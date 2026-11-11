@@ -296,3 +296,12 @@ func (m *ProcessManager) StopAll() {
 		_ = m.StopSite(siteID)
 	}
 }
+// procAttr возвращает SysProcAttr для отвязки процесса.
+func procAttr() *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{Setpgid: true}
+}
+
+// parsePID парсит строку в int.
+func parsePID(s string) (int, error) {
+	return strconv.Atoi(strings.TrimSpace(s))
+}
