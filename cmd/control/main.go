@@ -1,9 +1,8 @@
 // Package main — точка входа сервера VELTRIX Dock (Redmi 9).
-// Загружает конфиг, подключается к MySQL, запускает миграции и HTTP-сервер.
+// Загружает конфиг, создаёт сервер (миграции применяются внутри), запускает HTTP.
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"log"
@@ -11,7 +10,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"veltrix/internal/control"
 )
@@ -35,32 +33,22 @@ func main() {
 	// 1. Загружаем конфиг.
 	cfg := loadConfig(*configPath, *dataRoot)
 
-	// 2. Создаём сервер.
+	// 2. Создаём сервер. Внутри: подключение к БД, миграции, хаб.
+	//    Если что-то упадёт — log.Fatal, сервер не стартует.
 	srv, err := control.NewServer(cfg)
 	if err != nil {
 		log.Fatalf("init server: %v", err)
 	}
 	defer srv.Close()
 
-	// 3. Применяем миграции.
-	migrationsDir := filepath.Join(cfg.DataRoot, "migrations")
-	if _, err := os.Stat(migrationsDir); err == nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := runMigrations(srv, ctx, migrationsDir); err != nil {
-			cancel()
-			log.Fatalf("migrations: %v", err)
-		}
-		cancel()
-	}
-
-	// 4. Запускаем HTTP-сервер в горутине.
+	// 3. Запускаем HTTP-сервер в горутине.
 	go func() {
 		if err := srv.Start(); err != nil {
 			log.Fatalf("server: %v", err)
 		}
 	}()
 
-	// 5. Ждём сигнала остановки (Ctrl+C, SIGTERM).
+	// 4. Ждём сигнала остановки (Ctrl+C, SIGTERM).
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
@@ -106,9 +94,4 @@ func loadConfig(path, dataRoot string) control.Config {
 
 	log.Printf("config loaded from %s", path)
 	return cfg
-}
-
-// runMigrations — обёртка, чтобы не тащить *control.Server в пакет control.
-func runMigrations(srv *control.Server, ctx context.Context, dir string) error {
-	return srv.RunMigrations(ctx, dir)
 }
