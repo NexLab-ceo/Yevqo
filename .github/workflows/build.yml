@@ -35,6 +35,12 @@ jobs:
       - name: Generate protobuf
         run: |
           bash scripts/gen-proto.sh
+          
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Generate go.sum
+        run: go mod tidy
 
       - name: Build Go binaries (android/arm64)
         run: |
