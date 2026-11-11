@@ -460,3 +460,86 @@ func (db *DB) DeleteDevice(ctx context.Context, id int64) error {
 	)
 	return err
 }
+// ListUsers — список всех пользователей с пагинацией (для админки).
+func (db *DB) ListUsers(ctx context.Context, limit, offset int) ([]shared.User, int, error) {
+	// Считаем общее количество.
+	var total int
+	err := db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count users: %w", err)
+	}
+
+	query := `
+		SELECT id, username, email, password_hash, status,
+		       referral_code, referred_by, bonus_devices, max_devices,
+		       created_at, last_seen
+		FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?`
+
+	rows, err := db.conn.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query users: %w", err)
+	}
+	defer rows.Close()
+
+	var out []shared.User
+	for rows.Next() {
+		var u shared.User
+		if err := rows.Scan(
+			&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.Status,
+			&u.ReferralCode, &u.ReferredBy, &u.BonusDevices, &u.MaxDevices,
+			&u.CreatedAt, &u.LastSeen,
+		); err != nil {
+			return nil, 0, fmt.Errorf("scan user: %w", err)
+		}
+		out = append(out, u)
+	}
+	return out, total, rows.Err()
+}
+
+// DeleteSessionsByUser — удалить все сессии пользователя (при блокировке).
+func (db *DB) DeleteSessionsByUser(ctx context.Context, userID int64) error {
+	_, err := db.conn.ExecContext(ctx,
+		`DELETE FROM sessions WHERE user_id = ?`, userID,
+	)
+	return err
+}
+
+// GetAdminStats — агрегированная статистика для админки.
+func (db *DB) GetAdminStats(ctx context.Context) (map[string]interface{}, error) {
+	stats := map[string]interface{}{}
+
+	// Всего пользователей.
+	var users int
+	_ = db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&users)
+	stats["total_users"] = users
+
+	// Коммерческих.
+	var commercial int
+	_ = db.conn.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM users WHERE status = 'commercial'`).Scan(&commercial)
+	stats["commercial_users"] = commercial
+
+	// Заблокированных.
+	var blocked int
+	_ = db.conn.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM users WHERE status = 'blocked'`).Scan(&blocked)
+	stats["blocked_users"] = blocked
+
+	// Всего устройств.
+	var devices int
+	_ = db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM devices`).Scan(&devices)
+	stats["total_devices"] = devices
+
+	// Всего сайтов.
+	var sites int
+	_ = db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM sites`).Scan(&sites)
+	stats["total_sites"] = sites
+
+	// Сайтов в статусе running.
+	var running int
+	_ = db.conn.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM sites WHERE status = 'running'`).Scan(&running)
+	stats["running_sites"] = running
+
+	return stats, nil
+}
