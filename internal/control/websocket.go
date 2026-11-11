@@ -4,7 +4,6 @@ package control
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,61 +11,45 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"google.golang.org/protobuf/proto"
 	"veltrix/internal/shared"
-	pb "veltrix/internal/shared"
 )
 
-// Константы WebSocket.
 const (
-	wsWriteWait      = 10 * time.Second // таймаут записи
-	wsPongWait       = 60 * time.Second // ждём pong от агента
-	wsPingPeriod     = 30 * time.Second // шлём ping каждые 30 сек
-	wsMaxMessageSize = 1 << 20          // 1 MB — максимум на сообщение
-	wsCommandTimeout = 30 * time.Second // сколько ждём Result на команду
+	wsWriteWait      = 10 * time.Second
+	wsPongWait       = 60 * time.Second
+	wsPingPeriod     = 30 * time.Second
+	wsMaxMessageSize = 1 << 20
+	wsCommandTimeout = 30 * time.Second
 )
 
-// upgrader — превращает HTTP-запрос в WebSocket.
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		// Агенты ходят с телефонов, у них нет браузерного Origin.
-		// Пропускаем всех — защита в AuthRequest.
-		return true
-	},
+	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-// ============================================================
-// HUB — реестр всех подключённых агентов
-// ============================================================
-
-// Hub держит все активные соединения.
+// Hub — реестр подключённых агентов.
 type Hub struct {
 	mu    sync.RWMutex
-	conns map[int64]*AgentConn // key = device.ID (внутренний)
+	conns map[int64]*AgentConn
 }
 
-// NewHub создаёт пустой хаб.
 func NewHub() *Hub {
 	return &Hub{conns: make(map[int64]*AgentConn)}
 }
 
-// Add регистрирует соединение.
 func (h *Hub) Add(a *AgentConn) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.conns[a.Device.ID] = a
 }
 
-// Remove удаляет соединение.
 func (h *Hub) Remove(deviceID int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	delete(h.conns, deviceID)
 }
 
-// Get возвращает соединение по deviceID.
 func (h *Hub) Get(deviceID int64) (*AgentConn, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -74,7 +57,6 @@ func (h *Hub) Get(deviceID int64) (*AgentConn, bool) {
 	return c, ok
 }
 
-// List возвращает копию списка всех соединений.
 func (h *Hub) List() []*AgentConn {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -85,50 +67,33 @@ func (h *Hub) List() []*AgentConn {
 	return out
 }
 
-// ============================================================
-// AGENTCONN — одно соединение с агентом
-// ============================================================
-
-// AgentConn — это один подключённый телефон.
+// AgentConn — одно соединение с агентом.
 type AgentConn struct {
 	Device *shared.Device
 	ws     *websocket.Conn
-
-	// send — канал исходящих сообщений (Protobuf-байты).
-	// Один writer-goroutine читает из него и пишет в ws.
-	send chan []byte
-
-	// pending — ожидающие ответа команды (key = command.ID).
-	pending   map[string]chan *pb.Result
+	send   chan []byte
+	pending   map[string]chan *shared.Result
 	pendingMu sync.Mutex
-
 	hub *Hub
 	db  *DB
 }
 
-// ============================================================
-// ОБРАБОТЧИК: /ws (приём агентов)
-// ============================================================
-
-// handleWebSocket — HTTP-хендлер для /ws. Вызывается из server.go.
+// handleWebSocket — HTTP-хендлер для /ws.
 func (srv *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
-	// Апгрейд до WebSocket.
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("ws upgrade: %v", err)
 		return
 	}
 
-	// Создаём соединение (пока без Device — заполнится после AuthRequest).
 	conn := &AgentConn{
 		ws:      ws,
 		send:    make(chan []byte, 32),
-		pending: make(map[string]chan *pb.Result),
+		pending: make(map[string]chan *shared.Result),
 		hub:     srv.hub,
 		db:      srv.db,
 	}
 
-	// Запускаем writer и reader.
 	go conn.writePump()
 	conn.readPump(srv)
 }
@@ -136,8 +101,10 @@ func (srv *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 // readPump — читает сообщения от агента.
 func (c *AgentConn) readPump(srv *Server) {
 	defer func() {
-		c.hub.Remove(c.Device.ID)
-		_ = c.db.MarkDeviceOffline(context.Background(), c.Device.ID)
+		if c.Device != nil {
+			c.hub.Remove(c.Device.ID)
+			_ = c.db.MarkDeviceOffline(context.Background(), c.Device.ID)
+		}
 		c.ws.Close()
 	}()
 
@@ -157,28 +124,26 @@ func (c *AgentConn) readPump(srv *Server) {
 			return
 		}
 
-		// Парсим Envelope.
-		var env pb.Envelope
-		if err := proto.Unmarshal(msg, &env); err != nil {
+		// Парсим Envelope (JSON).
+		var env shared.Envelope
+		if err := shared.Unmarshal(msg, &env); err != nil {
 			log.Printf("ws unmarshal: %v", err)
 			continue
 		}
 
-		// Разбираем тип сообщения.
-		switch p := env.Payload.(type) {
-		case *pb.Envelope_AuthReq:
-			c.handleAuth(srv, p.AuthReq)
-		case *pb.Envelope_Result:
-			c.handleResult(p.Result)
-		case *pb.Envelope_Event:
-			c.handleEvent(srv, p.Event)
-		default:
-			log.Printf("ws unknown message type")
+		// Разбираем по типу.
+		switch {
+		case env.AuthReq != nil:
+			c.handleAuth(srv, env.AuthReq)
+		case env.Result != nil:
+			c.handleResult(env.Result)
+		case env.Event != nil:
+			c.handleEvent(srv, env.Event)
 		}
 	}
 }
 
-// writePump — пишет сообщения агенту (единственная горутина, которая пишет).
+// writePump — пишет сообщения агенту.
 func (c *AgentConn) writePump() {
 	ticker := time.NewTicker(wsPingPeriod)
 	defer func() {
@@ -197,7 +162,6 @@ func (c *AgentConn) writePump() {
 			if err := c.ws.WriteMessage(websocket.BinaryMessage, msg); err != nil {
 				return
 			}
-
 		case <-ticker.C:
 			_ = c.ws.SetWriteDeadline(time.Now().Add(wsWriteWait))
 			if err := c.ws.WriteMessage(websocket.PingMessage, nil); err != nil {
@@ -207,16 +171,10 @@ func (c *AgentConn) writePump() {
 	}
 }
 
-// ============================================================
-// ОБРАБОТЧИКИ СООБЩЕНИЙ
-// ============================================================
-
-// handleAuth — аутентификация агента при подключении.
-func (c *AgentConn) handleAuth(srv *Server, req *pb.AuthRequest) {
+// handleAuth — аутентификация агента.
+func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 	ctx := context.Background()
 
-	// Ищем пользователя по токену привязки.
-	// В нашей схеме token = referral_code пользователя (см. auth.go).
 	user, err := srv.db.GetUserByReferralCode(ctx, req.Token)
 	if err != nil {
 		c.sendAuthError("invalid token")
@@ -228,10 +186,8 @@ func (c *AgentConn) handleAuth(srv *Server, req *pb.AuthRequest) {
 		return
 	}
 
-	// Проверяем лимит устройств.
 	count, _ := srv.db.CountDevicesByUser(ctx, user.ID)
 	if count >= user.MaxDevicesTotal() {
-		// Устройства с этим UUID ещё нет? Тогда лимит превышен.
 		existing, _ := srv.db.GetDeviceByUUID(ctx, req.DeviceId)
 		if existing == nil {
 			c.sendAuthError("device limit reached")
@@ -239,7 +195,6 @@ func (c *AgentConn) handleAuth(srv *Server, req *pb.AuthRequest) {
 		}
 	}
 
-	// Upsert устройства.
 	device := &shared.Device{
 		UserID:       user.ID,
 		DeviceID:     req.DeviceId,
@@ -257,62 +212,49 @@ func (c *AgentConn) handleAuth(srv *Server, req *pb.AuthRequest) {
 	c.Device = device
 	c.hub.Add(c)
 
-	// Отвечаем.
-	resp := &pb.Envelope{
-		Payload: &pb.Envelope_AuthResp{
-			AuthResp: &pb.AuthResponse{
-				Ok:     true,
-				Message: "welcome",
-				UserId: user.ID,
-			},
+	resp := shared.Envelope{
+		AuthResp: &shared.AuthResponse{
+			Ok:      true,
+			Message: "welcome",
+			UserId:  user.ID,
 		},
 	}
-	b, _ := proto.Marshal(resp)
+	b, _ := shared.Marshal(resp)
 	c.send <- b
 }
 
-// sendAuthError — отправляет AuthResponse с ошибкой.
 func (c *AgentConn) sendAuthError(msg string) {
-	resp := &pb.Envelope{
-		Payload: &pb.Envelope_AuthResp{
-			AuthResp: &pb.AuthResponse{Ok: false, Message: msg},
-		},
+	resp := shared.Envelope{
+		AuthResp: &shared.AuthResponse{Ok: false, Message: msg},
 	}
-	b, _ := proto.Marshal(resp)
+	b, _ := shared.Marshal(resp)
 	c.send <- b
 }
 
-// handleResult — ответ агента на команду.
-func (c *AgentConn) handleResult(res *pb.Result) {
+func (c *AgentConn) handleResult(res *shared.Result) {
 	c.pendingMu.Lock()
 	ch, ok := c.pending[res.Id]
 	if ok {
 		delete(c.pending, res.Id)
 	}
 	c.pendingMu.Unlock()
-
 	if ok {
-		ch <- res // отправляем в ожидающий SendCommand
+		ch <- res
 	}
 }
 
-// handleEvent — события от агента (логи, статусы, ping).
-func (c *AgentConn) handleEvent(srv *Server, ev *pb.Event) {
+func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 	switch ev.Event {
 	case "ping":
-		// Агент жив — можно обновить last_seen в БД (опционально).
 		_ = srv.db.UpdateUserLastSeen(context.Background(), c.Device.UserID)
-
 	case "log":
-		var le pb.LogEvent
-		if err := proto.Unmarshal(ev.Payload, &le); err == nil {
-			// Сохраняем или пробрасываем на фронт (пока — просто лог).
+		var le shared.LogEvent
+		if err := shared.Unmarshal(ev.Payload, &le); err == nil {
 			log.Printf("[%s/%s] %s", c.Device.Hostname, le.SiteId, le.Line)
 		}
-
 	case "status":
-		var se pb.StatusEvent
-		if err := proto.Unmarshal(ev.Payload, &se); err == nil {
+		var se shared.StatusEvent
+		if err := shared.Unmarshal(ev.Payload, &se); err == nil {
 			_ = srv.db.UpdateSiteStatus(
 				context.Background(), c.Device.ID, se.SiteId, se.Status, int(se.Pid),
 			)
@@ -320,49 +262,38 @@ func (c *AgentConn) handleEvent(srv *Server, ev *pb.Event) {
 	}
 }
 
-// ============================================================
-// ОТПРАВКА КОМАНД АГЕНТУ
-// ============================================================
-
-// SendCommand отправляет команду агенту и ждёт Result (с таймаутом).
-func (c *AgentConn) SendCommand(ctx context.Context, action string, payload proto.Message) (*pb.Result, error) {
-	// Генерируем ID команды.
+// SendCommand — отправить команду агенту и дождаться Result.
+func (c *AgentConn) SendCommand(ctx context.Context, action string, payload interface{}) (*shared.Result, error) {
 	cmdID, err := GenerateToken(16)
 	if err != nil {
 		return nil, err
 	}
 
-	// Сериализуем payload.
 	var payloadBytes []byte
 	if payload != nil {
-		payloadBytes, err = proto.Marshal(payload)
+		payloadBytes, err = shared.Marshal(payload)
 		if err != nil {
 			return nil, fmt.Errorf("marshal payload: %w", err)
 		}
 	}
 
-	// Формируем Command.
-	cmd := &pb.Envelope{
-		Payload: &pb.Envelope_Command{
-			Command: &pb.Command{
-				Id:      cmdID,
-				Action:  action,
-				Payload: payloadBytes,
-			},
+	env := shared.Envelope{
+		Command: &shared.Command{
+			Id:      cmdID,
+			Action:  action,
+			Payload: payloadBytes,
 		},
 	}
-	msg, err := proto.Marshal(cmd)
+	msg, err := shared.Marshal(env)
 	if err != nil {
-		return nil, fmt.Errorf("marshal command: %w", err)
+		return nil, fmt.Errorf("marshal envelope: %w", err)
 	}
 
-	// Создаём канал для ответа.
-	ch := make(chan *pb.Result, 1)
+	ch := make(chan *shared.Result, 1)
 	c.pendingMu.Lock()
 	c.pending[cmdID] = ch
 	c.pendingMu.Unlock()
 
-	// Отправляем в очередь writer'а.
 	select {
 	case c.send <- msg:
 	case <-ctx.Done():
@@ -371,7 +302,6 @@ func (c *AgentConn) SendCommand(ctx context.Context, action string, payload prot
 		return nil, fmt.Errorf("write timeout")
 	}
 
-	// Ждём Result с таймаутом.
 	select {
 	case res := <-ch:
 		return res, nil
@@ -385,28 +315,21 @@ func (c *AgentConn) SendCommand(ctx context.Context, action string, payload prot
 	}
 }
 
-// ============================================================
-// ХЕНДЛЕР ДЛЯ API: получить список онлайн-устройств
-// ============================================================
-
-// OnlineDevices — возвращает список подключённых устройств (для API).
+// OnlineDevices — список подключённых устройств.
 func (srv *Server) OnlineDevices() []map[string]interface{} {
 	conns := srv.hub.List()
 	out := make([]map[string]interface{}, 0, len(conns))
 	for _, c := range conns {
+		if c.Device == nil {
+			continue
+		}
 		out = append(out, map[string]interface{}{
-			"id":         c.Device.ID,
-			"device_id":  c.Device.DeviceID,
-			"hostname":   c.Device.Hostname,
-			"tailscale":  c.Device.TailscaleIP,
-			"user_id":    c.Device.UserID,
+			"id":        c.Device.ID,
+			"device_id": c.Device.DeviceID,
+			"hostname":  c.Device.Hostname,
+			"tailscale": c.Device.TailscaleIP,
+			"user_id":   c.Device.UserID,
 		})
 	}
 	return out
-}
-
-// helper для JSON-логов (не используется в протоколе, но удобно).
-func mustJSON(v interface{}) string {
-	b, _ := json.Marshal(v)
-	return string(b)
 }
