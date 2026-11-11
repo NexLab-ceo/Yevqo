@@ -432,3 +432,31 @@ func isNotFound(err error) bool {
 	}
 	return false
 }
+// GetDeviceByID — поиск по внутреннему ID.
+func (db *DB) GetDeviceByID(ctx context.Context, id int64) (*shared.Device, error) {
+	query := `
+		SELECT id, user_id, device_id, hostname, tailscale_ip,
+		       agent_version, status, created_at, last_seen
+		FROM devices WHERE id = ?`
+
+	var d shared.Device
+	err := db.conn.QueryRowContext(ctx, query, id).Scan(
+		&d.ID, &d.UserID, &d.DeviceID, &d.Hostname, &d.TailscaleIP,
+		&d.AgentVersion, &d.Status, &d.CreatedAt, &d.LastSeen,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, shared.ErrNotFound("device not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("scan device: %w", err)
+	}
+	return &d, nil
+}
+
+// DeleteDevice — отвязать устройство (каскадно удалит сайты).
+func (db *DB) DeleteDevice(ctx context.Context, id int64) error {
+	_, err := db.conn.ExecContext(ctx,
+		`DELETE FROM devices WHERE id = ?`, id,
+	)
+	return err
+}
