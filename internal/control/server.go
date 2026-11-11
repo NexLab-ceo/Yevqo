@@ -32,7 +32,7 @@ type Server struct {
 	mux           *http.ServeMux
 }
 
-// NewServer создаёт сервер, подключается к БД, инициализирует хаб.
+// NewServer создаёт сервер, подключается к БД, применяет миграции, инициализирует хаб.
 func NewServer(cfg Config) (*Server, error) {
 	// Проверяем, что DataRoot существует.
 	if err := os.MkdirAll(cfg.DataRoot, 0o755); err != nil {
@@ -45,10 +45,27 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("connect mysql: %w", err)
 	}
 
+	// Применяем миграции, если папка существует.
+	// Это делается ДО запуска HTTP-сервера — если миграция упадёт,
+	// сервер вообще не стартует (лучше упасть на старте, чем на живой БД).
+	migrationsDir := filepath.Join(cfg.DataRoot, "migrations")
+	if _, err := os.Stat(migrationsDir); err == nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := db.RunMigrations(ctx, migrationsDir)
+		cancel()
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrations: %w", err)
+		}
+		log.Printf("migrations applied from %s", migrationsDir)
+	} else {
+		log.Printf("no migrations dir at %s (skipping)", migrationsDir)
+	}
+
 	// Чистим просроченные сессии при старте (не критично, если упадёт).
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 	_ = db.CleanupExpiredSessions(ctx)
+	cancel()
 
 	srv := &Server{
 		cfg:           cfg,
@@ -61,7 +78,6 @@ func NewServer(cfg Config) (*Server, error) {
 	srv.registerRoutes()
 	return srv, nil
 }
-
 // Close закрывает ресурсы.
 func (s *Server) Close() error {
 	return s.db.Close()
