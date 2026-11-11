@@ -305,3 +305,19 @@ func procAttr() *syscall.SysProcAttr {
 func parsePID(s string) (int, error) {
 	return strconv.Atoi(strings.TrimSpace(s))
 }
+// runGitPull выполняет git pull в папке сайта и возвращает вывод.
+func runGitPull(path string) (string, error) {
+	// Проверяем, что это git-репозиторий.
+	if _, err := os.Stat(filepath.Join(path, ".git")); err != nil {
+		return "", fmt.Errorf("not a git repository: %s", path)
+	}
+
+	cmd := exec.Command("git", "pull", "--ff-only")
+	cmd.Dir = path
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(out), fmt.Errorf("git pull: %w", err)
+	}
+
+	return string(out), nil
+}
