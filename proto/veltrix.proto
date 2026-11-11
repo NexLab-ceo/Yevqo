@@ -1,1 +1,131 @@
-w
+syntax = "proto3";
+
+package veltrix;
+option go_package = "veltrix/internal/shared";
+
+// ============================================================
+// ENVELOPE — обёртка для всех сообщений
+// ============================================================
+// Каждое сообщение, летящее по WebSocket, оборачивается в Envelope.
+// Поле `payload` — это `oneof`, то есть одновременно может быть
+// только одно из полей (auth_req, command, result и т.д.).
+message Envelope {
+  oneof payload {
+    AuthRequest   auth_req   = 1;
+    AuthResponse  auth_resp  = 2;
+    Command       command    = 3;
+    Result        result     = 4;
+    Event         event      = 5;
+  }
+}
+
+// ============================================================
+// АУТЕНТИФИКАЦИЯ
+// ============================================================
+// Агент отправляет это первым сообщением после подключения.
+message AuthRequest {
+  string token       = 1;  // Код привязки (например, "ABCD-1234")
+  string device_id   = 2;  // UUID устройства (постоянный, генерируется агентом)
+  string hostname    = 3;  // Имя устройства (например, "Redmi-Note-8")
+  string tailscale_ip = 4; // IP в tailnet (100.x.x.x)
+  string agent_version = 5;// Версия агента ("1.0.0")
+}
+
+// Сервер отвечает этим.
+message AuthResponse {
+  bool   ok      = 1;
+  string message = 2;  // "Welcome" или текст ошибки
+  int64  user_id = 3;  // ID пользователя в БД
+}
+
+// ============================================================
+// КОМАНДЫ (Сервер -> Агент)
+// ============================================================
+// `payload` — сериализованный Protobuf-объект, тип которого
+// зависит от `action`. Чтобы его распарсить, агент смотрит на `action`
+// и вызывает соответствующий парсер (StartSite, StopSite и т.д.).
+message Command {
+  string id      = 1;  // Уникальный ID команды (UUID), чтобы сопоставить с Result
+  string action  = 2;  // "start_site", "stop_site", "git_pull", "get_logs", "create_tunnel"
+  bytes  payload = 3;  // Сериализованный Protobuf (например, StartSite)
+}
+
+// --- Payload для start_site ---
+message StartSite {
+  string site_id  = 1;  // "blog"
+  string path     = 2;  // "sites/blog"
+  uint32 port     = 3;  // 8000
+  string runtime  = 4;  // "php", "go", "static"
+}
+
+// --- Payload для stop_site ---
+message StopSite {
+  string site_id = 1;
+}
+
+// --- Payload для git_pull ---
+message GitPull {
+  string site_id = 1;
+}
+
+// --- Payload для get_logs ---
+message GetLogs {
+  string site_id = 1;
+  uint32 lines   = 2;  // сколько последних строк вернуть (например, 50)
+}
+
+// --- Payload для create_tunnel ---
+message CreateTunnel {
+  string site_id      = 1;
+  string tunnel_token = 2;  // Токен Cloudflare Tunnel
+  string hostname     = 3;  // "blog.user1.com"
+}
+
+// ============================================================
+// РЕЗУЛЬТАТЫ (Агент -> Сервер)
+// ============================================================
+// Ответ на Command. Поле `payload` — сериализованный Protobuf,
+// тип зависит от того, на какую команду это ответ.
+message Result {
+  string id      = 1;  // ID команды (тот же, что в Command)
+  bool   ok      = 2;  // true = успех, false = ошибка
+  string message = 3;  // Текст ошибки (если ok = false)
+  bytes  payload = 4;  // Сериализованный Protobuf (например, StartSiteResult)
+}
+
+// --- Payload для результата start_site ---
+message StartSiteResult {
+  uint32 pid  = 1;
+  uint32 port = 2;
+}
+
+// --- Payload для результата get_logs ---
+message LogsResult {
+  string content = 1;  // Последние N строк
+}
+
+// ============================================================
+// СОБЫТИЯ (Агент -> Сервер, без запроса)
+// ============================================================
+// Агент может отправлять события в любой момент (не только в ответ на команду).
+message Event {
+  string event   = 1;  // "log", "status", "ping"
+  bytes  payload = 2;  // Сериализованный Protobuf (зависит от event)
+}
+
+// --- Payload для event="log" ---
+message LogEvent {
+  string site_id = 1;
+  string line    = 2;  // Одна строка лога
+}
+
+// --- Payload для event="status" ---
+message StatusEvent {
+  string site_id = 1;
+  string status  = 2;  // "running", "stopped", "error"
+  uint32 pid     = 3;
+}
+
+// --- Payload для event="ping" ---
+// (пустое сообщение, просто сигнал "я жив")
+message PingEvent {}
