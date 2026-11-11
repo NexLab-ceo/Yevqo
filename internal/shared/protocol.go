@@ -1,19 +1,19 @@
 // Package shared — общие структуры для сервера и агента.
 // Этот файл — вручную написанная замена сгенерированному protoc-коду.
-// Формат: совместим с proto/veltrix.proto (поля, теги, имена).
 package shared
+
+import "encoding/json"
 
 // ============================================================
 // ENVELOPE — обёртка для всех сообщений
 // ============================================================
 
 type Envelope struct {
-	// oneof: может быть только одно из полей
-	AuthReq   *AuthRequest
-	AuthResp  *AuthResponse
-	Command   *Command
-	Result    *Result
-	Event     *Event
+	AuthReq  *AuthRequest
+	AuthResp *AuthResponse
+	Command  *Command
+	Result   *Result
+	Event    *Event
 }
 
 // ============================================================
@@ -44,7 +44,6 @@ type Command struct {
 	Payload []byte
 }
 
-// Payload для start_site.
 type StartSite struct {
 	SiteId  string
 	Path    string
@@ -52,23 +51,19 @@ type StartSite struct {
 	Runtime string
 }
 
-// Payload для stop_site.
 type StopSite struct {
 	SiteId string
 }
 
-// Payload для git_pull.
 type GitPull struct {
 	SiteId string
 }
 
-// Payload для get_logs.
 type GetLogs struct {
 	SiteId string
 	Lines  uint32
 }
 
-// Payload для create_tunnel.
 type CreateTunnel struct {
 	SiteId      string
 	TunnelToken string
@@ -86,13 +81,11 @@ type Result struct {
 	Payload []byte
 }
 
-// Payload для start_site.
 type StartSiteResult struct {
 	Pid  uint32
 	Port uint32
 }
 
-// Payload для get_logs.
 type LogsResult struct {
 	Content string
 }
@@ -122,9 +115,6 @@ type PingEvent struct{}
 // ============================================================
 // МЕТОДЫ — имитация proto.Message
 // ============================================================
-// Protoc-сгенерированные типы реализуют proto.Message:
-//   Reset(), String(), ProtoMessage().
-// Мы делаем то же самое, чтобы код компилировался с теми же вызовами.
 
 func (m *AuthRequest) Reset()         { *m = AuthRequest{} }
 func (m *AuthRequest) String() string { return "AuthRequest" }
@@ -187,14 +177,8 @@ func (m *PingEvent) String() string { return "PingEvent" }
 func (m *PingEvent) ProtoMessage()  {}
 
 // ============================================================
-// СЕРИАЛИЗАЦИЯ
+// СЕРИАЛИЗАЦИЯ (JSON вместо protobuf)
 // ============================================================
-// В настоящем protobuf тут был бы proto.Marshal/Unmarshal.
-// Мы используем encoding/json как «транспорт» — проще, читаемо,
-// не требует protoc. Для MVP этого достаточно.
-// Позже можно заменить на proto.Marshal без изменения API.
-
-import "encoding/json"
 
 func Marshal(m interface{}) ([]byte, error) {
 	return json.Marshal(m)
@@ -207,8 +191,6 @@ func Unmarshal(data []byte, m interface{}) error {
 // ============================================================
 // ENVELOPE — определение типа
 // ============================================================
-// В реальном protobuf есть oneof (только одно поле).
-// Здесь мы просто проверяем, какое поле не nil.
 
 func (e *Envelope) GetType() string {
 	switch {
