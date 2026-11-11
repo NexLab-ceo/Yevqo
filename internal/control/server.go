@@ -1,1 +1,210 @@
-s
+// Package control — серверная часть VELTRIX Dock (Redmi 9).
+// Этот файл: HTTP-сервер, роутинг, middleware, статика.
+package control
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// Config — настройки сервера (из config.json).
+type Config struct {
+	ListenAddr    string `json:"listen_addr"`     // ":8080"
+	DataRoot      string `json:"data_root"`       // "/sdcard/veltrix-control"
+	StaticDir     string `json:"static_dir"`      // "public" (SvelteKit)
+	MySQLDSN      string `json:"mysql_dsn"`       // user:pass@tcp(...)/veltrix
+	AdminUsername string `json:"admin_username"`  // "maksim"
+	UseHTTPS      bool   `json:"use_https"`       // true, если за Cloudflare
+}
+
+// Server — главная структура сервера.
+type Server struct {
+	cfg           Config
+	db            *DB
+	hub           *Hub
+	adminUsername string
+	mux           *http.ServeMux
+}
+
+// NewServer создаёт сервер, подключается к БД, инициализирует хаб.
+func NewServer(cfg Config) (*Server, error) {
+	// Проверяем, что DataRoot существует.
+	if err := os.MkdirAll(cfg.DataRoot, 0o755); err != nil {
+		return nil, fmt.Errorf("create data_root: %w", err)
+	}
+
+	// Подключаемся к MySQL.
+	db, err := NewDB(cfg.MySQLDSN)
+	if err != nil {
+		return nil, fmt.Errorf("connect mysql: %w", err)
+	}
+
+	// Чистим просроченные сессии при старте (не критично, если упадёт).
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = db.CleanupExpiredSessions(ctx)
+
+	srv := &Server{
+		cfg:           cfg,
+		db:            db,
+		hub:           NewHub(),
+		adminUsername: cfg.AdminUsername,
+		mux:           http.NewServeMux(),
+	}
+
+	srv.registerRoutes()
+	return srv, nil
+}
+
+// Close закрывает ресурсы.
+func (s *Server) Close() error {
+	return s.db.Close()
+}
+
+// ============================================================
+// РОУТИНГ
+// ============================================================
+
+// registerRoutes настраивает все маршруты.
+func (s *Server) registerRoutes() {
+	// --- WebSocket для агентов ---
+	s.mux.HandleFunc("/ws", s.handleWebSocket)
+
+	// --- API для пользователей ---
+	s.mux.HandleFunc("/api/register", s.handleRegister)
+	s.mux.HandleFunc("/api/login", s.handleLogin)
+	s.mux.HandleFunc("/api/logout", s.handleLogout)
+	s.mux.HandleFunc("/api/me", s.RequireAuth(s.handleMe))
+	s.mux.HandleFunc("/api/devices", s.RequireAuth(s.handleDevices))
+	s.mux.HandleFunc("/api/devices/", s.RequireAuth(s.handleDeviceByID))
+	s.mux.HandleFunc("/api/sites", s.RequireAuth(s.handleSites))
+	s.mux.HandleFunc("/api/sites/", s.RequireAuth(s.handleSiteByID))
+
+	// --- API для админа ---
+	s.mux.HandleFunc("/admin/api/users", s.RequireAdmin(s.handleAdminUsers))
+	s.mux.HandleFunc("/admin/api/users/", s.RequireAdmin(s.handleAdminUserByID))
+	s.mux.HandleFunc("/admin/api/stats", s.RequireAdmin(s.handleAdminStats))
+
+	// --- Статика SvelteKit (последний маршрут — fallback) ---
+	s.mux.HandleFunc("/", s.handleStatic)
+}
+
+// ============================================================
+// HTTP-СЕРВЕР
+// ============================================================
+
+// Start запускает HTTP-сервер.
+func (s *Server) Start() error {
+	addr := s.cfg.ListenAddr
+	if addr == "" {
+		addr = ":8080"
+	}
+
+	httpSrv := &http.Server{
+		Addr:              addr,
+		Handler:           s.loggingMiddleware(s.mux),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	log.Printf("VELTRIX Dock listening on %s", addr)
+	return httpSrv.ListenAndServe()
+}
+
+// ============================================================
+// MIDDLEWARE
+// ============================================================
+
+// loggingMiddleware логирует запросы (метод, путь, статус, время).
+func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rw := &responseWriter{ResponseWriter: w, status: 200}
+		next.ServeHTTP(rw, r)
+		dur := time.Since(start)
+
+		// Не логируем WebSocket и статику, чтобы не засорять лог.
+		if r.URL.Path != "/ws" && !strings.HasPrefix(r.URL.Path, "/_app/") {
+			log.Printf("%s %s -> %d (%s)",
+				r.Method, r.URL.Path, rw.status, dur.Round(time.Millisecond))
+		}
+	})
+}
+
+// responseWriter оборачивает http.ResponseWriter, чтобы запомнить статус.
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.status = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+// ============================================================
+// СТАТИКА (SvelteKit)
+// ============================================================
+
+// handleStatic отдаёт статику из StaticDir.
+// Если файл не найден — отдаёт index.html (для SPA-роутинга).
+func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
+	// Защита: не отдаём файлы вне StaticDir.
+	cleanPath := filepath.Clean(r.URL.Path)
+	if strings.Contains(cleanPath, "..") {
+		http.NotFound(w, r)
+		return
+	}
+
+	fullPath := filepath.Join(s.cfg.StaticDir, cleanPath)
+	if info, err := os.Stat(fullPath); err == nil && !info.IsDir() {
+		// Файл существует — отдаём его.
+		http.ServeFile(w, r, fullPath)
+		return
+	}
+
+	// Для /api/* или /admin/* — 404, если не найден.
+	if strings.HasPrefix(r.URL.Path, "/api/") ||
+		strings.HasPrefix(r.URL.Path, "/admin/") ||
+		r.URL.Path == "/ws" {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Иначе — отдаём index.html (SvelteKit сам разберётся).
+	indexPath := filepath.Join(s.cfg.StaticDir, "index.html")
+	if _, err := os.Stat(indexPath); err != nil {
+		http.Error(w, "UI not built. Run: cd frontend && npm run build", http.StatusServiceUnavailable)
+		return
+	}
+	http.ServeFile(w, r, indexPath)
+}
+
+// ============================================================
+// HEALTH CHECK
+// ============================================================
+
+// Health возвращает статус сервера (для мониторинга).
+func (s *Server) Health() map[string]interface{} {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	dbOK := "ok"
+	if err := s.db.Ping(ctx); err != nil {
+		dbOK = "error: " + err.Error()
+	}
+
+	return map[string]interface{}{
+		"db":          dbOK,
+		"online":      len(s.hub.List()),
+		"admin":       s.adminUsername,
+	}
+}
