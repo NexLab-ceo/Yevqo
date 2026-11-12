@@ -69,16 +69,15 @@ func (h *Hub) List() []*AgentConn {
 
 // AgentConn — одно соединение с агентом.
 type AgentConn struct {
-	Device *shared.Device
-	ws     *websocket.Conn
-	send   chan []byte
+	Device    *shared.Device
+	ws        *websocket.Conn
+	send      chan []byte
 	pending   map[string]chan *shared.Result
 	pendingMu sync.Mutex
-	hub *Hub
-	db  *DB
+	hub       *Hub
+	db        *DB
 }
 
-// handleWebSocket — HTTP-хендлер для /ws.
 func (srv *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -98,7 +97,6 @@ func (srv *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn.readPump(srv)
 }
 
-// readPump — читает сообщения от агента.
 func (c *AgentConn) readPump(srv *Server) {
 	defer func() {
 		if c.Device != nil {
@@ -124,14 +122,12 @@ func (c *AgentConn) readPump(srv *Server) {
 			return
 		}
 
-		// Парсим Envelope (JSON).
 		var env shared.Envelope
 		if err := shared.Unmarshal(msg, &env); err != nil {
 			log.Printf("ws unmarshal: %v", err)
 			continue
 		}
 
-		// Разбираем по типу.
 		switch {
 		case env.AuthReq != nil:
 			c.handleAuth(srv, env.AuthReq)
@@ -143,7 +139,6 @@ func (c *AgentConn) readPump(srv *Server) {
 	}
 }
 
-// writePump — пишет сообщения агенту.
 func (c *AgentConn) writePump() {
 	ticker := time.NewTicker(wsPingPeriod)
 	defer func() {
@@ -171,7 +166,6 @@ func (c *AgentConn) writePump() {
 	}
 }
 
-// handleAuth — аутентификация агента.
 func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 	ctx := context.Background()
 
@@ -262,7 +256,6 @@ func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 	}
 }
 
-// SendCommand — отправить команду агенту и дождаться Result.
 func (c *AgentConn) SendCommand(ctx context.Context, action string, payload interface{}) (*shared.Result, error) {
 	cmdID, err := GenerateToken(16)
 	if err != nil {
@@ -315,7 +308,6 @@ func (c *AgentConn) SendCommand(ctx context.Context, action string, payload inte
 	}
 }
 
-// OnlineDevices — список подключённых устройств.
 func (srv *Server) OnlineDevices() []map[string]interface{} {
 	conns := srv.hub.List()
 	out := make([]map[string]interface{}, 0, len(conns))
