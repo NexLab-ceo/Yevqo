@@ -44,6 +44,20 @@ type Command struct {
 	Payload []byte
 }
 
+type InstallDatabaseServer struct {
+	ServerID int64
+	Engine string
+	Port uint32
+	DataDirectory string
+	MaxConnections uint32
+}
+
+type DatabaseServerInstallResult struct {
+	Version string `json:"version"`
+	DataDirectory string `json:"data_directory"`
+	Port uint32 `json:"port"`
+}
+
 type CreateSiteBackup struct { SiteId string }
 
 type SiteBackupResult struct {

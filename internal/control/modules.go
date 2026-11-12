@@ -146,9 +146,34 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 	}
 }
 
+func (s *Server) handleInstallDatabaseServer(w http.ResponseWriter,r *http.Request,id int64) {
+	u:=UserFromContext(r.Context())
+	var deviceID int64;var engine,version,dataDir,status,bind string;var port,maxConnections int;var remote bool
+	err:=s.db.conn.QueryRowContext(r.Context(),"SELECT device_id,engine,version,data_directory,status,port,max_connections,bind_address,remote_access FROM database_servers WHERE id=? AND user_id=?",id,u.ID).Scan(&deviceID,&engine,&version,&dataDir,&status,&port,&maxConnections,&bind,&remote)
+	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}
+	if engine!="postgresql"{apiError(w,shared.ErrBadRequest("Agent installation currently supports PostgreSQL only"));return}
+	if status=="ready"{apiError(w,shared.ErrBadRequest("database server is already ready"));return}
+	if status!="planned"&&status!="error"{apiError(w,shared.ErrBadRequest("database server cannot be installed from its current state"));return}
+	if bind!="127.0.0.1"||remote{apiError(w,shared.ErrBadRequest("remote database access must remain disabled"));return}
+	conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
+	_,_ = s.db.conn.ExecContext(r.Context(),"UPDATE database_servers SET status='installing' WHERE id=? AND user_id=?",id,u.ID)
+	ctx,cancel:=context.WithTimeout(r.Context(),10*time.Minute);defer cancel()
+	result,err:=conn.SendCommand(ctx,"install_database_server",&shared.InstallDatabaseServer{ServerID:id,Engine:engine,Port:uint32(port),DataDirectory:dataDir,MaxConnections:uint32(maxConnections)})
+	if err!=nil{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,u.ID);apiError(w,shared.ErrInternal("Agent installation command failed"));return}
+	if !result.Ok{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,u.ID);apiError(w,shared.ErrBadRequest(result.Message));return}
+	var installed shared.DatabaseServerInstallResult
+	if err:=shared.Unmarshal(result.Payload,&installed);err!=nil{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,u.ID);apiError(w,shared.ErrInternal("invalid Agent install response"));return}
+	_,err=s.db.conn.ExecContext(r.Context(),"UPDATE database_servers SET status='ready',version=?,data_directory=? WHERE id=? AND user_id=?",installed.Version,installed.DataDirectory,id,u.ID)
+	if err!=nil{apiError(w,shared.ErrInternal("PostgreSQL started but Control Plane metadata update failed"));return}
+	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_installed",Details:map[string]interface{}{"server_id":id,"engine":engine,"version":installed.Version}})
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"server_id":id,"status":"ready","version":installed.Version,"port":installed.Port})
+}
 func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context());raw:=strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/databases/servers/"),"/")
-	id,err:=strconv.ParseInt(raw,10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid server id"));return}
+	parts:=strings.Split(raw,"/")
+	id,err:=strconv.ParseInt(parts[0],10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid server id"));return}
+	if len(parts)==2&&parts[1]=="install"&&r.Method==http.MethodPost{s.handleInstallDatabaseServer(w,r,id);return}
+	if len(parts)!=1{http.NotFound(w,r);return}
 	var did int64;var name,engine,version,dir,network,status,storage,policy,bind,ssl,auth string;var port,ram,maxConnections int;var monitor,autoStart,remote bool;var created time.Time
 	err=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,name,engine,version,port,data_directory,network_access,status,created_at,storage_limit_gb,ram_budget_mb,max_connections,monitor_storage,auto_start,process_policy,bind_address,ssl_mode,auth_method,remote_access FROM database_servers WHERE id=? AND user_id=?`,id,u.ID).Scan(&did,&name,&engine,&version,&port,&dir,&network,&status,&created,&storage,&ram,&maxConnections,&monitor,&autoStart,&policy,&bind,&ssl,&auth,&remote)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}

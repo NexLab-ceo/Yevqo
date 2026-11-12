@@ -162,3 +162,5 @@ export async function getMonitoring() { return request('GET', '/api/monitoring')
 export async function refreshDeviceMetrics(deviceId) { return request('POST', `/api/devices/${deviceId}/metrics`); }
 
 export async function createSiteBackup(deviceId, siteId) { return request('POST', '/api/backups', { device_id: deviceId, site_id: siteId }); }
+
+export async function installDatabaseServer(id) { return request('POST', `/api/databases/servers/${id}/install`); }

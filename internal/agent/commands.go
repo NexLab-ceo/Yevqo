@@ -27,6 +27,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 	log.Printf("command: id=%s action=%s", cmd.Id, cmd.Action)
 
 	switch cmd.Action {
+	case "install_database_server":
+		return h.handleInstallDatabaseServer(cmd)
 	case "create_site_backup":
 		return h.handleCreateSiteBackup(cmd)
 	case "get_metrics":
@@ -46,6 +48,16 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 	default:
 		return errorResult(cmd.Id, "unknown action: "+cmd.Action)
 	}
+}
+
+func (h *CommandHandler) handleInstallDatabaseServer(cmd *shared.Command) *shared.Result {
+	var req shared.InstallDatabaseServer
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid install_database_server payload") }
+	result, err := installDatabaseServer(req)
+	if err != nil { return errorResult(cmd.Id, err.Error()) }
+	payload, err := shared.Marshal(result)
+	if err != nil { return errorResult(cmd.Id, "could not encode install result") }
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL is installed and running",Payload:payload}
 }
 
 func (h *CommandHandler) handleCreateSiteBackup(cmd *shared.Command) *shared.Result {

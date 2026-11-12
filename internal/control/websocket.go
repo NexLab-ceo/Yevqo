@@ -21,7 +21,7 @@ const (
 	wsPongWait       = 60 * time.Second
 	wsPingPeriod     = 30 * time.Second
 	wsMaxMessageSize = 1 << 20
-	wsCommandTimeout = 2 * time.Minute
+	wsCommandTimeout = 10 * time.Minute
 )
 
 var upgrader = websocket.Upgrader{
