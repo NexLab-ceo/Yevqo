@@ -91,12 +91,16 @@ func trimOutput(s string)string{ s=strings.TrimSpace(s);if len(s)>1200{return s[
 func ensurePostgresSSL(ctx context.Context,dataDir string)(string,string,error) {
 	cert:=filepath.Join(dataDir,"server.crt")
 	key:=filepath.Join(dataDir,"server.key")
-	if info,err:=os.Lstat(cert);err==nil && info.Mode()&os.ModeSymlink==0 && info.Mode().IsRegular() {
-		if keyInfo,keyErr:=os.Lstat(key);keyErr==nil && keyInfo.Mode()&os.ModeSymlink==0 && keyInfo.Mode().IsRegular() {
-			if err:=os.Chmod(key,0o600);err!=nil{return "","",err}
-			return cert,key,nil
+	certInfo,certErr:=os.Lstat(cert)
+	keyInfo,keyErr:=os.Lstat(key)
+	if certErr==nil || keyErr==nil {
+		if certErr!=nil || keyErr!=nil || certInfo.Mode()&os.ModeSymlink!=0 || keyInfo.Mode()&os.ModeSymlink!=0 || !certInfo.Mode().IsRegular() || !keyInfo.Mode().IsRegular() {
+			return "","",fmt.Errorf("existing SSL certificate paths are unsafe; no files were overwritten")
 		}
+		if err:=os.Chmod(key,0o600);err!=nil{return "","",err}
+		return cert,key,nil
 	}
+	if !os.IsNotExist(certErr) || !os.IsNotExist(keyErr) { return "","",fmt.Errorf("could not inspect SSL certificate paths") }
 	openssl,err:=exec.LookPath("openssl")
 	if err!=nil{return "","",fmt.Errorf("openssl is required for SSL mode; install the Termux openssl package")}
 	out,err:=exec.CommandContext(ctx,openssl,"req","-new","-x509","-days","3650","-nodes","-text","-out",cert,"-keyout",key,"-subj","/CN=localhost","-addext","subjectAltName=DNS:localhost,IP:127.0.0.1").CombinedOutput()
