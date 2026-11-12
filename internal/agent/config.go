@@ -1,146 +1,323 @@
 // Package agent — часть VELTRIX Dock, которая работает на телефонах пользователей.
-// Этот файл: загрузка/сохранение конфига агента (agent.json).
+// Этот файл: WebSocket-клиент (подключение к серверу, приём команд, отправка ответов).
 package agent
 
 import (
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
+	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
+	"log"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"veltrix/internal/shared"
 )
 
-// Config — конфиг агента (хранится в agent.json).
-type Config struct {
-	// ServerURL — WebSocket-URL сервера (например, "ws://100.64.1.1:8080/ws").
-	ServerURL string `json:"server_url"`
+const (
+	Version        = "1.0.0"
+	ReconnectDelay = 5 * time.Second
+	WriteWait      = 10 * time.Second
+	PongWait       = 60 * time.Second
+	PingPeriod     = 30 * time.Second
+	MaxMessageSize = 1 << 20
+)
 
-	// Token — код привязки (например, "ABCD-1234").
-	// Это реферальный код пользователя, к которому привязан агент.
-	Token string `json:"token"`
+// Client — WebSocket-клиент агента.
+type Client struct {
+	cfg     *Config
+	handler *CommandHandler
 
-	// DeviceID — UUID устройства. Генерируется один раз при первом запуске.
-	// Не меняется, даже если IP или hostname изменились.
-	DeviceID string `json:"device_id"`
-
-	// Hostname — имя устройства (например, "Redmi-Note-8").
-	Hostname string `json:"hostname"`
-
-	// DataRoot — корень данных на телефоне (например, "/sdcard/veltrix-agent").
-	DataRoot string `json:"data_root"`
+	ws     *websocket.Conn
+	send   chan []byte
+	mu     sync.Mutex
+	closed bool
 }
 
-// DefaultConfigPath — где искать agent.json по умолчанию.
-const DefaultConfigPath = "/sdcard/veltrix-agent/config/agent.json"
-
-// DefaultDataRoot — корень данных по умолчанию.
-const DefaultDataRoot = "/sdcard/veltrix-agent"
-
-// LoadConfig загружает конфиг из файла. Если файла нет — создаёт новый.
-func LoadConfig(path string) (*Config, error) {
-	if path == "" {
-		path = DefaultConfigPath
+// NewClient создаёт клиент.
+func NewClient(cfg *Config) *Client {
+	return &Client{
+		cfg:     cfg,
+		handler: NewCommandHandler(cfg),
+		send:    make(chan []byte, 32),
 	}
-
-	// Если файла нет — создаём с дефолтами.
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		cfg := &Config{
-			DataRoot: DefaultDataRoot,
-		}
-		if err := cfg.generateDeviceID(); err != nil {
-			return nil, err
-		}
-		if err := SaveConfig(path, cfg); err != nil {
-			return nil, err
-		}
-		return cfg, nil
-	}
-
-	// Читаем.
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read agent.json: %w", err)
-	}
-
-	var cfg Config
-	if err := json.Unmarshal(b, &cfg); err != nil {
-		return nil, fmt.Errorf("parse agent.json: %w", err)
-	}
-
-	// Если device_id пустой — генерируем (на случай, если файл редактировали).
-	if cfg.DeviceID == "" {
-		if err := cfg.generateDeviceID(); err != nil {
-			return nil, err
-		}
-		if err := SaveConfig(path, &cfg); err != nil {
-			return nil, err
-		}
-	}
-
-	return &cfg, nil
 }
 
-// SaveConfig сохраняет конфиг в файл (атомарно, через .tmp).
-func SaveConfig(path string, cfg *Config) error {
-	if path == "" {
-		path = DefaultConfigPath
+// Run — главный цикл. Подключается, переподключается при обрыве.
+func (c *Client) Run(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if err := c.connect(ctx); err != nil {
+			log.Printf("connection failed: %v (retry in %s)", err, ReconnectDelay)
+			time.Sleep(ReconnectDelay)
+			continue
+		}
+
+		c.runSession(ctx)
+
+		c.mu.Lock()
+		closed := c.closed
+		c.mu.Unlock()
+		if closed {
+			return nil
+		}
+
+		log.Printf("connection lost, reconnecting in %s...", ReconnectDelay)
+		time.Sleep(ReconnectDelay)
+	}
+}
+
+// Stop останавливает клиент.
+func (c *Client) Stop() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.closed = true
+	if c.ws != nil {
+		_ = c.ws.Close()
+	}
+}
+
+// ============================================================
+// CONNECT
+// ============================================================
+
+func (c *Client) connect(ctx context.Context) error {
+	if c.cfg.ServerURL == "" {
+		return errors.New("server_url is empty (edit agent.json)")
+	}
+	if c.cfg.Token == "" {
+		return errors.New("token is empty (edit agent.json)")
 	}
 
-	// Создаём папку, если её нет.
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create config dir: %w", err)
+	dialer := websocket.Dialer{
+		HandshakeTimeout: 10 * time.Second,
+		TLSClientConfig:  &tls.Config{InsecureSkipVerify: false},
 	}
 
-	// Сериализуем.
-	b, err := json.MarshalIndent(cfg, "", "  ")
+	log.Printf("connecting to %s...", c.cfg.ServerURL)
+	ws, _, err := dialer.DialContext(ctx, c.cfg.ServerURL, http.Header{})
 	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
+		return fmt.Errorf("dial: %w", err)
 	}
 
-	// Пишем во временный файл, потом переименовываем (атомарно).
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return fmt.Errorf("write tmp: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("rename: %w", err)
+	c.mu.Lock()
+	c.ws = ws
+	c.mu.Unlock()
+
+	ws.SetReadLimit(MaxMessageSize)
+	_ = ws.SetReadDeadline(time.Now().Add(PongWait))
+	ws.SetPongHandler(func(string) error {
+		return ws.SetReadDeadline(time.Now().Add(PongWait))
+	})
+
+	tailscaleIP, err := GetTailscaleIP()
+	if err != nil {
+		log.Printf("warning: tailscale: %v", err)
 	}
 
+	// Отправляем AuthRequest.
+	authEnv := shared.Envelope{
+		AuthReq: &shared.AuthRequest{
+			Token:        c.cfg.Token,
+			DeviceId:     c.cfg.DeviceID,
+			Hostname:     c.cfg.resolveHostname(),
+			TailscaleIp:  tailscaleIP,
+			AgentVersion: Version,
+		},
+	}
+
+	msg, err := shared.Marshal(authEnv)
+	if err != nil {
+		return fmt.Errorf("marshal auth: %w", err)
+	}
+
+	_ = ws.SetWriteDeadline(time.Now().Add(WriteWait))
+	if err := ws.WriteMessage(websocket.BinaryMessage, msg); err != nil {
+		return fmt.Errorf("write auth: %w", err)
+	}
+
+	// Ждём AuthResponse.
+	_ = ws.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_, respBytes, err := ws.ReadMessage()
+	if err != nil {
+		return fmt.Errorf("read auth response: %w", err)
+	}
+
+	var respEnv shared.Envelope
+	if err := shared.Unmarshal(respBytes, &respEnv); err != nil {
+		return fmt.Errorf("unmarshal auth response: %w", err)
+	}
+
+	if respEnv.AuthResp == nil {
+		return errors.New("expected auth response")
+	}
+
+	if !respEnv.AuthResp.Ok {
+		return fmt.Errorf("auth rejected: %s", respEnv.AuthResp.Message)
+	}
+
+	log.Printf("authenticated as user %d", respEnv.AuthResp.UserId)
 	return nil
 }
 
-// generateDeviceID генерирует UUID (v4) для устройства.
-// Использует crypto/rand — не Math.random.
-func (c *Config) generateDeviceID() error {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return fmt.Errorf("rand: %w", err)
+// ============================================================
+// SESSION
+// ============================================================
+
+func (c *Client) runSession(ctx context.Context) {
+	done := make(chan struct{})
+	var once sync.Once
+	stop := func() {
+		once.Do(func() { close(done) })
 	}
 
-	// RFC 4122: version 4 (random), variant 1.
-	b[6] = (b[6] & 0x0f) | 0x40 // version 4
-	b[8] = (b[8] & 0x3f) | 0x80 // variant 1
+	go func() {
+		defer stop()
+		c.writePump()
+	}()
 
-	// Формат UUID: 8-4-4-4-12
-	c.DeviceID = fmt.Sprintf("%s-%s-%s-%s-%s",
-		hex.EncodeToString(b[0:4]),
-		hex.EncodeToString(b[4:6]),
-		hex.EncodeToString(b[6:8]),
-		hex.EncodeToString(b[8:10]),
-		hex.EncodeToString(b[10:16]),
-	)
-	return nil
+	go func() {
+		defer stop()
+		c.readPump(ctx)
+	}()
+
+	<-done
+
+	c.mu.Lock()
+	if c.ws != nil {
+		_ = c.ws.Close()
+		c.ws = nil
+	}
+	c.mu.Unlock()
 }
 
-// Hostname возвращает имя устройства.
-// Сначала пробует os.Hostname(), иначе — "android-device".
-func (c *Config) resolveHostname() string {
-	if c.Hostname != "" {
-		return c.Hostname
+// readPump читает сообщения от сервера.
+func (c *Client) readPump(ctx context.Context) {
+	defer func() {
+		c.mu.Lock()
+		if c.ws != nil {
+			_ = c.ws.Close()
+		}
+		c.mu.Unlock()
+	}()
+
+	for {
+		c.mu.Lock()
+		ws := c.ws
+		c.mu.Unlock()
+		if ws == nil {
+			return
+		}
+
+		_, msg, err := ws.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+				log.Printf("read: %v", err)
+			}
+			return
+		}
+
+		var env shared.Envelope
+		if err := shared.Unmarshal(msg, &env); err != nil {
+			log.Printf("unmarshal: %v", err)
+			continue
+		}
+
+		if env.Command != nil {
+			go c.handleCommand(ctx, env.Command)
+		}
 	}
-	if h, err := os.Hostname(); err == nil && h != "" {
-		return h
+}
+
+// writePump пишет сообщения серверу.
+func (c *Client) writePump() {
+	ticker := time.NewTicker(PingPeriod)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		c.mu.Lock()
+		ws := c.ws
+		c.mu.Unlock()
+		if ws == nil {
+			return
+		}
+
+		_ = ws.SetWriteDeadline(time.Now().Add(WriteWait))
+		if err := ws.WriteMessage(websocket.PingMessage, nil); err != nil {
+			return
+		}
 	}
-	return "android-device"
+}
+
+// ============================================================
+// ОБРАБОТКА КОМАНД
+// ============================================================
+
+func (c *Client) handleCommand(ctx context.Context, cmd *shared.Command) {
+	result := c.handler.HandleCommand(cmd)
+
+	respEnv := shared.Envelope{
+		Result: result,
+	}
+
+	msg, err := shared.Marshal(respEnv)
+	if err != nil {
+		log.Printf("marshal result: %v", err)
+		return
+	}
+
+	c.mu.Lock()
+	ws := c.ws
+	c.mu.Unlock()
+	if ws == nil {
+		return
+	}
+
+	_ = ws.SetWriteDeadline(time.Now().Add(WriteWait))
+	if err := ws.WriteMessage(websocket.BinaryMessage, msg); err != nil {
+		log.Printf("write result: %v", err)
+	}
+
+	log.Printf("command %s done: ok=%v", cmd.Id, result.Ok)
+}
+
+// ============================================================
+// ОТПРАВКА СОБЫТИЙ
+// ============================================================
+
+// SendEvent отправляет событие серверу (например, лог или ping).
+func (c *Client) SendEvent(event string, payload interface{}) error {
+	payloadBytes, err := shared.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal event payload: %w", err)
+	}
+
+	env := shared.Envelope{
+		Event: &shared.Event{
+			Event:   event,
+			Payload: payloadBytes,
+		},
+	}
+
+	msg, err := shared.Marshal(env)
+	if err != nil {
+		return fmt.Errorf("marshal envelope: %w", err)
+	}
+
+	c.mu.Lock()
+	ws := c.ws
+	c.mu.Unlock()
+	if ws == nil {
+		return errors.New("not connected")
+	}
+
+	_ = ws.SetWriteDeadline(time.Now().Add(WriteWait))
+	return ws.WriteMessage(websocket.BinaryMessage, msg)
 }
