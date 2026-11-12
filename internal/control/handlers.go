@@ -11,17 +11,23 @@ import (
 	"time"
 
 	"veltrix/internal/shared"
-	pb "veltrix/internal/shared"
 )
 
 // ============================================================
 // ВСПОМОГАТЕЛЬНЫЕ
 // ============================================================
 
+// writeJSON — записать JSON в ответ.
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
 // decodeJSON читает JSON из тела запроса.
 func decodeJSON(r *http.Request, v interface{}) error {
 	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields() // строгость: неизвестные поля = ошибка
+	dec.DisallowUnknownFields()
 	return dec.Decode(v)
 }
 
@@ -38,10 +44,9 @@ func apiError(w http.ResponseWriter, err error) {
 	})
 }
 
-// clientIP вытаскивает IP из запроса (учитывает X-Forwarded-For от Cloudflare).
+// clientIP вытаскивает IP из запроса (учитывает X-Forwarded-For).
 func clientIP(r *http.Request) string {
 	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		// X-Forwarded-For: client, proxy1, proxy2
 		return strings.TrimSpace(strings.Split(fwd, ",")[0])
 	}
 	return strings.Split(r.RemoteAddr, ":")[0]
@@ -81,7 +86,6 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Автоматически логиним после регистрации.
 	sess, _, err := s.Login(r.Context(), LoginInput{
 		Username:  req.Username,
 		Password:  req.Password,
@@ -89,7 +93,6 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		UserAgent: r.UserAgent(),
 	})
 	if err != nil {
-		// Регистрация прошла, но логин — нет. Не критично, вернём ok.
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"ok":   true,
 			"user": user,
@@ -153,7 +156,6 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Если есть Cookie — удаляем сессию из БД.
 	if cookie, err := r.Cookie(SessionCookieName); err == nil {
 		_ = s.db.DeleteSession(r.Context(), cookie.Value)
 	}
@@ -196,7 +198,6 @@ func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Обогащаем данными о количестве сайтов на каждом устройстве.
 	type deviceView struct {
 		shared.Device
 		SiteCount int `json:"site_count"`
@@ -218,11 +219,6 @@ func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
 // /api/devices/{id}
 // ============================================================
 
-// handleDeviceByID — управление одним устройством.
-// Поддерживает:
-//   GET    /api/devices/{id}          — данные устройства
-//   DELETE /api/devices/{id}          — отвязать устройство
-//   POST   /api/devices/{id}/cmd      — отправить команду агенту
 func (s *Server) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
 	if user == nil {
@@ -230,7 +226,6 @@ func (s *Server) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Парсим {id} из пути.
 	rest := strings.TrimPrefix(r.URL.Path, "/api/devices/")
 	parts := strings.Split(rest, "/")
 	if len(parts) == 0 || parts[0] == "" {
@@ -244,11 +239,6 @@ func (s *Server) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Проверяем, что устройство принадлежит пользователю.
-	device, err := s.db.GetDeviceByUUID(r.Context(), "") // заглушка
-	_ = device
-	// Получаем устройство по внутреннему ID через хаб или БД.
-	// (В БД нет метода GetDeviceByID — добавим ниже.)
 	dev, err := s.db.GetDeviceByID(r.Context(), deviceID)
 	if err != nil {
 		apiError(w, err)
@@ -284,7 +274,6 @@ func (s *Server) handleGetDevice(w http.ResponseWriter, r *http.Request, dev *sh
 }
 
 func (s *Server) handleDeleteDevice(w http.ResponseWriter, r *http.Request, dev *shared.Device) {
-	// Отвязываем: удаляем из БД (каскадно удалятся сайты).
 	if err := s.db.DeleteDevice(r.Context(), dev.ID); err != nil {
 		apiError(w, err)
 		return
@@ -292,10 +281,9 @@ func (s *Server) handleDeleteDevice(w http.ResponseWriter, r *http.Request, dev 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 }
 
-// sendCommandRequest — тело POST /api/devices/{id}/cmd.
 type sendCommandRequest struct {
-	Action  string          `json:"action"`            // "start_site", "stop_site", ...
-	Payload json.RawMessage `json:"payload,omitempty"` // JSON, который будет преобразован в Protobuf
+	Action  string          `json:"action"`
+	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
 func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *shared.Device) {
@@ -311,19 +299,12 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 		return
 	}
 
-	// Парсим payload в нужный Protobuf-тип.
-	var payload interface {
-		Reset()
-		String() string
-		ProtoMessage()
-	}
 	payload, err := parsePayload(req.Action, req.Payload)
 	if err != nil {
 		apiError(w, shared.ErrBadRequest(err.Error()))
 		return
 	}
 
-	// Отправляем команду агенту.
 	ctx, cancel := context.WithTimeout(r.Context(), 35*time.Second)
 	defer cancel()
 
@@ -333,7 +314,6 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 		return
 	}
 
-	// Возвращаем ответ агента.
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":      result.Ok,
 		"message": result.Message,
@@ -341,35 +321,34 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 	})
 }
 
-// parsePayload превращает JSON в нужный Protobuf-тип по action.
-func parsePayload(action string, raw json.RawMessage) (interface{ Reset(); String() string; ProtoMessage() }, error) {
+func parsePayload(action string, raw json.RawMessage) (interface{}, error) {
 	switch action {
 	case "start_site":
-		var p pb.StartSite
+		var p shared.StartSite
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
 		}
 		return &p, nil
 	case "stop_site":
-		var p pb.StopSite
+		var p shared.StopSite
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
 		}
 		return &p, nil
 	case "git_pull":
-		var p pb.GitPull
+		var p shared.GitPull
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
 		}
 		return &p, nil
 	case "get_logs":
-		var p pb.GetLogs
+		var p shared.GetLogs
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
 		}
 		return &p, nil
 	case "create_tunnel":
-		var p pb.CreateTunnel
+		var p shared.CreateTunnel
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
 		}
@@ -390,7 +369,6 @@ func (s *Server) handleSites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Собираем сайты со всех устройств пользователя.
 	devices, _ := s.db.ListDevicesByUser(r.Context(), user.ID)
 	all := make([]map[string]interface{}, 0)
 	for _, d := range devices {
@@ -411,11 +389,10 @@ func (s *Server) handleSites(w http.ResponseWriter, r *http.Request) {
 }
 
 // ============================================================
-// /api/sites/{id}
+// /api/sites/{deviceID}/{siteID}
 // ============================================================
 
 func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
-	// Пока только GET /api/sites/{deviceID}/{siteID} — детали сайта.
 	user := UserFromContext(r.Context())
 	if user == nil {
 		apiError(w, shared.ErrUnauthorized("not logged in"))
@@ -436,7 +413,6 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 	}
 	siteID := parts[1]
 
-	// Проверяем, что устройство принадлежит пользователю.
 	dev, err := s.db.GetDeviceByID(r.Context(), deviceID)
 	if err != nil || dev.UserID != user.ID {
 		apiError(w, shared.ErrForbidden("not your device"))
