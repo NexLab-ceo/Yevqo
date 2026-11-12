@@ -101,6 +101,17 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/devices/", s.RequireAuth(s.handleDeviceByID))
 	s.mux.HandleFunc("/api/sites", s.RequireAuth(s.handleSites))
 	s.mux.HandleFunc("/api/sites/", s.RequireAuth(s.handleSiteByID))
+	// Workspace and operations modules.
+	s.mux.HandleFunc("/api/projects", s.RequireAuth(s.handleProjects))
+	s.mux.HandleFunc("/api/projects/", s.RequireAuth(s.handleProjectByID))
+	s.mux.HandleFunc("/api/databases/servers", s.RequireAuth(s.handleDatabaseServers))
+	s.mux.HandleFunc("/api/databases/servers/", s.RequireAuth(s.handleDatabaseServerByID))
+	s.mux.HandleFunc("/api/databases", s.RequireAuth(s.handleDatabases))
+	s.mux.HandleFunc("/api/logs", s.RequireAuth(s.handleLogs))
+	s.mux.HandleFunc("/api/notifications", s.RequireAuth(s.handleNotifications))
+	s.mux.HandleFunc("/api/settings", s.RequireAuth(s.handleSettings))
+	s.mux.HandleFunc("/api/reports", s.RequireAuth(s.handleReports))
+	s.mux.HandleFunc("/api/backups", s.RequireAuth(s.handleBackups))
 
 	// --- API для админа ---
 	s.mux.HandleFunc("/admin/api/users", s.RequireAdmin(s.handleAdminUsers))

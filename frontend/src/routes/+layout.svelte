@@ -12,7 +12,7 @@
     const navigation = [
         { label: 'WORKSPACE', items: [
             { title: 'Overview', href: '/', icon: '◫', active: 'exact' },
-            { title: 'Projects', href: '/projects', icon: '▦', soon: true }
+            { title: 'Projects', href: '/projects', icon: '▦' }
         ]},
         { label: 'INFRASTRUCTURE', items: [
             { title: 'Devices', href: '/devices', icon: '▣', active: 'root' },
@@ -23,14 +23,14 @@
         ]},
         { label: 'OPERATIONS', items: [
             { title: 'Monitoring', href: '/monitoring', icon: '⌁', soon: true },
-            { title: 'Logs', href: '/logs', icon: '≡', soon: true },
-            { title: 'Notifications', href: '/notifications', icon: '♧', soon: true },
-            { title: 'Reports & Export', href: '/reports', icon: '▤', soon: true }
+            { title: 'Logs', href: '/logs', icon: '≡' },
+            { title: 'Notifications', href: '/notifications', icon: '♧' },
+            { title: 'Reports & Export', href: '/reports', icon: '▤' }
         ]},
         { label: 'MANAGEMENT', items: [
             { title: 'Team & Permissions', href: '/team', icon: '♙', soon: true },
             { title: 'Integrations', href: '/integrations', icon: '⌘', soon: true },
-            { title: 'Backup & Restore', href: '/backups', icon: '⤓', soon: true },
+            { title: 'Backup & Restore', href: '/backups', icon: '⤓' },
             { title: 'Maintenance', href: '/maintenance', icon: '⚙', soon: true }
         ]}
     ];
@@ -110,7 +110,7 @@
             </nav>
 
             <div class="sidebar-bottom">
-                <div class="nav-item nav-disabled nav-settings"><span class="nav-icon">⚙</span><span>Settings</span><small>SOON</small></div>
+                <a href="/settings" class:active={isActive({href:"/settings"})} class="nav-item nav-settings"><span class="nav-icon">⚙</span><span>Settings</span></a>
                 <div class="account-row">
                     <span class="account-avatar">{($user?.username || 'U').slice(0,1).toUpperCase()}</span>
                     <span class="account-copy"><strong>{$user?.username}</strong><small>{$user?.email || 'Personal account'}</small></span>

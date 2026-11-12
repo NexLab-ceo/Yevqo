@@ -1,10 +1,10 @@
 <script>
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
-    import { listDevices } from '$lib/api.js';
+    import { listDevices, createDatabaseServer } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
 
-    const steps = ['Engine & Device', 'Storage & Resources', 'Network & Security', 'Review & Install'];
+    const steps = ['Engine & Device', 'Storage & Resources', 'Network & Security', 'Review & Save'];
     let step = 0;
     let loadingDevices = true;
     let devices = [];
@@ -78,9 +78,23 @@
         step = Math.max(step - 1, 0);
     }
 
-    function finishPreview() {
-        completed = true;
+    async function finishPreview() {
         error = '';
+        if (remoteAccess || bindAddress !== '127.0.0.1') {
+            error = 'Удалённый bind пока заблокирован: сначала настройте firewall и безопасный Agent protocol.';
+            return;
+        }
+        const result = await createDatabaseServer({
+            device_id: Number(deviceId),
+            name: serverName,
+            engine,
+            version: version === 'latest' ? '' : version,
+            port: Number(port),
+            data_directory: dataDirectory,
+            network_access: 'localhost'
+        });
+        if (!result.ok) { error = result.error || 'Не удалось сохранить конфигурацию'; return; }
+        completed = true;
     }
 
     function formatStorage(value) {
@@ -117,7 +131,7 @@
             {/each}
             <div class="rail-note">
                 <span class="note-icon">i</span>
-                <span>Установка выполняется локально на выбранном Android-устройстве через Agent.</span>
+                <span>Сейчас мастер сохраняет конфигурацию. Установка пакета будет отдельным этапом после реализации Agent protocol.</span>
             </div>
         </aside>
 
@@ -125,9 +139,9 @@
             {#if completed}
                 <div class="success-state">
                     <div class="success-icon">✓</div>
-                    <h2>Конфигурация готова</h2>
-                    <p>Мастер собрал параметры сервера. Реальная установка пока недоступна: Android Agent ещё не поддерживает команды управления Database Server.</p>
-                    <div class="notice warning"><strong>Установка не запускалась.</strong> Ни пакеты, ни каталоги, ни существующие базы на устройстве не изменялись.</div>
+                    <h2>Конфигурация сохранена</h2>
+                    <p>Параметры сервера сохранены в Control Plane. Запись имеет статус Planned — реальная установка PostgreSQL / MariaDB / MySQL ещё не запускается.</p>
+                    <div class="notice warning"><strong>Безопасно сохранено.</strong> На Android-устройстве ничего не устанавливалось и существующие данные не изменялись.</div>
                     <div class="summary-actions">
                         <button class="btn btn-secondary" on:click={() => { completed = false; step = 3; }}>Изменить настройки</button>
                         <button class="btn btn-primary" on:click={() => goto('/databases')}>Вернуться в Databases</button>

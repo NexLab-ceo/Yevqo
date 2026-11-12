@@ -1,22 +1,19 @@
 <script>
-    import { goto } from '$app/navigation';
+ import {onMount} from 'svelte';import {goto} from '$app/navigation';import {listDatabaseServers,listDatabases} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
+ let servers=[],databases=[],loading=true;
+ async function load(){const [s,d]=await Promise.all([listDatabaseServers(),listDatabases()]);if(s.ok)servers=s.data.servers||[];else notify(s.error||'Не удалось загрузить Database Servers','error');if(d.ok)databases=d.data.databases||[];else if(d.status!==0)notify(d.error||'Не удалось загрузить базы','error');loading=false}
+ onMount(load);
+ function stateLabel(s){return ({planned:'Configuration saved',installing:'Installing',ready:'Ready',stopped:'Stopped',error:'Error'})[s]||s}
 </script>
-
 <svelte:head><title>Databases · VELTRIX Dock</title></svelte:head>
-<div class="page-header">
-    <div><h1 class="page-title">Databases</h1><p class="page-desc">Database servers and databases across your Android devices.</p></div>
-    <button class="btn btn-primary" on:click={() => goto('/databases/servers/new')}>+ Install Database Server</button>
-</div>
-<div class="db-empty">
-    <div class="db-icon">DB</div>
-    <h2>Database infrastructure</h2>
-    <p>Управляйте PostgreSQL, MariaDB и MySQL серверами, а также отдельными базами данных на подключённых Android-устройствах.</p>
-    <button class="btn btn-primary" on:click={() => goto('/databases/servers/new')}>Установить Database Server <span>→</span></button>
-</div>
+<div class="page-header"><div><div class="eyebrow">INFRASTRUCTURE</div><h1 class="page-title">Databases</h1><p class="page-desc">Database Servers and independent databases across your Android devices.</p></div><Button variant="primary" on:click={()=>goto('/databases/servers/new')}>＋ Add Database Server</Button></div>
+{#if loading}<div class="empty">Загрузка инфраструктуры баз данных…</div>{:else}
+<div class="section-header"><div><h2 class="section-title">Database Servers</h2><p class="section-desc">Локальные процессы СУБД на Android-устройствах.</p></div><span class="count">{servers.length} servers</span></div>
+{#if servers.length}<div class="server-list">{#each servers as s}<article class="server-row"><span class="engine">{s.engine==='postgresql'?'PG':s.engine==='mariadb'?'M':'MY'}</span><div class="server-copy"><strong>{s.name}</strong><small>{s.engine} · {s.version||'Latest'} · Device #{s.device_id} · :{s.port}</small></div><span class="server-state"><StatusDot status={s.status==='ready'?'online':s.status==='error'?'error':'offline'}/>{stateLabel(s.status)}</span><span class="server-date">{new Date(s.created_at).toLocaleDateString()}</span></article>{/each}</div>{:else}<div class="empty compact"><strong>Database Servers ещё не добавлены</strong><p>Создайте конфигурацию сервера. Реальная установка будет активирована после реализации Agent lifecycle-команд.</p><Button variant="primary" on:click={()=>goto('/databases/servers/new')}>Настроить Database Server</Button></div>{/if}
+<div class="section-header"><div><h2 class="section-title">Databases</h2><p class="section-desc">Отдельные базы внутри Database Server.</p></div><span class="count">{databases.length} databases</span></div>
+{#if databases.length}<div class="server-list">{#each databases as d}<article class="server-row"><span class="engine small">DB</span><div class="server-copy"><strong>{d.name}</strong><small>{d.server_name} · {d.engine} · Device #{d.device_id}</small></div><span class="server-state">{d.status}</span></article>{/each}</div>{:else}<div class="empty compact">Базы появятся после установки и подключения Database Server.</div>{/if}
+{/if}
 <style>
-    .db-empty{min-height:390px;border:1px dashed #334155;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:35px;background:linear-gradient(145deg,#101827,#0b1020)}
-    .db-icon{width:52px;height:52px;border-radius:14px;display:grid;place-items:center;background:#1a2140;border:1px solid #373d70;color:#a5b4fc;font:700 14px ui-monospace,monospace;margin-bottom:18px}
-    .db-empty h2{font-size:18px}.db-empty p{max-width:440px;color:#94a3b8;font-size:12px;line-height:1.7;margin:8px 0 20px}
-    .btn{border:1px solid #6366f1;background:#6366f1;color:white;border-radius:8px;padding:9px 14px;font-size:12px;font-weight:600;cursor:pointer}
-    .btn:hover{background:#5558df}
+.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}.section-header{display:flex;align-items:center;justify-content:space-between;margin:25px 0 11px}.section-title{font-size:12px}.section-desc,.count{font-size:9px;color:#64748b;margin-top:3px}.server-list{border:1px solid #253149;border-radius:11px;background:#101727;overflow:hidden}.server-row{display:flex;align-items:center;gap:11px;padding:12px;border-bottom:1px solid #1e293b}.server-row:last-child{border:0}.engine{width:33px;height:33px;display:grid;place-items:center;border-radius:8px;background:#1e3a5f;color:#93c5fd;font-size:10px;font-weight:800;flex:none}.engine.small{background:#242b50;color:#a5b4fc}.server-copy{display:grid;gap:3px;flex:1;min-width:0}.server-copy strong{font-size:11px}.server-copy small{font-size:9px;color:#64748b}.server-state{display:flex;align-items:center;gap:7px;font-size:9px;color:#94a3b8;white-space:nowrap}.server-date{font-size:9px;color:#64748b}.empty.compact{padding:24px}.empty.compact p{margin:7px 0 13px}
+@media(max-width:600px){.server-date{display:none}.server-row{gap:8px}.server-state{font-size:8px}}
 </style>

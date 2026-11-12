@@ -1,0 +1,11 @@
+<script>
+ import {onMount} from 'svelte';import {listBackups} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';
+ let backups=[],loading=true;
+ onMount(async()=>{const r=await listBackups();if(r.ok)backups=r.data.backups||[];else notify(r.error||'Не удалось загрузить резервные копии','error');loading=false});
+ function size(n){if(!n)return '—';const units=['B','KB','MB','GB'];let i=0,v=n;while(v>=1024&&i<3){v/=1024;i++}return v.toFixed(1)+' '+units[i]}
+</script>
+<div class="page-header"><div><div class="eyebrow">DATA PROTECTION</div><h1 class="page-title">Backup & Restore</h1><p class="page-desc">Резервные копии сайтов и баз данных хранятся независимо от жизненного цикла сайта.</p></div></div>
+{#if loading}<div class="empty">Загрузка резервных копий…</div>{:else if !backups.length}<div class="empty"><strong>Резервных копий пока нет</strong><p>Создание backup-файлов будет доступно после подключения безопасных команд Agent и локального хранилища.</p></div>{:else}<div class="backup-list">{#each backups as b}<div class="backup-row"><span class="backup-icon">⤓</span><span class="backup-copy"><strong>{b.file_name}</strong><small>{b.resource_type} · {b.resource_id} · {new Date(b.created_at).toLocaleString()}</small></span><span class="size">{size(b.size_bytes)}</span><span class="status">{b.status}</span></div>{/each}</div>{/if}
+<style>
+.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}.backup-list{border:1px solid #253149;border-radius:11px;overflow:hidden;background:#101727}.backup-row{display:flex;align-items:center;gap:11px;padding:12px;border-bottom:1px solid #1e293b}.backup-row:last-child{border:0}.backup-icon{width:30px;height:30px;display:grid;place-items:center;background:#172136;color:#a5b4fc;border-radius:8px}.backup-copy{display:grid;gap:3px;min-width:0;flex:1}.backup-copy strong{font-size:10px}.backup-copy small,.size,.status{font-size:9px;color:#64748b}.size{white-space:nowrap}.status{text-transform:capitalize}
+</style>

@@ -125,3 +125,29 @@ export async function adminUnblockUser(id) {
 export async function adminStats() {
     return request('GET', '/admin/api/stats');
 }
+
+
+// === Workspace ===
+export async function listProjects() { return request('GET', '/api/projects'); }
+export async function createProject(name, description = '') { return request('POST', '/api/projects', { name, description }); }
+export async function getProject(id) { return request('GET', `/api/projects/${id}`); }
+export async function updateProject(id, name, description = '') { return request('PATCH', `/api/projects/${id}`, { name, description }); }
+export async function deleteProject(id) { return request('DELETE', `/api/projects/${id}`); }
+export async function attachProjectDevice(projectId, deviceId) { return request('POST', `/api/projects/${projectId}/devices`, { device_id: deviceId }); }
+export async function attachProjectSite(projectId, deviceId, siteId) { return request('POST', `/api/projects/${projectId}/sites`, { device_id: deviceId, site_id: siteId }); }
+
+// === Database inventory ===
+export async function listDatabaseServers() { return request('GET', '/api/databases/servers'); }
+export async function createDatabaseServer(input) { return request('POST', '/api/databases/servers', input); }
+export async function getDatabaseServer(id) { return request('GET', `/api/databases/servers/${id}`); }
+export async function deleteDatabaseServer(id) { return request('DELETE', `/api/databases/servers/${id}`); }
+export async function listDatabases() { return request('GET', '/api/databases'); }
+
+// === Operations ===
+export async function listLogs(limit = 100) { return request('GET', `/api/logs?limit=${limit}`); }
+export async function listNotifications() { return request('GET', '/api/notifications'); }
+export async function markNotificationRead(id) { return request('POST', '/api/notifications', { id }); }
+export async function getSettings() { return request('GET', '/api/settings'); }
+export async function saveSettings(settings) { return request('PUT', '/api/settings', settings); }
+export async function getReports() { return request('GET', '/api/reports'); }
+export async function listBackups() { return request('GET', '/api/backups'); }
