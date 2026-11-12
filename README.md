@@ -28,3 +28,9 @@ Database engine installation, database creation, credentials, backup execution a
 - The Agent now emits an application heartbeat every 30 seconds; Control Plane updates device `last_seen`.
 - The Monitoring screen requests typed metrics from online agents: CPU utilization sample, 1-minute load average, memory totals/available, storage totals/available, and thermal-zone temperature when readable.
 - Metrics are stored as time-stamped snapshots in the additive `002_device_metrics.sql` migration. Missing Android thermal sensors are represented as unavailable, not as zero.
+
+
+### Database Server configuration
+- The four-step wizard persists its storage budget, RAM budget, connection limit, local bind, SSL mode, authentication, startup policy and storage monitoring preferences.
+- These settings are configuration metadata only while the server remains `planned`; no package install or database initialization is implied.
+- Migration `003_database_server_options.sql` adds the optional settings without deleting existing database records.
