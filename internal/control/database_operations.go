@@ -122,3 +122,32 @@ func (s *Server) handleDatabaseConnections(w http.ResponseWriter,r *http.Request
 
 // Avoid accidental disclosure: credentials are only used by internal provisioning code, never serialized.
 func redactDatabasePayload(b []byte) []byte { var v map[string]interface{};if json.Unmarshal(b,&v)!=nil{return nil};delete(v,"password");out,_:=json.Marshal(v);return out }
+
+func (s *Server) handleDatabaseByID(w http.ResponseWriter,r *http.Request) {
+	if r.Method!=http.MethodGet { http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return }
+	u:=UserFromContext(r.Context())
+	raw:=strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/databases/"),"/")
+	id,err:=strconv.ParseInt(raw,10,64)
+	if err!=nil||id<1 { apiError(w,shared.ErrBadRequest("invalid database id"));return }
+	var databaseID,serverID,deviceID int64
+	var name,status,serverName,engine string
+	var username sql.NullString
+	var port int
+	var created time.Time
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.device_id,ds.name,ds.engine,ds.port,dc.username
+		FROM databases d JOIN database_servers ds ON ds.id=d.server_id
+		LEFT JOIN database_credentials dc ON dc.database_id=d.id
+		WHERE d.id=? AND d.user_id=?`,id,u.ID).Scan(&databaseID,&serverID,&name,&status,&created,&deviceID,&serverName,&engine,&port,&username)
+	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database not found"));return }
+	if err!=nil { apiError(w,shared.ErrInternal("could not load database details"));return }
+	var linkedSites int
+	if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM site_database_connections WHERE database_id=? AND user_id=?`,id,u.ID).Scan(&linkedSites);err!=nil { apiError(w,shared.ErrInternal("could not load database connections"));return }
+	user:=""
+	if username.Valid { user=username.String }
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"database":map[string]interface{}{
+		"id":databaseID,"server_id":serverID,"name":name,"status":status,"created_at":created,
+		"device_id":deviceID,"server_name":serverName,"engine":engine,"port":port,
+		"username":user,"host":"127.0.0.1","linked_sites":linkedSites,
+		"role_type":"Application user","permissions":[]string{"CONNECT","USAGE ON SCHEMA public","SELECT","INSERT","UPDATE","DELETE","USAGE/SELECT/UPDATE ON SEQUENCES"},
+	}})
+}
