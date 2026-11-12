@@ -254,8 +254,29 @@ func (s *Server) handleReports(w http.ResponseWriter,r *http.Request) {
 func (s *Server) handleBackups(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	if r.Method==http.MethodPost {
-		var in struct { DeviceID int64; SiteID string }
-		if err:=decodeJSON(r,&in);err!=nil||in.DeviceID<1||!validBackupSiteID(in.SiteID){apiError(w,shared.ErrBadRequest("invalid device or site"));return}
+		var in struct {
+			DeviceID int64 `json:"device_id"`
+			SiteID string `json:"site_id"`
+			DatabaseID int64 `json:"database_id"`
+		}
+		if err:=decodeJSON(r,&in);err!=nil { apiError(w,shared.ErrBadRequest("invalid backup request"));return }
+		if in.DatabaseID>0 {
+			var deviceID int64;var serverID int64;var database,engine,databaseStatus,serverStatus string;var port int
+			err:=s.db.conn.QueryRowContext(r.Context(),`SELECT ds.device_id,ds.id,d.name,ds.engine,d.status,ds.status,ds.port
+				FROM databases d JOIN database_servers ds ON ds.id=d.server_id
+				WHERE d.id=? AND d.user_id=?`,in.DatabaseID,u.ID).Scan(&deviceID,&serverID,&database,&engine,&databaseStatus,&serverStatus,&port)
+			if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database not found"));return }
+			if err!=nil { apiError(w,shared.ErrInternal("could not load database backup target"));return }
+			if engine!="postgresql" || databaseStatus!="ready" || serverStatus!="ready" { apiError(w,shared.ErrBadRequest("database and PostgreSQL server must be ready"));return }
+			conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
+			res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO backups(user_id,device_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,0,'queued')`,u.ID,deviceID,"database",fmt.Sprint(in.DatabaseID),fmt.Sprintf("pending-%d.dump",in.DatabaseID))
+			if err!=nil { apiError(w,shared.ErrInternal("could not queue database backup"));return }
+			backupID,_:=res.LastInsertId()
+			go s.runDatabaseBackup(backupID,u.ID,deviceID,conn,&shared.CreateDatabaseBackup{DatabaseID:in.DatabaseID,ServerID:serverID,Database:database,Port:uint32(port)})
+			writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"backup":map[string]interface{}{"id":backupID,"device_id":deviceID,"resource_type":"database","resource_id":fmt.Sprint(in.DatabaseID),"file_name":fmt.Sprintf("pending-%d.dump",in.DatabaseID),"size_bytes":0,"status":"queued"}})
+			return
+		}
+		if in.DeviceID<1||!validBackupSiteID(in.SiteID){apiError(w,shared.ErrBadRequest("invalid device or site"));return}
 		var count int
 		if err:=s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?",in.DeviceID,in.SiteID,u.ID).Scan(&count);err!=nil||count!=1{apiError(w,shared.ErrNotFound("site not found"));return}
 		conn,online:=s.hub.Get(in.DeviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
@@ -274,6 +295,23 @@ func (s *Server) handleBackups(w http.ResponseWriter,r *http.Request) {
 	if err!=nil{apiError(w,shared.ErrInternal("could not load backups"));return};defer rows.Close()
 	out:=make([]map[string]interface{},0);for rows.Next(){var id,size int64;var typ,resource,file,status string;var created time.Time;if err:=rows.Scan(&id,&typ,&resource,&file,&size,&status,&created);err!=nil{apiError(w,shared.ErrInternal("could not read backups"));return};out=append(out,map[string]interface{}{"id":id,"resource_type":typ,"resource_id":resource,"file_name":file,"size_bytes":size,"status":status,"created_at":created})}
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"backups":out})
+}
+
+func (s *Server) runDatabaseBackup(backupID,userID,deviceID int64,conn *DeviceConn,req *shared.CreateDatabaseBackup) {
+	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='running' WHERE id=? AND user_id=?`,backupID,userID)
+	ctx,cancel:=context.WithTimeout(context.Background(),13*time.Minute);defer cancel()
+	result,err:=conn.SendCommand(ctx,"create_database_backup",req)
+	if err!=nil || !result.Ok {
+		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='failed' WHERE id=? AND user_id=?`,backupID,userID)
+		return
+	}
+	var backup shared.DatabaseBackupResult
+	if err:=shared.Unmarshal(result.Payload,&backup);err!=nil || backup.FileName=="" || backup.SizeBytes<1 {
+		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='failed' WHERE id=? AND user_id=?`,backupID,userID)
+		return
+	}
+	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET file_name=?,size_bytes=?,status='completed' WHERE id=? AND user_id=?`,backup.FileName,backup.SizeBytes,backupID,userID)
+	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(deviceID),Action:"database_backup_created",Details:map[string]interface{}{"backup_id":backupID,"database_id":req.DatabaseID,"size_bytes":backup.SizeBytes}})
 }
 
 func validBackupSiteID(siteID string) bool {
