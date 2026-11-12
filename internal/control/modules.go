@@ -148,8 +148,8 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 
 func (s *Server) handleInstallDatabaseServer(w http.ResponseWriter,r *http.Request,id int64) {
 	u:=UserFromContext(r.Context())
-	var deviceID int64;var engine,version,dataDir,status,bind string;var port,maxConnections int;var remote bool
-	err:=s.db.conn.QueryRowContext(r.Context(),"SELECT device_id,engine,version,data_directory,status,port,max_connections,bind_address,remote_access FROM database_servers WHERE id=? AND user_id=?",id,u.ID).Scan(&deviceID,&engine,&version,&dataDir,&status,&port,&maxConnections,&bind,&remote)
+	var deviceID int64;var engine,version,dataDir,status,bind,sslMode string;var port,maxConnections int;var remote bool
+	err:=s.db.conn.QueryRowContext(r.Context(),"SELECT device_id,engine,version,data_directory,status,port,max_connections,bind_address,remote_access,ssl_mode FROM database_servers WHERE id=? AND user_id=?",id,u.ID).Scan(&deviceID,&engine,&version,&dataDir,&status,&port,&maxConnections,&bind,&remote,&sslMode)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}
 	if engine!="postgresql"{apiError(w,shared.ErrBadRequest("Agent installation currently supports PostgreSQL only"));return}
 	if status=="ready"{apiError(w,shared.ErrBadRequest("database server is already ready"));return}
@@ -158,7 +158,7 @@ func (s *Server) handleInstallDatabaseServer(w http.ResponseWriter,r *http.Reque
 	conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
 	_,_ = s.db.conn.ExecContext(r.Context(),"UPDATE database_servers SET status='installing' WHERE id=? AND user_id=?",id,u.ID)
 	ctx,cancel:=context.WithTimeout(r.Context(),10*time.Minute);defer cancel()
-	result,err:=conn.SendCommand(ctx,"install_database_server",&shared.InstallDatabaseServer{ServerID:id,Engine:engine,Port:uint32(port),DataDirectory:dataDir,MaxConnections:uint32(maxConnections)})
+	result,err:=conn.SendCommand(ctx,"install_database_server",&shared.InstallDatabaseServer{ServerID:id,Engine:engine,Port:uint32(port),DataDirectory:dataDir,MaxConnections:uint32(maxConnections),SSLMode:sslMode})
 	if err!=nil{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,u.ID);apiError(w,shared.ErrInternal("Agent installation command failed"));return}
 	if !result.Ok{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,u.ID);apiError(w,shared.ErrBadRequest(result.Message));return}
 	var installed shared.DatabaseServerInstallResult
