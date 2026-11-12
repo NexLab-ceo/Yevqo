@@ -4,10 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"os"
-	"path/filepath"
-	"testing"
 	"strings"
+	"testing"
 )
 
 func TestResolveTermuxPathAcceptsPrefixPath(t *testing.T) {
