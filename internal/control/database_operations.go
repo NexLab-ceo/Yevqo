@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"context"
 	"regexp"
 	"strconv"
 	"strings"
@@ -73,6 +74,30 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 	if err=tx.Commit();err!=nil { apiError(w,shared.ErrInternal("database created but metadata commit failed; inspect database inventory before retrying"));return }
 	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_created",Details:map[string]interface{}{"database_id":databaseID,"server_id":in.ServerID,"database":in.Name,"username":in.Username}})
 	writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"database":map[string]interface{}{"id":databaseID,"server_id":in.ServerID,"name":in.Name,"username":in.Username,"status":"ready"},"message":"Database and least-privilege application role created. Password stored encrypted."})
+}
+
+func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID int64, siteID string) (map[string]string,error) {
+	rows,err:=s.db.conn.QueryContext(ctx,`SELECT d.name,ds.port,dc.username,dc.ciphertext,dc.nonce
+		FROM site_database_connections c
+		JOIN databases d ON d.id=c.database_id
+		JOIN database_servers ds ON ds.id=d.server_id
+		JOIN database_credentials dc ON dc.database_id=d.id
+		WHERE c.user_id=? AND c.device_id=? AND c.site_id=? AND d.status='ready' AND ds.status='ready'
+		ORDER BY c.id`,userID,deviceID,siteID)
+	if err!=nil{return nil,err};defer rows.Close()
+	type databaseEnv struct { Name string `json:"name"`; Host string `json:"host"`; Port int `json:"port"`; Username string `json:"username"`; Password string `json:"password"` }
+	all:=make([]databaseEnv,0)
+	for rows.Next(){
+		var item databaseEnv;var ciphertext,nonce []byte
+		if err:=rows.Scan(&item.Name,&item.Port,&item.Username,&ciphertext,&nonce);err!=nil{return nil,err}
+		plain,err:=decryptCredential(s.credentialKey,nonce,ciphertext);if err!=nil{return nil,err}
+		item.Host="127.0.0.1";item.Password=string(plain);all=append(all,item)
+	}
+	if err:=rows.Err();err!=nil{return nil,err}
+	if len(all)==0{return nil,nil}
+	encoded,err:=json.Marshal(all);if err!=nil{return nil,err}
+	first:=all[0]
+	return map[string]string{"DB_CONNECTION":"pgsql","DB_HOST":first.Host,"DB_PORT":strconv.Itoa(first.Port),"DB_DATABASE":first.Name,"DB_USERNAME":first.Username,"DB_PASSWORD":first.Password,"VELTRIX_DATABASES":string(encoded)},nil
 }
 
 func (s *Server) handleDatabaseConnections(w http.ResponseWriter,r *http.Request) {
