@@ -497,6 +497,8 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				if err != nil || !result.Ok { apiError(w, shared.ErrBadRequest("could not stop site; metadata was not removed")); return }
 			}
 			_, _ = s.db.conn.ExecContext(r.Context(), "DELETE FROM project_sites WHERE device_id=? AND site_id=?", deviceID, siteID)
+			// Remove only the link; the independent database and its data remain intact.
+			_, _ = s.db.conn.ExecContext(r.Context(), "DELETE FROM site_database_connections WHERE device_id=? AND site_id=?", deviceID, siteID)
 			if _, err := s.db.conn.ExecContext(r.Context(), "DELETE FROM sites WHERE device_id=? AND site_id=?", deviceID, siteID); err != nil { apiError(w, shared.ErrInternal("could not remove site metadata")); return }
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Site metadata removed. Device files were preserved."})
 			return
