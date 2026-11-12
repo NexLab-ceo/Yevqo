@@ -77,6 +77,15 @@ type CreateDatabaseBackup struct {
 	Port uint32 `json:"port"`
 }
 
+type TestDatabaseConnection struct {
+	DatabaseID int64 `json:"database_id"`
+	Database string `json:"database"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Port uint32 `json:"port"`
+	SSLMode string `json:"ssl_mode"`
+}
+
 type RestoreDatabaseBackup struct {
 	BackupServerID int64 `json:"backup_server_id"`
 	BackupFileName string `json:"backup_file_name"`
