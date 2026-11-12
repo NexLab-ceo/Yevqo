@@ -29,7 +29,7 @@
 <div class="panel-head">Пользователи, доступ и подключение</div>
 <div class="form-group"><label>Первый пользователь</label><input bind:value={username}/></div>
 <div class="form-group"><label>Доступ</label><select bind:value={access}><option>Local + private network</option><option>Local only</option><option>Private network</option></select></div>
-<div class="form-group"><label>Учетные данные</label><select bind:value={connection}><option>Create credentials automatically</option><option>Use existing user</option></option></select></div>
+<div class="form-group"><label>Учетные данные</label><select bind:value={connection}><option>Create credentials automatically</option><option>Use existing user</option></select></div>
 <div class="hint">Пароль будет создан сервером и показан только один раз после успешного создания.</div>
 {/if}
 {#if error}<div class="error">{error}</div>{/if}
