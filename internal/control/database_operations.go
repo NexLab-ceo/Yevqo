@@ -76,7 +76,7 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID int64, siteID string) (map[string]string,error) {
-	rows,err:=s.db.conn.QueryContext(ctx,`SELECT d.name,ds.port,dc.username,dc.ciphertext,dc.nonce
+	rows,err:=s.db.conn.QueryContext(ctx,`SELECT d.name,ds.port,ds.ssl_mode,dc.username,dc.ciphertext,dc.nonce
 		FROM site_database_connections c
 		JOIN databases d ON d.id=c.database_id
 		JOIN database_servers ds ON ds.id=d.server_id
@@ -84,11 +84,11 @@ func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID i
 		WHERE c.user_id=? AND c.device_id=? AND c.site_id=? AND d.status='ready' AND ds.status='ready'
 		ORDER BY c.id`,userID,deviceID,siteID)
 	if err!=nil{return nil,err};defer rows.Close()
-	type databaseEnv struct { Name string `json:"name"`; Host string `json:"host"`; Port int `json:"port"`; Username string `json:"username"`; Password string `json:"password"` }
+	type databaseEnv struct { Name string `json:"name"`; Host string `json:"host"`; Port int `json:"port"`; SSLMode string `json:"ssl_mode"`; Username string `json:"username"`; Password string `json:"password"` }
 	all:=make([]databaseEnv,0)
 	for rows.Next(){
 		var item databaseEnv;var ciphertext,nonce []byte
-		if err:=rows.Scan(&item.Name,&item.Port,&item.Username,&ciphertext,&nonce);err!=nil{return nil,err}
+		if err:=rows.Scan(&item.Name,&item.Port,&item.SSLMode,&item.Username,&ciphertext,&nonce);err!=nil{return nil,err}
 		plain,err:=decryptCredential(s.credentialKey,nonce,ciphertext);if err!=nil{return nil,err}
 		item.Host="127.0.0.1";item.Password=string(plain);all=append(all,item)
 	}
@@ -96,7 +96,7 @@ func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID i
 	if len(all)==0{return nil,nil}
 	encoded,err:=json.Marshal(all);if err!=nil{return nil,err}
 	first:=all[0]
-	return map[string]string{"DB_CONNECTION":"pgsql","DB_HOST":first.Host,"DB_PORT":strconv.Itoa(first.Port),"DB_DATABASE":first.Name,"DB_USERNAME":first.Username,"DB_PASSWORD":first.Password,"VELTRIX_DATABASES":string(encoded)},nil
+	return map[string]string{"DB_CONNECTION":"pgsql","DB_HOST":first.Host,"DB_PORT":strconv.Itoa(first.Port),"DB_SSLMODE":first.SSLMode,"DB_DATABASE":first.Name,"DB_USERNAME":first.Username,"DB_PASSWORD":first.Password,"VELTRIX_DATABASES":string(encoded)},nil
 }
 
 func (s *Server) handleDatabaseConnections(w http.ResponseWriter,r *http.Request) {
@@ -153,14 +153,14 @@ func (s *Server) handleDatabaseByID(w http.ResponseWriter,r *http.Request) {
 	id,err:=strconv.ParseInt(raw,10,64)
 	if err!=nil||id<1 { apiError(w,shared.ErrBadRequest("invalid database id"));return }
 	var databaseID,serverID,deviceID int64
-	var name,status,serverName,engine string
+	var name,status,serverName,engine,sslMode string
 	var username sql.NullString
 	var port int
 	var created time.Time
-	err=s.db.conn.QueryRowContext(r.Context(),`SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.device_id,ds.name,ds.engine,ds.port,dc.username
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.device_id,ds.name,ds.engine,ds.port,ds.ssl_mode,dc.username
 		FROM databases d JOIN database_servers ds ON ds.id=d.server_id
 		LEFT JOIN database_credentials dc ON dc.database_id=d.id
-		WHERE d.id=? AND d.user_id=?`,id,u.ID).Scan(&databaseID,&serverID,&name,&status,&created,&deviceID,&serverName,&engine,&port,&username)
+		WHERE d.id=? AND d.user_id=?`,id,u.ID).Scan(&databaseID,&serverID,&name,&status,&created,&deviceID,&serverName,&engine,&port,&sslMode,&username)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database not found"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load database details"));return }
 	var linkedSites int
@@ -170,7 +170,7 @@ func (s *Server) handleDatabaseByID(w http.ResponseWriter,r *http.Request) {
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"database":map[string]interface{}{
 		"id":databaseID,"server_id":serverID,"name":name,"status":status,"created_at":created,
 		"device_id":deviceID,"server_name":serverName,"engine":engine,"port":port,
-		"username":user,"host":"127.0.0.1","linked_sites":linkedSites,
+		"username":user,"host":"127.0.0.1","ssl_mode":sslMode,"linked_sites":linkedSites,
 		"role_type":"Application user","permissions":[]string{"CONNECT","USAGE ON SCHEMA public","SELECT","INSERT","UPDATE","DELETE","USAGE/SELECT/UPDATE ON SEQUENCES"},
 	}})
 }
