@@ -69,6 +69,13 @@
                     >
                         Сайты
                     </a>
+                    <a
+                        href="/databases"
+                        class="nav-item"
+                        class:active={isActive('/databases')}
+                    >
+                        Databases
+                    </a>
                 </div>
 
                 {#if $user?.username === 'admin'}
