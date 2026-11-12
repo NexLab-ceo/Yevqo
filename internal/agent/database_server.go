@@ -45,7 +45,18 @@ func installDatabaseServer(req shared.InstallDatabaseServer) (*shared.DatabaseSe
 	out,err:=exec.CommandContext(ctx,initdb,"-D",dataDir,"--auth-local=trust","--auth-host=scram-sha-256","--encoding=UTF8","--no-locale").CombinedOutput()
 	if err!=nil{return nil,fmt.Errorf("initdb failed: %s",trimOutput(string(out)))}
 	conf:=filepath.Join(dataDir,"postgresql.conf")
-	if err:=setPostgresConfig(conf,map[string]string{"listen_addresses":"'127.0.0.1'","port":fmt.Sprint(req.Port),"max_connections":fmt.Sprint(req.MaxConnections),"password_encryption":"'scram-sha-256'"});err!=nil{return nil,fmt.Errorf("configure PostgreSQL: %w",err)}
+	config:=map[string]string{"listen_addresses":"'127.0.0.1'","port":fmt.Sprint(req.Port),"max_connections":fmt.Sprint(req.MaxConnections),"password_encryption":"'scram-sha-256'"}
+	switch req.SSLMode {
+	case "", "require", "prefer":
+		cert,key,sslErr:=ensurePostgresSSL(ctx,dataDir)
+		if sslErr!=nil{return nil,fmt.Errorf("configure PostgreSQL SSL: %w",sslErr)}
+		config["ssl"]="on";config["ssl_cert_file"]="'"+filepath.Base(cert)+"'";config["ssl_key_file"]="'"+filepath.Base(key)+"'"
+	case "disable":
+		config["ssl"]="off"
+	default:
+		return nil,fmt.Errorf("unsupported PostgreSQL SSL mode")
+	}
+	if err:=setPostgresConfig(conf,config);err!=nil{return nil,fmt.Errorf("configure PostgreSQL: %w",err)}
 	logDir:=filepath.Join(filepath.Dir(dataDir),"log");if err:=os.MkdirAll(logDir,0o700);err!=nil{return nil,err}
 	logFile:=filepath.Join(logDir,fmt.Sprintf("postgresql-%d.log",req.ServerID))
 	out,err=exec.CommandContext(ctx,pgctl,"-D",dataDir,"-l",logFile,"-w","-t","120","start").CombinedOutput()
@@ -76,3 +87,21 @@ func setPostgresConfig(path string,values map[string]string)error{
 }
 
 func trimOutput(s string)string{ s=strings.TrimSpace(s);if len(s)>1200{return s[len(s)-1200:]};return s }
+
+func ensurePostgresSSL(ctx context.Context,dataDir string)(string,string,error) {
+	cert:=filepath.Join(dataDir,"server.crt")
+	key:=filepath.Join(dataDir,"server.key")
+	if info,err:=os.Lstat(cert);err==nil && info.Mode()&os.ModeSymlink==0 && info.Mode().IsRegular() {
+		if keyInfo,keyErr:=os.Lstat(key);keyErr==nil && keyInfo.Mode()&os.ModeSymlink==0 && keyInfo.Mode().IsRegular() {
+			if err:=os.Chmod(key,0o600);err!=nil{return "","",err}
+			return cert,key,nil
+		}
+	}
+	openssl,err:=exec.LookPath("openssl")
+	if err!=nil{return "","",fmt.Errorf("openssl is required for SSL mode; install the Termux openssl package")}
+	out,err:=exec.CommandContext(ctx,openssl,"req","-new","-x509","-days","3650","-nodes","-text","-out",cert,"-keyout",key,"-subj","/CN=localhost","-addext","subjectAltName=DNS:localhost,IP:127.0.0.1").CombinedOutput()
+	if err!=nil{return "","",fmt.Errorf("generate local certificate: %s",trimOutput(string(out)))}
+	if err:=os.Chmod(key,0o600);err!=nil{return "","",err}
+	if err:=os.Chmod(cert,0o644);err!=nil{return "","",err}
+	return cert,key,nil
+}
