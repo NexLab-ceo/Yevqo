@@ -25,7 +25,8 @@
     let restoreBusy = false;
     let restoreNotice = '';
 
-    $: availableSites = database ? sites.filter((entry) => Number(entry.device_id) === Number(database.device_id) && !connections.some((link) => link.site_id === entry.site?.site_id)) : [];
+    $: deviceSites = database ? sites.filter((entry) => Number(entry.device_id) === Number(database.device_id)) : [];
+    $: availableSites = deviceSites.filter((entry) => !connections.some((link) => link.site_id === entry.site?.site_id));
 
     async function addSiteLink() {
         if (!database || !siteChoice || linking) return;
@@ -155,7 +156,7 @@
                         <label>Verified backup<select bind:value={restoreBackupID}><option value="">Choose backup</option>{#each databaseBackups.filter((item) => item.status === 'verified') as backup}<option value={String(backup.id)}>{backup.file_name} · {(backup.size_bytes / 1048576).toFixed(2)} MB</option>{/each}</select></label>
                         <div class="restore-fields"><label>New database name<input bind:value={restoreName} maxlength="63" /></label><label>New application username<input bind:value={restoreUsername} maxlength="63" /></label></div>
                         <label>New application password<input type="password" bind:value={restorePassword} minlength="12" maxlength="256" autocomplete="new-password" placeholder="At least 12 characters" /></label>
-                        <label>Connect website (optional)<select bind:value={restoreSiteID}><option value="">Do not connect yet</option>{#each availableSites as site}<option value={site.site.site_id}>{site.site.site_id}</option>{/each}</select></label>
+                        <label>Connect website (optional)<select bind:value={restoreSiteID}><option value="">Do not connect yet</option>{#each deviceSites as site}<option value={site.site.site_id}>{site.site.site_id}</option>{/each}</select></label>
                         <button class="attach" disabled={!restoreBackupID || !/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/.test(restoreName) || !/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/.test(restoreUsername) || restorePassword.length < 12 || restoreBusy} on:click={restoreBackup}>{restoreBusy ? 'Queuing restore…' : 'Restore into new database'}</button>
                         {#if restoreNotice}<div class="notice">{restoreNotice}</div>{/if}
                     </div>
