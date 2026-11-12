@@ -45,46 +45,42 @@ jobs:
           npm run build
           cd ..
 
-           - name: Package .deb
-             run: |
-                # Версия: из тега, иначе "0.1.0-dev"
-                if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-                  VERSION="${GITHUB_REF#refs/tags/v}"
-                else
-                  VERSION="0.1.0-dev"
-                fi
-      
-                echo "Building version: $VERSION"
-      
-                DEB_DIR="build-deb"
-                rm -rf "$DEB_DIR"
-                mkdir -p "$DEB_DIR/DEBIAN"
-                mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/bin"
-                mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix"
-      
-                cp bin/veltrix-control "$DEB_DIR/data/data/com.termux/files/usr/bin/"
-                cp bin/veltrix-agent   "$DEB_DIR/data/data/com.termux/files/usr/bin/"
-                chmod +x "$DEB_DIR/data/data/com.termux/files/usr/bin/"*
-      
-                if [ -d "public" ]; then
-                  cp -r public/* "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/"
-                fi
-      
-                cat > "$DEB_DIR/DEBIAN/control" <<EOF
-                Package: veltrix
-                Version: $VERSION
-                Architecture: aarch64
-                Maintainer: Your Name <you@example.com>
-                Depends: php, git
-                Section: utils
-                Priority: optional
-                Homepage: https://github.com/your-username/veltrix-dock
-                Description: Lightweight server manager for Termux
-                 VELTRIX Dock manages PHP sites, monitors resources, and handles git deployments.
-                EOF
-      
-                dpkg-deb --build "$DEB_DIR" "veltrix_${VERSION}_aarch64.deb"
+      - name: Package .deb
+        run: |
+          VERSION="0.1.0-dev"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "Building version: $VERSION"
 
+          DEB_DIR="build-deb"
+          rm -rf "$DEB_DIR"
+          mkdir -p "$DEB_DIR/DEBIAN"
+          mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/bin"
+          mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix"
+
+          cp bin/veltrix-control "$DEB_DIR/data/data/com.termux/files/usr/bin/"
+          cp bin/veltrix-agent   "$DEB_DIR/data/data/com.termux/files/usr/bin/"
+          chmod +x "$DEB_DIR/data/data/com.termux/files/usr/bin/"*
+
+          if [ -d "public" ]; then
+            cp -r public/* "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/"
+          fi
+
+          cat > "$DEB_DIR/DEBIAN/control" <<EOF
+          Package: veltrix
+          Version: $VERSION
+          Architecture: aarch64
+          Maintainer: Your Name <you@example.com>
+          Depends: php, git
+          Section: utils
+          Priority: optional
+          Homepage: https://github.com/your-username/veltrix-dock
+          Description: Lightweight server manager for Termux
+           VELTRIX Dock manages PHP sites, monitors resources, and handles git deployments.
+          EOF
+
+          dpkg-deb --build "$DEB_DIR" "veltrix_${VERSION}_aarch64.deb"
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
