@@ -55,7 +55,14 @@
         loadingDevices = false;
     });
 
-    function setEngine(value) {\n        engine = value;\n        port = value === 'postgresql' ? 5432 : 3306;\n        dataDirectory = value === 'postgresql' ? '$PREFIX/var/lib/postgresql' : '$PREFIX/var/lib/mysql';\n        if (value !== 'postgresql' && authMethod === 'scram') authMethod = 'password';\n    }\n\n    function next() {
+    function setEngine(value) {
+        engine = value;
+        port = value === 'postgresql' ? 5432 : 3306;
+        dataDirectory = value === 'postgresql' ? '$PREFIX/var/lib/postgresql' : '$PREFIX/var/lib/mysql';
+        if (value !== 'postgresql' && authMethod === 'scram') authMethod = 'password';
+    }
+
+    function next() {
         error = '';
         if (!canContinue) {
             error = step === 0
