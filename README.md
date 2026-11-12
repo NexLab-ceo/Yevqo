@@ -43,3 +43,10 @@ Database engine installation, database creation, credentials, backup execution a
 - Restore is intentionally not exposed yet; safe extraction into a new site directory and archive verification are required first.
 
 - Backup commands may take longer than ordinary site actions; the Control Plane now allows a bounded two-minute Agent response window for these archives.
+
+
+### PostgreSQL Agent lifecycle
+- The Database Server detail view can trigger a typed PostgreSQL installation command on an online Termux Agent.
+- The Agent validates the Termux prefix, data path, port, storage headroom and connection limit; installs only the allowlisted `postgresql` package and initializes only an empty data directory.
+- Existing non-empty directories and detected PostgreSQL clusters are rejected without overwrite. PostgreSQL binds to localhost; remote access stays disabled.
+- MariaDB/MySQL installation, existing-cluster adoption, database/user creation and website credential provisioning remain separate follow-up work.
