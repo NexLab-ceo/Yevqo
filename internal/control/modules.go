@@ -227,10 +227,33 @@ func (s *Server) handleReports(w http.ResponseWriter,r *http.Request) {
 
 func (s *Server) handleBackups(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
+	if r.Method==http.MethodPost {
+		var in struct { DeviceID int64; SiteID string }
+		if err:=decodeJSON(r,&in);err!=nil||in.DeviceID<1||!validBackupSiteID(in.SiteID){apiError(w,shared.ErrBadRequest("invalid device or site"));return}
+		var count int
+		if err:=s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?",in.DeviceID,in.SiteID,u.ID).Scan(&count);err!=nil||count!=1{apiError(w,shared.ErrNotFound("site not found"));return}
+		conn,online:=s.hub.Get(in.DeviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
+		ctx,cancel:=context.WithTimeout(r.Context(),2*time.Minute);defer cancel()
+		result,err:=conn.SendCommand(ctx,"create_site_backup",&shared.CreateSiteBackup{SiteId:in.SiteID})
+		if err!=nil{apiError(w,shared.ErrInternal("backup command failed"));return};if !result.Ok{apiError(w,shared.ErrBadRequest(result.Message));return}
+		var backup shared.SiteBackupResult;if err:=shared.Unmarshal(result.Payload,&backup);err!=nil{apiError(w,shared.ErrInternal("invalid backup response"));return}
+		resourceID:=fmt.Sprintf("%d:%s",in.DeviceID,in.SiteID)
+		res,err:=s.db.conn.ExecContext(r.Context(),"INSERT INTO backups(user_id,device_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,?,'completed')",u.ID,in.DeviceID,"site",resourceID,backup.FileName,backup.SizeBytes)
+		if err!=nil{apiError(w,shared.ErrInternal("backup completed on device but metadata could not be saved"));return}
+		id,_:=res.LastInsertId()
+		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"backup":map[string]interface{}{"id":id,"device_id":in.DeviceID,"resource_type":"site","resource_id":resourceID,"file_name":backup.FileName,"size_bytes":backup.SizeBytes,"status":"completed"}});return
+	}
+	if r.Method!=http.MethodGet{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
 	rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT id,resource_type,resource_id,file_name,size_bytes,status,created_at FROM backups WHERE user_id=? ORDER BY id DESC LIMIT 100`,u.ID)
 	if err!=nil{apiError(w,shared.ErrInternal("could not load backups"));return};defer rows.Close()
 	out:=make([]map[string]interface{},0);for rows.Next(){var id,size int64;var typ,resource,file,status string;var created time.Time;if err:=rows.Scan(&id,&typ,&resource,&file,&size,&status,&created);err!=nil{apiError(w,shared.ErrInternal("could not read backups"));return};out=append(out,map[string]interface{}{"id":id,"resource_type":typ,"resource_id":resource,"file_name":file,"size_bytes":size,"status":status,"created_at":created})}
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"backups":out})
+}
+
+func validBackupSiteID(siteID string) bool {
+	if len(siteID)<1||len(siteID)>64{return false}
+	for _,r:=range siteID{if !((r>='a'&&r<='z')||(r>='A'&&r<='Z')||(r>='0'&&r<='9')||r=='-'||r=='_'){return false}}
+	return true
 }
 
 var _ = fmt.Sprintf

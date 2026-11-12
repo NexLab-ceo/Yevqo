@@ -27,6 +27,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 	log.Printf("command: id=%s action=%s", cmd.Id, cmd.Action)
 
 	switch cmd.Action {
+	case "create_site_backup":
+		return h.handleCreateSiteBackup(cmd)
 	case "get_metrics":
 		return h.handleGetMetrics(cmd)
 	case "create_site":
@@ -44,6 +46,16 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 	default:
 		return errorResult(cmd.Id, "unknown action: "+cmd.Action)
 	}
+}
+
+func (h *CommandHandler) handleCreateSiteBackup(cmd *shared.Command) *shared.Result {
+	var req shared.CreateSiteBackup
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid create_site_backup payload") }
+	result, err := createSiteBackup(h.cfg.DataRoot, req.SiteId)
+	if err != nil { return errorResult(cmd.Id, err.Error()) }
+	payload, err := shared.Marshal(result)
+	if err != nil { return errorResult(cmd.Id, "could not encode backup result") }
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:"site backup completed",Payload:payload}
 }
 
 func (h *CommandHandler) handleGetMetrics(cmd *shared.Command) *shared.Result {

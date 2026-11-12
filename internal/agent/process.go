@@ -68,8 +68,12 @@ func safeSiteDirectory(dataRoot, siteID string) (string, error) {
 		return "", fmt.Errorf("site path is outside the sites directory")
 	}
 	if resolvedRoot, e := filepath.EvalSymlinks(absRoot); e == nil {
+		if resolvedDataRoot, de := filepath.EvalSymlinks(dataRoot); de == nil {
+			rootRel, re := filepath.Rel(resolvedDataRoot, resolvedRoot)
+			if re != nil || rootRel == ".." || strings.HasPrefix(rootRel, ".."+string(filepath.Separator)) { return "", fmt.Errorf("sites directory resolves outside the agent data directory") }
+		}
 		if resolvedTarget, e := filepath.EvalSymlinks(absTarget); e == nil {
-			rel, e = filepath.Rel(resolvedRoot, resolvedTarget)
+			rel, e := filepath.Rel(resolvedRoot, resolvedTarget)
 			if e != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return "", fmt.Errorf("site path resolves outside the sites directory") }
 		}
 	}

@@ -44,6 +44,13 @@ type Command struct {
 	Payload []byte
 }
 
+type CreateSiteBackup struct { SiteId string }
+
+type SiteBackupResult struct {
+	FileName string `json:"file_name"`
+	SizeBytes int64 `json:"size_bytes"`
+}
+
 type GetMetrics struct{}
 
 type MetricsResult struct {
