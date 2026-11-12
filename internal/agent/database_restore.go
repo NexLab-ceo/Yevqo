@@ -24,7 +24,9 @@ func restorePostgresDatabase(req shared.RestoreDatabaseBackup) error {
 	fullPath:=filepath.Join(backupDir,req.BackupFileName)
 	info,err:=os.Lstat(fullPath);if err!=nil{return fmt.Errorf("database backup file not found")}
 	if info.Mode()&os.ModeSymlink!=0||!info.Mode().IsRegular(){return fmt.Errorf("database backup file is not a regular file")}
+	prefixReal,err:=filepath.EvalSymlinks(prefix);if err!=nil{return fmt.Errorf("could not verify Termux storage root")}
 	realDir,err:=filepath.EvalSymlinks(backupDir);if err!=nil{return fmt.Errorf("could not verify backup directory")}
+	dirRel,err:=filepath.Rel(prefixReal,realDir);if err!=nil||dirRel==".."||strings.HasPrefix(dirRel,".."+string(filepath.Separator)){return fmt.Errorf("database backup directory escapes Termux private storage")}
 	realFile,err:=filepath.EvalSymlinks(fullPath);if err!=nil{return fmt.Errorf("could not verify backup file")}
 	rel,err:=filepath.Rel(realDir,realFile);if err!=nil||rel==".."||strings.HasPrefix(rel,".."+string(filepath.Separator)){return fmt.Errorf("backup path escapes private storage")}
 	if err:=createPostgresDatabase(req.Database);err!=nil{return err}
