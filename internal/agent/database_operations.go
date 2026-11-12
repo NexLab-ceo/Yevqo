@@ -30,12 +30,12 @@ GRANT CONNECT ON DATABASE %s TO %s;`,role,literal,db,role,db,role)
 	prefix:=os.Getenv("PREFIX")
 	if prefix=="" { return fmt.Errorf("Termux PREFIX is not set") }
 	socketDir:=prefix+"/tmp"
-	cmd:=exec.CommandContext(ctx,psql,"-X","-w","-v","ON_ERROR_STOP=1","-h",socketDir,"-p",fmt.Sprint(req.Port),"-U","postgres","-d","postgres")
+	cmd:=exec.CommandContext(ctx,psql,"-X","-w","-v","ON_ERROR_STOP=1","-h",socketDir,"-p",fmt.Sprint(req.Port),"-d","postgres")
 	cmd.Stdin=strings.NewReader(sqlText)
 	var stderr bytes.Buffer;cmd.Stderr=&stderr
 	if err:=cmd.Run();err!=nil {
 		// Do not expose SQL or password in the returned error.
-		msg:=strings.TrimSpace(stderr.String());if len(msg)>500{msg=msg[len(msg)-500:]}
+		msg:=strings.TrimSpace(stderr.String());msg=strings.ReplaceAll(msg,req.Password,"[redacted]");if len(msg)>500{msg=msg[len(msg)-500:]}
 		if ctx.Err()!=nil{return fmt.Errorf("PostgreSQL command timed out")}
 		if msg==""{return fmt.Errorf("PostgreSQL database creation failed")}
 		return fmt.Errorf("PostgreSQL database creation failed: %s",msg)
