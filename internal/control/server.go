@@ -119,6 +119,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/settings", s.RequireAuth(s.handleSettings))
 	s.mux.HandleFunc("/api/reports", s.RequireAuth(s.handleReports))
 	s.mux.HandleFunc("/api/backups", s.RequireAuth(s.handleBackups))
+	s.mux.HandleFunc("/api/backups/restore", s.RequireAuth(s.handleRestoreDatabaseBackup))
 	s.mux.HandleFunc("/api/domains", s.RequireAuth(s.handleDomains))
 	s.mux.HandleFunc("/api/deployments", s.RequireAuth(s.handleDeployments))
 	s.mux.HandleFunc("/api/monitoring", s.RequireAuth(s.handleMonitoring))
