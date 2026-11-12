@@ -171,3 +171,5 @@ export async function listSiteDatabaseConnections(deviceId, siteId) { return req
 export async function removeSiteDatabaseConnection(id) { return request('DELETE', '/api/database-connections', { id }); }
 
 export async function getDatabase(id) { return request('GET', `/api/databases/${id}`); }
+
+export async function createDatabaseBackup(databaseId) { return request('POST', '/api/backups', { database_id: databaseId }); }
