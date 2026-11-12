@@ -169,3 +169,5 @@ export async function installDatabaseServer(id) { return request('POST', `/api/d
 export async function createDatabase(input) { return request('POST', '/api/databases', input); }
 export async function listSiteDatabaseConnections(deviceId, siteId) { return request('GET', `/api/database-connections?device_id=${deviceId}&site_id=${encodeURIComponent(siteId)}`); }
 export async function removeSiteDatabaseConnection(id) { return request('DELETE', '/api/database-connections', { id }); }
+
+export async function getDatabase(id) { return request('GET', `/api/databases/${id}`); }
