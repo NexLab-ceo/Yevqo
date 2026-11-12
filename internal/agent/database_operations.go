@@ -24,25 +24,30 @@ func createPostgresDatabase(req shared.CreateDatabase) error {
 	prefix:=os.Getenv("PREFIX")
 	if prefix=="" { return fmt.Errorf("Termux PREFIX is not set") }
 	current,err:=user.Current();if err!=nil || !pgIdentifier.MatchString(current.Username) { return fmt.Errorf("could not safely resolve the local PostgreSQL administrator role") }
-
-	// The app role is deliberately NOT the database owner and receives DML only.
-	// Password travels through stdin, never argv or logs.
 	literal:=strings.ReplaceAll(req.Password,"'","''")
-	db,role:=req.Database,req.Username
-	createSQL:=fmt.Sprintf(`CREATE ROLE %s LOGIN PASSWORD '%s';
-CREATE DATABASE %s;
-GRANT CONNECT ON DATABASE %s TO %s;`,role,literal,db,db,role)
-	ctx,cancel:=context.WithTimeout(context.Background(),90*time.Second);defer cancel()
 	socketDir:=prefix+"/tmp"
-	if err:=runPostgresSQL(ctx,psql,socketDir,req.Port,"postgres",createSQL,req.Password);err!=nil{return err}
+	ctx,cancel:=context.WithTimeout(context.Background(),90*time.Second);defer cancel()
 
+	// Create the role and database in separate autocommit commands so failures can be rolled back safely.
+	if err:=runPostgresSQL(ctx,psql,socketDir,req.Port,"postgres",fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s';",req.Username,literal),req.Password);err!=nil{return err}
+	if err:=runPostgresSQL(ctx,psql,socketDir,req.Port,"postgres",fmt.Sprintf("CREATE DATABASE %s;",req.Database),req.Password);err!=nil{
+		_ = runPostgresSQL(ctx,psql,socketDir,req.Port,"postgres",fmt.Sprintf("DROP ROLE IF EXISTS %s;",req.Username),req.Password)
+		return err
+	}
+	if err:=runPostgresSQL(ctx,psql,socketDir,req.Port,"postgres",fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s;",req.Database,req.Username),req.Password);err!=nil{
+		cleanupRestoredDatabase(req)
+		return err
+	}
 	grantSQL:=fmt.Sprintf(`GRANT USAGE ON SCHEMA public TO %s;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %s;
 GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO %s;
 ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s;
 ALTER DEFAULT PRIVILEGES FOR ROLE %s IN SCHEMA public GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO %s;`,
-		role,role,role,current.Username,role,current.Username,role)
-	if err:=runPostgresSQL(ctx,psql,socketDir,req.Port,db,grantSQL,req.Password);err!=nil{return fmt.Errorf("database was created but application grants could not be completed: %w",err)}
+		req.Username,req.Username,req.Username,current.Username,req.Username,current.Username,req.Username)
+	if err:=runPostgresSQL(ctx,psql,socketDir,req.Port,req.Database,grantSQL,req.Password);err!=nil{
+		cleanupRestoredDatabase(req)
+		return fmt.Errorf("database was created but application grants could not be completed; new database and role were cleaned up: %w",err)
+	}
 	return nil
 }
 
