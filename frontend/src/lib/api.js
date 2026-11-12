@@ -151,3 +151,5 @@ export async function getSettings() { return request('GET', '/api/settings'); }
 export async function saveSettings(settings) { return request('PUT', '/api/settings', settings); }
 export async function getReports() { return request('GET', '/api/reports'); }
 export async function listBackups() { return request('GET', '/api/backups'); }
+
+export async function deleteSite(deviceId, siteId) { return request('DELETE', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}`); }

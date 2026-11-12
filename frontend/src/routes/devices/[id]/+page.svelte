@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, deleteDevice, sendCommand } from '$lib/api.js';
+    import { getDevice, deleteDevice, deleteSite, sendCommand } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -75,6 +75,13 @@
     // Остановка сайта.
     async function stopSite(site) {
         await runCommand('stop_site', { site_id: site.site_id });
+    }
+
+    async function removeSite(site) {
+        if (!confirm('Удалить запись сайта? Файлы на Android-устройстве останутся на месте.')) return;
+        const res = await deleteSite(device.id, site.site_id);
+        if (res.ok) { notify('Запись сайта удалена. Файлы сохранены.', 'success'); await loadDevice(); }
+        else notify(res.error || 'Не удалось удалить сайт', 'error');
     }
 
     // Git pull.
@@ -201,6 +208,9 @@
                         </Button>
                         <Button variant="ghost" size="sm" on:click={() => showLogs(site)}>
                             Логи
+                        </Button>
+                        <Button variant="danger" size="sm" on:click={() => removeSite(site)} disabled={busy}>
+                            Удалить запись
                         </Button>
                     </div>
                 </Card>

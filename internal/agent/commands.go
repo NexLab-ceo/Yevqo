@@ -27,6 +27,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 	log.Printf("command: id=%s action=%s", cmd.Id, cmd.Action)
 
 	switch cmd.Action {
+	case "create_site":
+		return h.handleCreateSite(cmd)
 	case "start_site":
 		return h.handleStartSite(cmd)
 	case "stop_site":
@@ -40,6 +42,13 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 	default:
 		return errorResult(cmd.Id, "unknown action: "+cmd.Action)
 	}
+}
+
+func (h *CommandHandler) handleCreateSite(cmd *shared.Command) *shared.Result {
+	var req shared.CreateSite
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid create_site payload") }
+	if err := h.processes.CreateSite(req.SiteId, int(req.Port), req.Runtime); err != nil { return errorResult(cmd.Id, err.Error()) }
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: "site directory created"}
 }
 
 func (h *CommandHandler) handleStartSite(cmd *shared.Command) *shared.Result {

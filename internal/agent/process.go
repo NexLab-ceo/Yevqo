@@ -4,9 +4,9 @@ package agent
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
-	"unicode"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -52,7 +52,7 @@ func NewProcessManager(dataRoot string) *ProcessManager {
 func validSiteID(siteID string) bool {
 	if len(siteID) < 1 || len(siteID) > 64 { return false }
 	for _, r := range siteID {
-		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_') { return false }
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_') { return false }
 	}
 	return true
 }
@@ -76,6 +76,27 @@ func safeSiteDirectory(dataRoot, siteID string) (string, error) {
 	return absTarget, nil
 }
 
+func (m *ProcessManager) CreateSite(siteID string, port int, runtime string) error {
+	if !validSiteID(siteID) { return fmt.Errorf("invalid site id") }
+	if port < 1024 || port > 65535 { return fmt.Errorf("port must be between 1024 and 65535") }
+	if runtime != "php" && runtime != "go" && runtime != "static" { return fmt.Errorf("unsupported runtime: %s", runtime) }
+	target, err := safeSiteDirectory(m.DataRoot, siteID)
+	if err != nil { return err }
+	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil { return fmt.Errorf("create sites directory: %w", err) }
+	if err := os.Mkdir(target, 0o750); err != nil {
+		if os.IsExist(err) { return fmt.Errorf("site directory already exists") }
+		return fmt.Errorf("create site directory: %w", err)
+	}
+	fileName, body := "index.php", "<?php\n// Your VELTRIX website starts here.\necho 'Hello from VELTRIX';\n"
+	if runtime == "static" { fileName, body = "index.html", "<!doctype html>\n<html lang=\"en\"><meta charset=\"utf-8\"><title>VELTRIX site</title><h1>Your site is ready</h1></html>\n" }
+	if runtime == "go" { fileName, body = "README.md", "# Go site\n\nBuild your application as ./site before starting this site.\n" }
+	f, err := os.OpenFile(filepath.Join(target, fileName), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
+	if err != nil { _ = os.RemoveAll(target); return fmt.Errorf("create starter file: %w", err) }
+	if _, err := f.WriteString(body); err != nil { f.Close(); _ = os.RemoveAll(target); return fmt.Errorf("write starter file: %w", err) }
+	if err := f.Close(); err != nil { _ = os.RemoveAll(target); return fmt.Errorf("close starter file: %w", err) }
+	return nil
+}
+
 func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string) (int, error) {
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return 0, fmt.Errorf("port must be between 1024 and 65535") }
@@ -92,6 +113,11 @@ func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string
 	if _, err := os.Stat(absPath); err != nil {
 		return 0, fmt.Errorf("site directory not found: %s", absPath)
 	}
+
+	// Refuse a port already occupied by another process.
+	listener, listenErr := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	if listenErr != nil { return 0, fmt.Errorf("port %d is already in use", port) }
+	_ = listener.Close()
 
 	// Лог-файл.
 	logDir := filepath.Join(m.DataRoot, "logs")
@@ -110,7 +136,7 @@ func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string
 	var cmd *exec.Cmd
 	switch runtime {
 	case "php":
-		cmd = exec.Command("php", "-S", fmt.Sprintf("0.0.0.0:%d", port), "-t", ".")
+		cmd = exec.Command("php", "-S", fmt.Sprintf("127.0.0.1:%d", port), "-t", ".")
 		cmd.Dir = absPath
 	case "go":
 		// Для Go предполагаем, что бинарник уже собран в папке сайта.

@@ -44,6 +44,12 @@ type Command struct {
 	Payload []byte
 }
 
+type CreateSite struct {
+	SiteId string
+	Port uint32
+	Runtime string
+}
+
 type StartSite struct {
 	SiteId  string
 	Path    string

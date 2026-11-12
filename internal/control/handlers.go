@@ -316,6 +316,28 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 		return
 	}
 
+	if result.Ok {
+		switch p := payload.(type) {
+		case *shared.CreateSite:
+			_ = s.db.UpsertSite(r.Context(), &shared.Site{DeviceID: dev.ID, SiteID: p.SiteId, Path: "sites/" + p.SiteId, Port: int(p.Port), Runtime: p.Runtime, Status: shared.SiteStopped})
+		case *shared.StartSite:
+			var started shared.StartSiteResult
+			_ = shared.Unmarshal(result.Payload, &started)
+			_ = s.db.UpsertSite(r.Context(), &shared.Site{DeviceID: dev.ID, SiteID: p.SiteId, Path: p.Path, Port: int(p.Port), Runtime: p.Runtime, Status: shared.SiteRunning, PID: int(started.Pid)})
+		case *shared.StopSite:
+			_ = s.db.UpdateSiteStatus(r.Context(), dev.ID, p.SiteId, shared.SiteStopped, 0)
+		}
+	}
+	// Audit only action metadata, never raw payloads or secrets.
+	details := map[string]interface{}{"ok": result.Ok}
+	switch p := payload.(type) {
+	case *shared.CreateSite: details["site_id"] = p.SiteId
+	case *shared.StartSite: details["site_id"] = p.SiteId
+	case *shared.StopSite: details["site_id"] = p.SiteId
+	case *shared.GitPull: details["site_id"] = p.SiteId
+	}
+	_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(dev.UserID), DeviceID: shared.PtrInt64(dev.ID), Action: req.Action, Details: details, IP: clientIP(r)})
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":      result.Ok,
 		"message": result.Message,
@@ -325,6 +347,10 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 
 func parsePayload(action string, raw json.RawMessage) (interface{}, error) {
 	switch action {
+	case "create_site":
+		var p shared.CreateSite
+		if err := json.Unmarshal(raw, &p); err != nil { return nil, err }
+		return &p, nil
 	case "start_site":
 		var p shared.StartSite
 		if err := json.Unmarshal(raw, &p); err != nil {
@@ -423,13 +449,24 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 
 	sites, _ := s.db.ListSitesByDevice(r.Context(), deviceID)
 	for _, st := range sites {
-		if st.SiteID == siteID {
-			writeJSON(w, http.StatusOK, map[string]interface{}{
-				"ok":   true,
-				"site": st,
-			})
+		if st.SiteID != siteID { continue }
+		if r.Method == http.MethodDelete {
+			if st.Status == shared.SiteRunning {
+				conn, online := s.hub.Get(deviceID)
+				if !online { apiError(w, shared.ErrBadRequest("device is offline; stop the site before removing it")); return }
+				ctx, cancel := context.WithTimeout(r.Context(), 35*time.Second)
+				defer cancel()
+				result, err := conn.SendCommand(ctx, "stop_site", &shared.StopSite{SiteId: siteID})
+				if err != nil || !result.Ok { apiError(w, shared.ErrBadRequest("could not stop site; metadata was not removed")); return }
+			}
+			_, _ = s.db.conn.ExecContext(r.Context(), "DELETE FROM project_sites WHERE device_id=? AND site_id=?", deviceID, siteID)
+			if _, err := s.db.conn.ExecContext(r.Context(), "DELETE FROM sites WHERE device_id=? AND site_id=?", deviceID, siteID); err != nil { apiError(w, shared.ErrInternal("could not remove site metadata")); return }
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "Site metadata removed. Device files were preserved."})
 			return
 		}
+		if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "site": st})
+		return
 	}
 
 	apiError(w, shared.ErrNotFound("site not found"))
