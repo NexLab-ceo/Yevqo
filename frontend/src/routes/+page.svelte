@@ -45,7 +45,7 @@
         <div class="metric-card"><div class="metric-label">Database servers <span>◈</span></div><div class="metric-value">—</div><div class="metric-foot">Управление серверами БД подключается</div></div>
     </div>
 
-    <div class="section-header"><div><h2 class="section-title">Устройства</h2><p class="section-subtitle">Android-хосты, подключённые к VELTRIX</p></div><a href="/" class="view-link">Все устройства →</a></div>
+    <div class="section-header"><div><h2 class="section-title">Устройства</h2><p class="section-subtitle">Android-хосты, подключённые к VELTRIX</p></div><a href="/devices" class="view-link">Все устройства →</a></div>
     {#if $devices.length === 0}
         <div class="empty"><p>Пока нет подключённых устройств</p><p class="empty-hint">Установите VELTRIX Agent в Termux и подключите устройство.</p><div class="empty-action"><Button variant="primary" on:click={() => showAddModal = true}>Подключить устройство</Button></div></div>
     {:else}

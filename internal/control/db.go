@@ -298,6 +298,11 @@ func (db *DB) ListDevicesByUser(ctx context.Context, userID int64) ([]shared.Dev
 	return out, rows.Err()
 }
 
+func (db *DB) UpdateDeviceHeartbeat(ctx context.Context, deviceID int64) error {
+	_, err := db.conn.ExecContext(ctx, "UPDATE devices SET status = ?, last_seen = ? WHERE id = ?", shared.DeviceOnline, shared.Now(), deviceID)
+	return err
+}
+
 func (db *DB) MarkDeviceOffline(ctx context.Context, deviceID int64) error {
 	_, err := db.conn.ExecContext(ctx,
 		`UPDATE devices SET status = ? WHERE id = ?`,

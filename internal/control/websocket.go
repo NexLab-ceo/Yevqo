@@ -248,7 +248,10 @@ func (c *AgentConn) handleResult(res *shared.Result) {
 func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 	switch ev.Event {
 	case "ping":
-		_ = srv.db.UpdateUserLastSeen(context.Background(), c.Device.UserID)
+		if c.Device != nil {
+			_ = srv.db.UpdateUserLastSeen(context.Background(), c.Device.UserID)
+			_ = srv.db.UpdateDeviceHeartbeat(context.Background(), c.Device.ID)
+		}
 	case "log":
 		var le shared.LogEvent
 		if err := shared.Unmarshal(ev.Payload, &le); err == nil {
