@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page as route } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDatabase, listDatabaseConnections, listSites, attachDatabaseToSite, removeSiteDatabaseConnection } from '$lib/api.js';
+    import { getDatabase, listDatabaseConnections, listSites, attachDatabaseToSite, removeSiteDatabaseConnection, listBackups, createDatabaseBackup } from '$lib/api.js';
     import StatusDot from '$lib/components/StatusDot.svelte';
 
     const tabs = ['Overview', 'Connection', 'Users & Permissions', 'Backups', 'Import / Export', 'Logs', 'Settings'];
@@ -15,6 +15,8 @@
     let siteChoice = '';
     let linking = false;
     let actionError = '';
+    let databaseBackups = [];
+    let backupBusy = false;
 
     $: availableSites = database ? sites.filter((entry) => Number(entry.device_id) === Number(database.device_id) && !connections.some((link) => link.site_id === entry.site?.site_id)) : [];
 
@@ -31,6 +33,21 @@
         linking = false;
     }
 
+    async function createBackup() {
+        if (!database || backupBusy) return;
+        backupBusy = true; actionError = '';
+        const result = await createDatabaseBackup(database.id);
+        if (result.ok) {
+            databaseBackups = [{ ...result.data.backup, created_at: new Date().toISOString() }, ...databaseBackups];
+        } else actionError = result.error || 'Could not queue database backup';
+        backupBusy = false;
+    }
+
+    async function refreshBackups() {
+        const result = await listBackups();
+        if (result.ok) databaseBackups = (result.data?.backups || []).filter((item) => item.resource_type === 'database' && item.resource_id === String(database.id));
+    }
+
     async function removeSiteLink(id) {
         const result = await removeSiteDatabaseConnection(id);
         if (result.ok) connections = connections.filter((item) => item.id !== id);
@@ -41,9 +58,10 @@
         const result = await getDatabase($route.params.id);
         if (result.ok) {
             database = result.data?.database;
-            const [linkResult, siteResult] = await Promise.all([listDatabaseConnections(database.id), listSites()]);
+            const [linkResult, siteResult, backupResult] = await Promise.all([listDatabaseConnections(database.id), listSites(), listBackups()]);
             if (linkResult.ok) connections = linkResult.data?.connections || [];
             if (siteResult.ok) sites = siteResult.data?.sites || [];
+            if (backupResult.ok) databaseBackups = (backupResult.data?.backups || []).filter((item) => item.resource_type === 'database' && item.resource_id === String(database.id));
         } else error = result.error || 'Не удалось загрузить базу данных';
         loading = false;
     });
@@ -111,7 +129,9 @@
                 <div class="permissions">{#each database.permissions || [] as permission}<span>{permission}</span>{/each}</div>
             </section>
         {:else if active === 'Backups'}
-            <section class="panel"><h2>Backups</h2><p class="muted">Database backup and restore actions are not enabled yet. No backup has been created automatically.</p><div class="empty compact">Backup engine pending: pg_dump, verification and restore-to-new-database workflow.</div></section>
+            <section class="panel"><div class="backup-heading"><div><h2>Database backups</h2><p class="muted">Local PostgreSQL custom-format dumps. Each archive is checked with pg_restore before it is marked verified.</p></div><div class="backup-actions"><button on:click={refreshBackups}>Refresh</button><button class="attach" disabled={backupBusy || database.status !== 'ready'} on:click={createBackup}>{backupBusy ? 'Queuing…' : 'Create backup'}</button></div></div>
+                {#if databaseBackups.length === 0}<div class="empty compact">No database backups yet.</div>{:else}{#each databaseBackups as backup}<div class="site-link"><span><strong>{backup.file_name}</strong><small>{new Date(backup.created_at).toLocaleString()} · {(backup.size_bytes / 1048576).toFixed(2)} MB</small></span><span class="role-tag">{backup.status}</span></div>{/each}{/if}
+                <div class="notice">Backups stay in private Termux storage on the database device. Restore, download and cross-device transfer are not enabled yet.</div></section>
         {:else if active === 'Import / Export'}
             <section class="panel"><h2>Import / Export</h2><p class="muted">SQL import and export are not enabled yet. Existing database contents are untouched.</p><div class="empty compact">Planned formats: Plain SQL and PostgreSQL custom archive.</div></section>
         {:else if active === 'Logs'}
@@ -123,5 +143,5 @@
 </div>
 
 <style>
-.page{max-width:1050px;margin:0 auto;padding:25px 0 60px;color:#f1f5f9}.breadcrumbs{display:flex;gap:9px;align-items:center;font-size:10px;color:#64748b;margin-bottom:22px}.breadcrumbs button{background:none;border:0;color:#94a3b8;cursor:pointer;font:inherit}.heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}.identity{display:flex;align-items:center;gap:13px}.engine{width:44px;height:44px;border-radius:11px;background:#1e3a5f;color:#93c5fd;display:grid;place-items:center;font-size:13px;font-weight:800}.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:5px}h1{font-size:22px;margin:0 0 4px}.identity p{font-size:10px;color:#94a3b8;margin:0}.status{display:flex;align-items:center;gap:7px;color:#94a3b8;font-size:10px}.tabs{display:flex;gap:4px;border-bottom:1px solid #253149;overflow:auto;margin-bottom:18px}.tabs button{white-space:nowrap;background:none;border:0;border-bottom:2px solid transparent;color:#94a3b8;padding:11px 12px;font-size:10px;cursor:pointer}.tabs button.active{color:#c7d2fe;border-color:#818cf8}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:15px}.stats article,.panel{background:#101727;border:1px solid #253149;border-radius:12px;padding:16px}.stats small{display:block;color:#64748b;font-size:8px;letter-spacing:.12em;margin-bottom:9px}.stats strong{display:block;font-size:16px}.stats span{display:block;color:#64748b;font-size:9px;margin-top:5px}.panel h2{font-size:13px;margin:0 0 8px}.muted{font-size:10px;color:#94a3b8;line-height:1.6}.rows{margin-top:15px}.rows>div{display:flex;justify-content:space-between;gap:20px;padding:11px 0;border-bottom:1px solid #1e293b;font-size:10px}.rows>div:last-child{border:0}.rows span{color:#94a3b8}.rows strong{font-weight:600;text-align:right}.link-heading{display:flex;justify-content:space-between;align-items:center;margin-top:22px;font-size:10px}.link-heading span{color:#94a3b8}.site-link{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e293b}.site-link strong,.site-link small{display:block}.site-link strong{font-size:10px}.site-link small{font-size:9px;color:#94a3b8;margin-top:4px}.site-link button{background:none;border:0;color:#fda4af;font-size:9px;cursor:pointer}.attach-row{display:flex;gap:8px;margin-top:12px}.attach-row select{flex:1;min-width:0;background:#0b1020;border:1px solid #334155;border-radius:8px;padding:9px;color:#f1f5f9;font-size:10px}.attach{border:0;border-radius:8px;padding:9px 12px;background:#6366f1;color:white;font-size:10px;cursor:pointer}.attach:disabled{opacity:.45;cursor:not-allowed}.connection{margin-top:16px;padding:12px;background:#080b14;border:1px solid #253149;border-radius:8px;color:#c7d2fe;font:10px 'JetBrains Mono',monospace;overflow-wrap:anywhere}.notice{margin-top:12px;color:#94a3b8;font-size:10px;line-height:1.6}.role{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-top:1px solid #253149;border-bottom:1px solid #253149;margin-top:15px}.role strong,.role small{display:block}.role strong{font-size:11px}.role small{font-size:9px;color:#94a3b8;margin-top:4px}.role-tag{font-size:8px;color:#a5b4fc;background:#242b50;padding:5px 8px;border-radius:5px}.permissions{display:flex;flex-wrap:wrap;gap:7px;margin-top:13px}.permissions span{font-size:9px;color:#a7f3d0;background:#12332d;border:1px solid #1f594a;padding:6px 8px;border-radius:6px}.empty{padding:28px;text-align:center;color:#94a3b8;font-size:11px}.empty.compact{padding:18px;margin-top:14px;border:1px dashed #334155;border-radius:8px}.error{padding:14px;color:#fda4af;background:#3f1725;border-radius:8px;font-size:11px}@media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}.heading{align-items:flex-start;gap:10px;flex-direction:column}.page{padding-top:15px}.rows>div{align-items:flex-start}.rows strong{max-width:60%;overflow-wrap:anywhere}}
+.page{max-width:1050px;margin:0 auto;padding:25px 0 60px;color:#f1f5f9}.breadcrumbs{display:flex;gap:9px;align-items:center;font-size:10px;color:#64748b;margin-bottom:22px}.breadcrumbs button{background:none;border:0;color:#94a3b8;cursor:pointer;font:inherit}.heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}.identity{display:flex;align-items:center;gap:13px}.engine{width:44px;height:44px;border-radius:11px;background:#1e3a5f;color:#93c5fd;display:grid;place-items:center;font-size:13px;font-weight:800}.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:5px}h1{font-size:22px;margin:0 0 4px}.identity p{font-size:10px;color:#94a3b8;margin:0}.status{display:flex;align-items:center;gap:7px;color:#94a3b8;font-size:10px}.tabs{display:flex;gap:4px;border-bottom:1px solid #253149;overflow:auto;margin-bottom:18px}.tabs button{white-space:nowrap;background:none;border:0;border-bottom:2px solid transparent;color:#94a3b8;padding:11px 12px;font-size:10px;cursor:pointer}.tabs button.active{color:#c7d2fe;border-color:#818cf8}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:15px}.stats article,.panel{background:#101727;border:1px solid #253149;border-radius:12px;padding:16px}.stats small{display:block;color:#64748b;font-size:8px;letter-spacing:.12em;margin-bottom:9px}.stats strong{display:block;font-size:16px}.stats span{display:block;color:#64748b;font-size:9px;margin-top:5px}.panel h2{font-size:13px;margin:0 0 8px}.muted{font-size:10px;color:#94a3b8;line-height:1.6}.rows{margin-top:15px}.rows>div{display:flex;justify-content:space-between;gap:20px;padding:11px 0;border-bottom:1px solid #1e293b;font-size:10px}.rows>div:last-child{border:0}.rows span{color:#94a3b8}.rows strong{font-weight:600;text-align:right}.backup-heading{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.backup-actions{display:flex;gap:7px;flex-shrink:0}.backup-actions button:first-child{background:#172136;color:#cbd5e1;border:0;border-radius:8px;padding:9px 11px;font-size:10px;cursor:pointer}.link-heading{display:flex;justify-content:space-between;align-items:center;margin-top:22px;font-size:10px}.link-heading span{color:#94a3b8}.site-link{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #1e293b}.site-link strong,.site-link small{display:block}.site-link strong{font-size:10px}.site-link small{font-size:9px;color:#94a3b8;margin-top:4px}.site-link button{background:none;border:0;color:#fda4af;font-size:9px;cursor:pointer}.attach-row{display:flex;gap:8px;margin-top:12px}.attach-row select{flex:1;min-width:0;background:#0b1020;border:1px solid #334155;border-radius:8px;padding:9px;color:#f1f5f9;font-size:10px}.attach{border:0;border-radius:8px;padding:9px 12px;background:#6366f1;color:white;font-size:10px;cursor:pointer}.attach:disabled{opacity:.45;cursor:not-allowed}.connection{margin-top:16px;padding:12px;background:#080b14;border:1px solid #253149;border-radius:8px;color:#c7d2fe;font:10px 'JetBrains Mono',monospace;overflow-wrap:anywhere}.notice{margin-top:12px;color:#94a3b8;font-size:10px;line-height:1.6}.role{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-top:1px solid #253149;border-bottom:1px solid #253149;margin-top:15px}.role strong,.role small{display:block}.role strong{font-size:11px}.role small{font-size:9px;color:#94a3b8;margin-top:4px}.role-tag{font-size:8px;color:#a5b4fc;background:#242b50;padding:5px 8px;border-radius:5px}.permissions{display:flex;flex-wrap:wrap;gap:7px;margin-top:13px}.permissions span{font-size:9px;color:#a7f3d0;background:#12332d;border:1px solid #1f594a;padding:6px 8px;border-radius:6px}.empty{padding:28px;text-align:center;color:#94a3b8;font-size:11px}.empty.compact{padding:18px;margin-top:14px;border:1px dashed #334155;border-radius:8px}.error{padding:14px;color:#fda4af;background:#3f1725;border-radius:8px;font-size:11px}@media(max-width:700px){.stats{grid-template-columns:repeat(2,1fr)}.heading{align-items:flex-start;gap:10px;flex-direction:column}.page{padding-top:15px}.rows>div{align-items:flex-start}.rows strong{max-width:60%;overflow-wrap:anywhere}}
 </style>
