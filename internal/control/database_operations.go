@@ -155,12 +155,13 @@ func (s *Server) handleDatabaseByID(w http.ResponseWriter,r *http.Request) {
 	var databaseID,serverID,deviceID int64
 	var name,status,serverName,engine,sslMode string
 	var username sql.NullString
+	var restoreStatus sql.NullString
 	var port int
 	var created time.Time
-	err=s.db.conn.QueryRowContext(r.Context(),`SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.device_id,ds.name,ds.engine,ds.port,ds.ssl_mode,dc.username
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.device_id,ds.name,ds.engine,ds.port,ds.ssl_mode,dc.username,(SELECT status FROM database_restore_jobs WHERE target_database_id=d.id ORDER BY id DESC LIMIT 1)
 		FROM databases d JOIN database_servers ds ON ds.id=d.server_id
 		LEFT JOIN database_credentials dc ON dc.database_id=d.id
-		WHERE d.id=? AND d.user_id=?`,id,u.ID).Scan(&databaseID,&serverID,&name,&status,&created,&deviceID,&serverName,&engine,&port,&sslMode,&username)
+		WHERE d.id=? AND d.user_id=?`,id,u.ID).Scan(&databaseID,&serverID,&name,&status,&created,&deviceID,&serverName,&engine,&port,&sslMode,&username,&restoreStatus)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database not found"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load database details"));return }
 	var linkedSites int
@@ -170,7 +171,7 @@ func (s *Server) handleDatabaseByID(w http.ResponseWriter,r *http.Request) {
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"database":map[string]interface{}{
 		"id":databaseID,"server_id":serverID,"name":name,"status":status,"created_at":created,
 		"device_id":deviceID,"server_name":serverName,"engine":engine,"port":port,
-		"username":user,"host":"127.0.0.1","ssl_mode":sslMode,"linked_sites":linkedSites,
+		"username":user,"host":"127.0.0.1","ssl_mode":sslMode,"restore_status":restoreStatus.String,"linked_sites":linkedSites,
 		"role_type":"Application user","permissions":[]string{"CONNECT","USAGE ON SCHEMA public","SELECT","INSERT","UPDATE","DELETE","USAGE/SELECT/UPDATE ON SEQUENCES"},
 	}})
 }
