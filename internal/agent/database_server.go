@@ -104,7 +104,7 @@ func ensurePostgresSSL(ctx context.Context,dataDir string)(string,string,error) 
 	openssl,err:=exec.LookPath("openssl")
 	if err!=nil{return "","",fmt.Errorf("openssl is required for SSL mode; install the Termux openssl package")}
 	out,err:=exec.CommandContext(ctx,openssl,"req","-new","-x509","-days","3650","-nodes","-out",cert,"-keyout",key,"-subj","/CN=localhost","-addext","subjectAltName=DNS:localhost,IP:127.0.0.1").CombinedOutput()
-	if err!=nil{return "","",fmt.Errorf("generate local certificate: %s",trimOutput(string(out)))}
+	if err!=nil{_ = os.Remove(cert);_ = os.Remove(key);return "","",fmt.Errorf("generate local certificate: %s",trimOutput(string(out)))}
 	if err:=os.Chmod(key,0o600);err!=nil{return "","",err}
 	if err:=os.Chmod(cert,0o644);err!=nil{return "","",err}
 	return cert,key,nil
