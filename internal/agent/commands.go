@@ -37,6 +37,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleCreateDatabaseBackup(cmd)
 	case "restore_database_backup":
 		return h.handleRestoreDatabaseBackup(cmd)
+	case "test_database_connection":
+		return h.handleTestDatabaseConnection(cmd)
 	case "get_metrics":
 		return h.handleGetMetrics(cmd)
 	case "create_site":
@@ -219,4 +221,11 @@ func (h *CommandHandler) handleRestoreDatabaseBackup(cmd *shared.Command) *share
 	if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid restore_database_backup payload")}
 	if err:=restorePostgresDatabase(req);err!=nil{return errorResult(cmd.Id,err.Error())}
 	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL backup restored into a new database"}
+}
+
+func (h *CommandHandler) handleTestDatabaseConnection(cmd *shared.Command) *shared.Result {
+	var req shared.TestDatabaseConnection
+	if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid test_database_connection payload")}
+	if err:=testPostgresConnection(req);err!=nil{return errorResult(cmd.Id,err.Error())}
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL connection test succeeded"}
 }
