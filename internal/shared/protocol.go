@@ -69,6 +69,19 @@ type CreateDatabase struct {
 
 type CreateSiteBackup struct { SiteId string }
 
+type CreateDatabaseBackup struct {
+	DatabaseID int64 `json:"database_id"`
+	ServerID int64 `json:"server_id"`
+	Database string `json:"database"`
+	Port uint32 `json:"port"`
+}
+
+type DatabaseBackupResult struct {
+	FileName string `json:"file_name"`
+	SizeBytes int64 `json:"size_bytes"`
+	Format string `json:"format"`
+}
+
 type SiteBackupResult struct {
 	FileName string `json:"file_name"`
 	SizeBytes int64 `json:"size_bytes"`
