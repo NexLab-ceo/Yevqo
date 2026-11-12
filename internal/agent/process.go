@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"unicode"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -48,14 +49,46 @@ func NewProcessManager(dataRoot string) *ProcessManager {
 //   - path:    "sites/blog" (относительно DataRoot)
 //   - port:    8000
 //   - runtime: "php", "go", "static"
+func validSiteID(siteID string) bool {
+	if len(siteID) < 1 || len(siteID) > 64 { return false }
+	for _, r := range siteID {
+		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_') { return false }
+	}
+	return true
+}
+
+func safeSiteDirectory(dataRoot, siteID string) (string, error) {
+	if !validSiteID(siteID) { return "", fmt.Errorf("invalid site id") }
+	root := filepath.Join(dataRoot, "sites")
+	target := filepath.Join(root, siteID)
+	absRoot, err := filepath.Abs(root); if err != nil { return "", err }
+	absTarget, err := filepath.Abs(target); if err != nil { return "", err }
+	rel, err := filepath.Rel(absRoot, absTarget)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("site path is outside the sites directory")
+	}
+	if resolvedRoot, e := filepath.EvalSymlinks(absRoot); e == nil {
+		if resolvedTarget, e := filepath.EvalSymlinks(absTarget); e == nil {
+			rel, e = filepath.Rel(resolvedRoot, resolvedTarget)
+			if e != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return "", fmt.Errorf("site path resolves outside the sites directory") }
+		}
+	}
+	return absTarget, nil
+}
+
 func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string) (int, error) {
+	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
+	if port < 1024 || port > 65535 { return 0, fmt.Errorf("port must be between 1024 and 65535") }
+	if runtime != "php" && runtime != "go" && runtime != "static" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
+	if filepath.Clean(path) != filepath.Join("sites", siteID) || filepath.IsAbs(path) { return 0, fmt.Errorf("site path must be sites/<site_id>") }
 	// Проверяем, что процесс ещё не запущен.
 	if p, ok := m.procs[siteID]; ok && isAlive(p.PID) {
 		return p.PID, fmt.Errorf("site %s is already running (pid %d)", siteID, p.PID)
 	}
 
-	// Абсолютный путь.
-	absPath := filepath.Join(m.DataRoot, path)
+	// Resolve the site strictly inside the agent's sites directory.
+	absPath, err := safeSiteDirectory(m.DataRoot, siteID)
+	if err != nil { return 0, err }
 	if _, err := os.Stat(absPath); err != nil {
 		return 0, fmt.Errorf("site directory not found: %s", absPath)
 	}
@@ -68,7 +101,7 @@ func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string
 	logPath := filepath.Join(logDir, siteID+".log")
 
 	// Открываем лог для записи (append).
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return 0, fmt.Errorf("open log: %w", err)
 	}
@@ -148,6 +181,7 @@ func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string
 
 // StopSite останавливает сайт (SIGTERM, потом SIGKILL).
 func (m *ProcessManager) StopSite(siteID string) error {
+	if !validSiteID(siteID) { return fmt.Errorf("invalid site id") }
 	p, ok := m.procs[siteID]
 	if !ok {
 		// Попробуем найти PID через pgrep (на случай, если агент перезапускался).
@@ -177,6 +211,7 @@ func (m *ProcessManager) StopSite(siteID string) error {
 
 // GetLogs возвращает последние N строк лога сайта.
 func (m *ProcessManager) GetLogs(siteID string, lines int) (string, error) {
+	if !validSiteID(siteID) { return "", fmt.Errorf("invalid site id") }
 	logPath := filepath.Join(m.DataRoot, "logs", siteID+".log")
 	if _, err := os.Stat(logPath); err != nil {
 		return "", fmt.Errorf("log not found: %s", logPath)
@@ -247,6 +282,7 @@ func killProcess(pid int) error {
 // Ищет процессы, у которых в командной строке есть "sites/<siteID>"
 // или "php -S 0.0.0.0:<port>".
 func findPIDBySite(dataRoot, siteID string) int {
+	if !validSiteID(siteID) { return 0 }
 	// Ищем php -S, который был запущен из папки этого сайта.
 	pattern := filepath.Join(dataRoot, "sites", siteID)
 	cmd := exec.Command("pgrep", "-f", pattern)

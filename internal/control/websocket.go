@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,7 +27,12 @@ const (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" { return true } // native Termux Agent has no browser Origin
+		u, err := url.Parse(origin)
+		return err == nil && (u.Scheme == "http" || u.Scheme == "https") && strings.EqualFold(u.Host, r.Host)
+	},
 }
 
 // Hub — реестр подключённых агентов.
@@ -128,6 +135,7 @@ func (c *AgentConn) readPump(srv *Server) {
 			continue
 		}
 
+		if c.Device == nil && env.AuthReq == nil { continue }
 		switch {
 		case env.AuthReq != nil:
 			c.handleAuth(srv, env.AuthReq)

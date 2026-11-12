@@ -185,6 +185,11 @@ func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Devic
 	}
 
 	if existing != nil {
+		// A device UUID is globally unique. Never let a token owned by another
+		// account rebind or take over an already paired device.
+		if existing.UserID != d.UserID {
+			return nil, shared.ErrForbidden("device is already paired to another account")
+		}
 		query := `
 			UPDATE devices
 			SET tailscale_ip = ?, hostname = ?, agent_version = ?,

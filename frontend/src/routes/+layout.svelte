@@ -101,7 +101,7 @@
                         {/each}
                     </section>
                 {/each}
-                {#if $user?.username === 'admin'}
+                {#if $user?.is_admin === true}
                     <section class="nav-group">
                         <div class="nav-label">ADMINISTRATION</div>
                         <a href="/admin" class:active={isActive({href:'/admin'})} class="nav-item"><span class="nav-icon">♜</span><span>Admin panel</span></a>

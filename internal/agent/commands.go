@@ -87,7 +87,8 @@ func (h *CommandHandler) handleGitPull(cmd *shared.Command) *shared.Result {
 		return errorResult(cmd.Id, "invalid git_pull payload")
 	}
 
-	path := h.cfg.DataRoot + "/sites/" + req.SiteId
+	path, pathErr := safeSiteDirectory(h.cfg.DataRoot, req.SiteId)
+	if pathErr != nil { return errorResult(cmd.Id, pathErr.Error()) }
 
 	out, err := runGitPull(path)
 	if err != nil {
@@ -124,6 +125,7 @@ func (h *CommandHandler) handleCreateTunnel(cmd *shared.Command) *shared.Result 
 		return errorResult(cmd.Id, "invalid create_tunnel payload")
 	}
 
+	if !validSiteID(req.SiteId) { return errorResult(cmd.Id, "invalid site id") }
 	proc, ok := h.processes.Get(req.SiteId)
 	if !ok {
 		return errorResult(cmd.Id, "site must be running first")

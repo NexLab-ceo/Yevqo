@@ -101,9 +101,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SetSessionCookie(w, sess, s.cfg.UseHTTPS)
+	userView := *user
+	userView.IsAdmin = user.Username == s.adminUsername
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":   true,
-		"user": user,
+		"user": userView,
 	})
 }
 

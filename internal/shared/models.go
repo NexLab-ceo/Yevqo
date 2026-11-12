@@ -61,6 +61,7 @@ type User struct {
 	Email        string     `json:"email"`
 	PasswordHash string     `json:"-"`              // никогда не отдаём в JSON
 	Status       string     `json:"status"`
+	IsAdmin      bool       `json:"is_admin,omitempty"`
 
 	ReferralCode string     `json:"referral_code"`
 	ReferredBy   *int64     `json:"referred_by,omitempty"`
