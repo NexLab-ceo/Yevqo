@@ -99,3 +99,13 @@ The `feature/database-server-wizard` branch contains the in-progress VELTRIX Doc
 
 ### Important implementation boundary
 Database engine installation, database creation, credentials, backup execution and restore are not yet wired to the Android Agent. The current UI must not imply those device-side operations have completed. These capabilities require typed Agent protocol commands, device-side validation, idempotent execution and rollback-safe behavior.
+
+
+### Website lifecycle and operations
+- Site creation is an explicit typed Agent command. It creates a new site directory and a starter file without overwriting an existing directory.
+- Site processes bind to localhost by default; occupied ports are rejected before launch.
+- Site IDs and paths are validated on the Agent. Site log files are private to the Termux account.
+- Removing a website from the panel removes its metadata only; its device files are deliberately preserved.
+- Domains can be assigned as metadata to a site. DNS and reverse-proxy / tunnel routing are not reported as active until verified separately.
+- Deployment history records site create/start/stop and Git Pull actions without storing command payloads or credentials.
+- Monitoring currently reports device heartbeat, agent version and site/server counts. CPU, RAM and temperature require a future telemetry event from the Agent.
