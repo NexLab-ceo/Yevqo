@@ -303,7 +303,7 @@ func (s *Server) handleBackups(w http.ResponseWriter,r *http.Request) {
 			if err!=nil { apiError(w,shared.ErrInternal("could not load database backup target"));return }
 			if engine!="postgresql" || databaseStatus!="ready" || serverStatus!="ready" { apiError(w,shared.ErrBadRequest("database and PostgreSQL server must be ready"));return }
 			conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
-			res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO backups(user_id,device_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,0,'queued')`,u.ID,deviceID,"database",fmt.Sprint(in.DatabaseID),fmt.Sprintf("pending-%d.dump",in.DatabaseID))
+			res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,?,0,'queued')`,u.ID,deviceID,serverID,"database",fmt.Sprint(in.DatabaseID),fmt.Sprintf("pending-%d.dump",in.DatabaseID))
 			if err!=nil { apiError(w,shared.ErrInternal("could not queue database backup"));return }
 			backupID,_:=res.LastInsertId()
 			go s.runDatabaseBackup(backupID,u.ID,deviceID,conn,&shared.CreateDatabaseBackup{DatabaseID:in.DatabaseID,ServerID:serverID,Database:database,Port:uint32(port)})
