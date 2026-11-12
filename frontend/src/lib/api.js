@@ -173,3 +173,6 @@ export async function removeSiteDatabaseConnection(id) { return request('DELETE'
 export async function getDatabase(id) { return request('GET', `/api/databases/${id}`); }
 
 export async function createDatabaseBackup(databaseId) { return request('POST', '/api/backups', { database_id: databaseId }); }
+
+export async function listDatabaseConnections(databaseId) { return request('GET', `/api/database-connections?database_id=${databaseId}`); }
+export async function attachDatabaseToSite(databaseId, deviceId, siteId) { return request('POST', '/api/database-connections', { database_id: databaseId, device_id: deviceId, site_id: siteId }); }
