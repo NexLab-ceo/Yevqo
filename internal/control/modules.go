@@ -306,11 +306,11 @@ func (s *Server) runDatabaseBackup(backupID,userID,deviceID int64,conn *AgentCon
 		return
 	}
 	var backup shared.DatabaseBackupResult
-	if err:=shared.Unmarshal(result.Payload,&backup);err!=nil || backup.FileName=="" || backup.SizeBytes<1 {
+	if err:=shared.Unmarshal(result.Payload,&backup);err!=nil || backup.FileName=="" || backup.SizeBytes<1 || !backup.Verified {
 		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='failed' WHERE id=? AND user_id=?`,backupID,userID)
 		return
 	}
-	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET file_name=?,size_bytes=?,status='completed' WHERE id=? AND user_id=?`,backup.FileName,backup.SizeBytes,backupID,userID)
+	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET file_name=?,size_bytes=?,status='verified' WHERE id=? AND user_id=?`,backup.FileName,backup.SizeBytes,backupID,userID)
 	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(deviceID),Action:"database_backup_created",Details:map[string]interface{}{"backup_id":backupID,"database_id":req.DatabaseID,"size_bytes":backup.SizeBytes}})
 }
 
