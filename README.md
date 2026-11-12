@@ -8,7 +8,7 @@ The `feature/database-server-wizard` branch contains the in-progress VELTRIX Doc
 - Database Server records are isolated per account and device. A server cannot be removed while database metadata references it.
 - Account settings persist Simple / Advanced mode, locale and theme.
 - Activity logs, notifications, account summary reports and backup metadata have read APIs.
-- New additive schema is in `migrations/001_modules.sql`; the Termux installer copies SQL migrations into the control-plane data directory and applies them at startup.
+- New additive schema is in migrations 001–006; the Termux installer copies SQL migrations into the Control Plane data directory and applies them at startup.
 
 ### Important implementation boundary
 PostgreSQL installation, database creation, application-role provisioning, encrypted credential storage, website process injection and local database backup are now wired through typed Agent commands. Restore, download/export, MariaDB/MySQL, existing-cluster adoption and full credential rotation remain pending. The UI reports device-side actions only after the Agent confirms them.
@@ -62,6 +62,6 @@ PostgreSQL installation, database creation, application-role provisioning, encry
 ### PostgreSQL database backups
 - Database backups run asynchronously through the Agent using pg_dump -Fc --no-owner --no-acl.
 - The Agent validates the database identifier, stores dumps in Termux private storage under $PREFIX/var/lib/veltrix-agent/backups, and verifies each custom archive with pg_restore --list before the Control Plane marks it verified.
-- Restore, backup download and cross-device transfer remain pending.
+- Restore is available only into a new database on the original ready PostgreSQL server; it never overwrites the source database. Backup download and cross-device transfer remain pending.
 
 - Storage and RAM budgets, process policy and auto-start preferences are persisted as configuration; enforcement is not claimed until runtime quota and boot integration are implemented.
