@@ -21,7 +21,7 @@ if [ ! -f "go.mod" ]; then
     exit 1
 fi
 
-DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-/sdcard/veltrix-agent}"
+DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-$PREFIX/var/lib/veltrix-agent}"
 
 log "VELTRIX Agent installer"
 log "data root: $DATA_ROOT"
@@ -72,7 +72,8 @@ fi
 # 2. СТРУКТУРА ПАПОК
 # ============================================================
 log "creating directory structure..."
-mkdir -p "$DATA_ROOT"/{config,sites,databases,logs,cloudflared}
+mkdir -p "$DATA_ROOT"/{config,sites,databases,logs,cloudflared,backups}
+chmod 700 "$DATA_ROOT" "$DATA_ROOT/backups"
 
 # ============================================================
 # 3. КОНФИГ
