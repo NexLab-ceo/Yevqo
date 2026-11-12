@@ -50,6 +50,7 @@ type InstallDatabaseServer struct {
 	Port uint32
 	DataDirectory string
 	MaxConnections uint32
+	SSLMode string `json:"ssl_mode"`
 }
 
 type DatabaseServerInstallResult struct {
