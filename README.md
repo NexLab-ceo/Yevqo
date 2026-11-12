@@ -41,3 +41,5 @@ Database engine installation, database creation, credentials, backup execution a
 - Archive files are created with private permissions, are isolated by site ID, skip symlinks and are not deleted when website metadata is removed.
 - Backup metadata is associated with the owning account and device through migration `004_backup_device_scope.sql`.
 - Restore is intentionally not exposed yet; safe extraction into a new site directory and archive verification are required first.
+
+- Backup commands may take longer than ordinary site actions; the Control Plane now allows a bounded two-minute Agent response window for these archives.
