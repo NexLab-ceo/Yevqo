@@ -45,7 +45,13 @@ func createDatabaseBackup(dataRoot string, req shared.CreateDatabaseBackup) (*sh
 	}
 	if err:=file.Sync();err!=nil{return nil,err}
 	if err:=file.Close();err!=nil{return nil,err}
+	verify,err:=exec.LookPath("pg_restore");if err!=nil{return nil,fmt.Errorf("pg_restore is not installed; backup verification is unavailable")}
+	verifyCtx,cancelVerify:=context.WithTimeout(context.Background(),60*time.Second)
+	verifyCmd:=exec.CommandContext(verifyCtx,verify,"--list",fullPath)
+	verifyOut,verifyErr:=verifyCmd.CombinedOutput()
+	cancelVerify()
+	if verifyErr!=nil{return nil,fmt.Errorf("database backup verification failed: %s",strings.TrimSpace(string(verifyOut)))}
 	ok=true
 	info,err:=os.Stat(fullPath);if err!=nil{return nil,err}
-	return &shared.DatabaseBackupResult{FileName:name,SizeBytes:info.Size(),Format:"custom"},nil
+	return &shared.DatabaseBackupResult{FileName:name,SizeBytes:info.Size(),Format:"custom",Verified:true},nil
 }
