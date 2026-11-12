@@ -234,3 +234,52 @@ func (s *Server) handleBackups(w http.ResponseWriter,r *http.Request) {
 }
 
 var _ = fmt.Sprintf
+
+func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
+	u:=UserFromContext(r.Context())
+	if r.Method!=http.MethodGet { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
+	rows,err:=s.db.conn.QueryContext(r.Context(),"SELECT st.device_id,st.site_id,st.domain,st.port,st.status,COALESCE(d.hostname,'Android host') FROM sites st JOIN devices d ON d.id=st.device_id WHERE d.user_id=? AND st.domain IS NOT NULL AND st.domain<>'' ORDER BY st.updated_at DESC",u.ID)
+	if err!=nil { apiError(w,shared.ErrInternal("could not load domains")); return }
+	defer rows.Close()
+	out:=make([]map[string]interface{},0)
+	for rows.Next(){var deviceID int64;var siteID,domain,status,hostname string;var port int
+		if err:=rows.Scan(&deviceID,&siteID,&domain,&port,&status,&hostname);err!=nil{apiError(w,shared.ErrInternal("could not read domains"));return}
+		out=append(out,map[string]interface{}{"device_id":deviceID,"site_id":siteID,"domain":domain,"port":port,"site_status":status,"device_name":hostname,"routing_status":"not_verified"})
+	}
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"domains":out})
+}
+
+func (s *Server) handleDeployments(w http.ResponseWriter,r *http.Request) {
+	u:=UserFromContext(r.Context())
+	if r.Method!=http.MethodGet { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
+	rows,err:=s.db.conn.QueryContext(r.Context(),"SELECT l.id,l.action,l.details,l.created_at,COALESCE(d.hostname,'') FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=? AND l.action IN ('create_site','start_site','stop_site','git_pull') ORDER BY l.id DESC LIMIT 100",u.ID)
+	if err!=nil { apiError(w,shared.ErrInternal("could not load deployment history")); return }
+	defer rows.Close()
+	out:=make([]map[string]interface{},0)
+	for rows.Next(){var id int64;var action,hostname string;var details []byte;var created time.Time
+		if err:=rows.Scan(&id,&action,&details,&created,&hostname);err!=nil{apiError(w,shared.ErrInternal("could not read deployment history"));return}
+		var parsed interface{};if len(details)>0{_ = json.Unmarshal(details,&parsed)}
+		out=append(out,map[string]interface{}{"id":id,"action":action,"details":parsed,"created_at":created,"device":hostname})
+	}
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"deployments":out})
+}
+
+func (s *Server) handleMonitoring(w http.ResponseWriter,r *http.Request) {
+	u:=UserFromContext(r.Context())
+	if r.Method!=http.MethodGet { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
+	var totalDevices,onlineDevices,totalSites,runningSites,totalDB int
+	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM devices WHERE user_id=?",u.ID).Scan(&totalDevices)
+	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM devices WHERE user_id=? AND status='online'",u.ID).Scan(&onlineDevices)
+	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE d.user_id=?",u.ID).Scan(&totalSites)
+	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE d.user_id=? AND st.status='running'",u.ID).Scan(&runningSites)
+	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM database_servers WHERE user_id=?",u.ID).Scan(&totalDB)
+	rows,err:=s.db.conn.QueryContext(r.Context(),"SELECT d.id,COALESCE(d.hostname,'Android host'),d.status,d.agent_version,d.last_seen,(SELECT COUNT(*) FROM sites st WHERE st.device_id=d.id),(SELECT COUNT(*) FROM sites st WHERE st.device_id=d.id AND st.status='running') FROM devices d WHERE d.user_id=? ORDER BY d.last_seen DESC",u.ID)
+	if err!=nil{apiError(w,shared.ErrInternal("could not load monitoring data"));return};defer rows.Close()
+	devices:=make([]map[string]interface{},0)
+	for rows.Next(){var id int64;var hostname,status,version string;var lastSeen sql.NullTime;var sites,running int
+		if err:=rows.Scan(&id,&hostname,&status,&version,&lastSeen,&sites,&running);err!=nil{apiError(w,shared.ErrInternal("could not read monitoring data"));return}
+		var seen interface{};if lastSeen.Valid{seen=lastSeen.Time}
+		devices=append(devices,map[string]interface{}{"id":id,"hostname":hostname,"status":status,"agent_version":version,"last_seen":seen,"site_count":sites,"running_sites":running})
+	}
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"summary":map[string]int{"devices":totalDevices,"online_devices":onlineDevices,"sites":totalSites,"running_sites":runningSites,"database_servers":totalDB},"devices":devices})
+}

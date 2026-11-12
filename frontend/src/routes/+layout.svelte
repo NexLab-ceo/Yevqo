@@ -18,11 +18,11 @@
             { title: 'Devices', href: '/devices', icon: '▣', active: 'root' },
             { title: 'Websites', href: '/sites', icon: '◉' },
             { title: 'Databases', href: '/databases', icon: '◈' },
-            { title: 'Deployments', href: '/deployments', icon: '⇧', soon: true },
-            { title: 'Domains', href: '/domains', icon: '◎', soon: true }
+            { title: 'Deployments', href: '/deployments', icon: '⇧' },
+            { title: 'Domains', href: '/domains', icon: '◎' }
         ]},
         { label: 'OPERATIONS', items: [
-            { title: 'Monitoring', href: '/monitoring', icon: '⌁', soon: true },
+            { title: 'Monitoring', href: '/monitoring', icon: '⌁' },
             { title: 'Logs', href: '/logs', icon: '≡' },
             { title: 'Notifications', href: '/notifications', icon: '♧' },
             { title: 'Reports & Export', href: '/reports', icon: '▤' }

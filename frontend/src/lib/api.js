@@ -153,3 +153,8 @@ export async function getReports() { return request('GET', '/api/reports'); }
 export async function listBackups() { return request('GET', '/api/backups'); }
 
 export async function deleteSite(deviceId, siteId) { return request('DELETE', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}`); }
+
+export async function listDomains() { return request('GET', '/api/domains'); }
+export async function updateSiteDomain(deviceId, siteId, domain) { return request('PATCH', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId), { domain }); }
+export async function listDeployments() { return request('GET', '/api/deployments'); }
+export async function getMonitoring() { return request('GET', '/api/monitoring'); }

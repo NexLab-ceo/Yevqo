@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -420,6 +421,10 @@ func (s *Server) handleSites(w http.ResponseWriter, r *http.Request) {
 // /api/sites/{deviceID}/{siteID}
 // ============================================================
 
+var domainPattern = regexp.MustCompile("(?i)^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$")
+
+func nullableString(v string) interface{} { if v == "" { return nil }; return v }
+
 func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
 	if user == nil {
@@ -450,6 +455,15 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 	sites, _ := s.db.ListSitesByDevice(r.Context(), deviceID)
 	for _, st := range sites {
 		if st.SiteID != siteID { continue }
+		if r.Method == http.MethodPatch {
+			var in struct { Domain string }
+			if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
+			domain:=strings.ToLower(strings.TrimSpace(in.Domain))
+			if domain!="" && !domainPattern.MatchString(domain){apiError(w,shared.ErrBadRequest("enter a valid hostname, such as app.example.com"));return}
+			_,err:=s.db.conn.ExecContext(r.Context(),"UPDATE sites SET domain=? WHERE device_id=? AND site_id=?",nullableString(domain),deviceID,siteID)
+			if err!=nil{apiError(w,shared.ErrInternal("could not update domain"));return}
+			writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"domain":domain});return
+		}
 		if r.Method == http.MethodDelete {
 			if st.Status == shared.SiteRunning {
 				conn, online := s.hub.Get(deviceID)

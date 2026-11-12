@@ -1,0 +1,15 @@
+<script>
+ import {onMount} from 'svelte';import {listSites,updateSiteDomain} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
+ let sites=[],drafts={},loading=true,busyKey='';
+ async function load(){const r=await listSites();if(r.ok){sites=r.data.sites||[];const next={};for(const item of sites){const k=item.device_id+':'+item.site.site_id;next[k]=item.site.domain||''}drafts=next}else notify(r.error||'Не удалось загрузить сайты','error');loading=false}
+ onMount(load);
+ async function save(item,key){busyKey=key;const r=await updateSiteDomain(item.device_id,item.site.site_id,drafts[key]||'');busyKey='';if(r.ok){notify('Домен сохранён','success');await load()}else notify(r.error||'Не удалось сохранить домен','error')}
+</script>
+<div class="page-header"><div><div class="eyebrow">INFRASTRUCTURE</div><h1 class="page-title">Domains</h1><p class="page-desc">Назначение hostname сайтам. DNS и tunnel routing проверяются отдельно.</p></div><Button on:click={load}>↻ Обновить</Button></div>
+{#if loading}<div class="empty">Загрузка сайтов…</div>{:else if !sites.length}<div class="empty">Сначала создайте сайт на подключённом устройстве.</div>{:else}
+<div class="domain-list">{#each sites as item}<article class="domain-row"><div class="site"><span class="site-icon">◎</span><span><strong>{item.site.site_id}</strong><small>{item.device_name} · :{item.site.port}</small></span></div><div class="domain-input"><input class="input" type="text" placeholder="app.example.com" bind:value={drafts[item.device_id+':'+item.site.site_id]}/><Button size="sm" variant="primary" loading={busyKey===item.device_id+':'+item.site.site_id} on:click={()=>save(item,item.device_id+':'+item.site.site_id)}>Сохранить</Button></div><div class="routing"><StatusDot status={item.site.domain?'online':'offline'}/><span>{item.site.domain?'Assigned · routing not verified':'No domain'}</span></div></article>{/each}</div>
+{/if}
+<style>
+.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}.domain-list{border:1px solid #253149;border-radius:11px;background:#101727;overflow:hidden}.domain-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(220px,1.4fr) minmax(150px,.8fr);align-items:center;gap:15px;padding:12px;border-bottom:1px solid #1e293b}.domain-row:last-child{border:0}.site{display:flex;align-items:center;gap:9px;min-width:0}.site-icon{width:30px;height:30px;display:grid;place-items:center;background:#172136;color:#a5b4fc;border-radius:8px}.site span:last-child{display:grid;gap:3px}.site strong{font-size:10px}.site small,.routing{font-size:9px;color:#64748b}.domain-input{display:flex;gap:7px}.domain-input input{min-width:0}.routing{display:flex;align-items:center;gap:7px}
+@media(max-width:760px){.domain-row{grid-template-columns:1fr}.routing{padding-left:39px}}
+</style>
