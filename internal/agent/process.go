@@ -102,6 +102,10 @@ func (m *ProcessManager) CreateSite(siteID string, port int, runtime string) err
 }
 
 func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string) (int, error) {
+	return m.StartSiteWithEnv(siteID, path, port, runtime, nil)
+}
+
+func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime string, extraEnv map[string]string) (int, error) {
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return 0, fmt.Errorf("port must be between 1024 and 65535") }
 	if runtime != "php" && runtime != "go" && runtime != "static" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
@@ -160,6 +164,21 @@ func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string
 		logFile.Close()
 		return 0, fmt.Errorf("unsupported runtime: %s", runtime)
 	}
+
+	// Environment values are injected into this site's process only; no .env file is modified.
+	env := append([]string{}, os.Environ()...)
+	for key, value := range extraEnv {
+		if key != "DB_CONNECTION" && key != "DB_HOST" && key != "DB_PORT" && key != "DB_DATABASE" && key != "DB_USERNAME" && key != "DB_PASSWORD" && key != "VELTRIX_DATABASES" {
+			logFile.Close()
+			return 0, fmt.Errorf("unsupported managed environment key: %s", key)
+		}
+		if strings.IndexByte(value, 0) >= 0 || len(value) > 16384 {
+			logFile.Close()
+			return 0, fmt.Errorf("invalid managed environment value")
+		}
+		env = append(env, key+"="+value)
+	}
+	cmd.Env = env
 
 	// Перенаправляем вывод в лог.
 	cmd.Stdout = logFile
