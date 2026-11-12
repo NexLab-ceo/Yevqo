@@ -1,9 +1,8 @@
 <script>
-    import { user, devices, notify } from '$lib/stores.js';
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
     import { listDevices } from '$lib/api.js';
-    import { devices, notify } from '$lib/stores.js';
+    import { devices, notify, user } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
     import StatusDot from '$lib/components/StatusDot.svelte';
@@ -13,7 +12,6 @@
     let showAddModal = false;
     let deviceLimit = 1;
 
-    // Загружаем устройства при открытии страницы.
     onMount(async () => {
         const res = await listDevices();
         if (res.ok) {
@@ -89,7 +87,6 @@
     Устройств: {$devices.length} из {deviceLimit}
 </div>
 
-<!-- Модалка «Добавить устройство» -->
 <Modal open={showAddModal} title="Добавить устройство" onClose={closeAddModal}>
     <p class="modal-text">
         Чтобы подключить новое устройство:
