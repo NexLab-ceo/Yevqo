@@ -158,7 +158,7 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		cmd.Env = append(os.Environ(), fmt.Sprintf("PORT=%d", port))
 	case "static":
 		// Статика — через php -S (он умеет отдавать статические файлы).
-		cmd = exec.Command("php", "-S", fmt.Sprintf("0.0.0.0:%d", port), "-t", ".")
+		cmd = exec.Command("php", "-S", fmt.Sprintf("127.0.0.1:%d", port), "-t", ".")
 		cmd.Dir = absPath
 	default:
 		logFile.Close()
@@ -178,6 +178,7 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		}
 		env = append(env, key+"="+value)
 	}
+	if runtime == "go" { env = append(env, fmt.Sprintf("PORT=%d", port)) }
 	cmd.Env = env
 
 	// Перенаправляем вывод в лог.
