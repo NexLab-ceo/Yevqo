@@ -18,9 +18,11 @@ func createSiteBackup(dataRoot, siteID string) (*shared.SiteBackupResult, error)
 	if err != nil { return nil, err }
 	info, err := os.Stat(siteDir)
 	if err != nil || !info.IsDir() { return nil, fmt.Errorf("site directory not found") }
-	backupDir := filepath.Join(dataRoot, "backups", "sites", siteID)
+	prefix := os.Getenv("PREFIX")
+	if prefix == "" { return nil, fmt.Errorf("Termux PREFIX is not set") }
+	backupDir := filepath.Join(prefix, "var", "lib", "veltrix-agent", "backups", "sites", siteID)
 	if err := os.MkdirAll(backupDir, 0o700); err != nil { return nil, fmt.Errorf("create backup directory: %w", err) }
-	rootResolved, rootErr := filepath.EvalSymlinks(dataRoot)
+	rootResolved, rootErr := filepath.EvalSymlinks(prefix)
 	backupResolved, backupErr := filepath.EvalSymlinks(backupDir)
 	if rootErr != nil || backupErr != nil { return nil, fmt.Errorf("could not verify backup directory") }
 	relBackup, relErr := filepath.Rel(rootResolved, backupResolved)
