@@ -14,6 +14,7 @@
     let sites = [];
     let siteChoice = '';
     let linking = false;
+    let actionError = '';
 
     $: availableSites = database ? sites.filter((entry) => Number(entry.device_id) === Number(database.device_id) && !connections.some((link) => link.site_id === entry.site?.site_id)) : [];
 
@@ -26,14 +27,14 @@
             const links = await listDatabaseConnections(database.id);
             if (links.ok) connections = links.data?.connections || [];
             siteChoice = '';
-        } else error = result.error || 'Could not link website';
+        } else actionError = result.error || 'Could not link website';
         linking = false;
     }
 
     async function removeSiteLink(id) {
         const result = await removeSiteDatabaseConnection(id);
         if (result.ok) connections = connections.filter((item) => item.id !== id);
-        else error = result.error || 'Could not remove website link';
+        else actionError = result.error || 'Could not remove website link';
     }
 
     onMount(async () => {
@@ -96,6 +97,7 @@
                 </div>
                 <div class="connection">postgresql://{database.username}@127.0.0.1:{database.port}/{database.name}</div>
                 <div class="notice">The connection is provisioned to linked websites as process environment variables. Existing .env files are not modified. Restart a website after changing its database link.</div>
+                {#if actionError}<div class="error">{actionError}</div>{/if}
                 <div class="link-heading"><strong>Connected websites</strong><span>{connections.length} linked</span></div>
                 {#each connections as link}
                     <div class="site-link"><span><strong>{link.site_id}</strong><small>Android Host #{link.device_id}</small></span><button on:click={() => removeSiteLink(link.id)}>Remove</button></div>
