@@ -43,6 +43,11 @@ if ! command -v php >/dev/null 2>&1; then
     pkg install -y php
 fi
 
+if ! command -v openssl >/dev/null 2>&1; then
+    log "  → installing OpenSSL (PostgreSQL TLS certificates)"
+    pkg install -y openssl
+fi
+
 if ! command -v git >/dev/null 2>&1; then
     log "  → installing Git"
     pkg install -y git
