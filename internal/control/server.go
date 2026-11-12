@@ -29,6 +29,7 @@ type Server struct {
 	db            *DB
 	hub           *Hub
 	adminUsername string
+	credentialKey []byte
 	mux           *http.ServeMux
 }
 
@@ -38,6 +39,9 @@ func NewServer(cfg Config) (*Server, error) {
 	if err := os.MkdirAll(cfg.DataRoot, 0o755); err != nil {
 		return nil, fmt.Errorf("create data_root: %w", err)
 	}
+
+	credentialKey, err := loadCredentialKey(cfg.DataRoot)
+	if err != nil { return nil, fmt.Errorf("load database credential key: %w", err) }
 
 	// Подключаемся к MySQL.
 	db, err := NewDB(cfg.MySQLDSN)
@@ -72,6 +76,7 @@ func NewServer(cfg Config) (*Server, error) {
 		db:            db,
 		hub:           NewHub(),
 		adminUsername: cfg.AdminUsername,
+		credentialKey: credentialKey,
 		mux:           http.NewServeMux(),
 	}
 
@@ -106,7 +111,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/projects/", s.RequireAuth(s.handleProjectByID))
 	s.mux.HandleFunc("/api/databases/servers", s.RequireAuth(s.handleDatabaseServers))
 	s.mux.HandleFunc("/api/databases/servers/", s.RequireAuth(s.handleDatabaseServerByID))
-	s.mux.HandleFunc("/api/databases", s.RequireAuth(s.handleDatabases))
+	s.mux.HandleFunc("/api/databases", s.RequireAuth(s.handleDatabaseCollection))
+	s.mux.HandleFunc("/api/database-connections", s.RequireAuth(s.handleDatabaseConnections))
 	s.mux.HandleFunc("/api/logs", s.RequireAuth(s.handleLogs))
 	s.mux.HandleFunc("/api/notifications", s.RequireAuth(s.handleNotifications))
 	s.mux.HandleFunc("/api/settings", s.RequireAuth(s.handleSettings))
