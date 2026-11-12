@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"veltrix/internal/shared"
 )
 
 func TestResolveTermuxPathAcceptsPrefixPath(t *testing.T) {
@@ -45,4 +47,17 @@ func TestEnsurePostgresSSLRejectsSymlink(t *testing.T) {
 	if _,_,err:=ensurePostgresSSL(context.Background(),dir);err==nil{t.Fatal("expected unsafe SSL key symlink to be rejected")}
 	got,err:=os.ReadFile(outside);if err!=nil{t.Fatal(err)}
 	if string(got)!="do not overwrite"{t.Fatal("outside file was modified")}
+}
+
+func TestRestoreDatabaseRejectsBackupDirectorySymlinkEscape(t *testing.T) {
+	prefix:=t.TempDir()
+	t.Setenv("PREFIX",prefix)
+	outside:=t.TempDir()
+	name:="source_db-1-20261112T123456.123456Z.dump"
+	if err:=os.WriteFile(filepath.Join(outside,name),[]byte("archive"),0o600);err!=nil{t.Fatal(err)}
+	link:=filepath.Join(prefix,"var","lib","veltrix-agent","backups","databases","7")
+	if err:=os.MkdirAll(filepath.Dir(link),0o700);err!=nil{t.Fatal(err)}
+	if err:=os.Symlink(outside,link);err!=nil{t.Skipf("symlinks unavailable: %v",err)}
+	req:=shared.RestoreDatabaseBackup{BackupServerID:7,BackupFileName:name,Database:shared.CreateDatabase{DatabaseID:2,ServerID:7,Database:"target_db",Username:"target_user",Password:"long-enough-password",Port:5432}}
+	if err:=restorePostgresDatabase(req);err==nil{t.Fatal("expected backup directory symlink escape to be rejected")}
 }
