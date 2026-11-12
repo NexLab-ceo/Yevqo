@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -27,9 +28,10 @@ CREATE DATABASE %s OWNER %s;
 GRANT CONNECT ON DATABASE %s TO %s;
 ",role,literal,db,role,db,role)
 	ctx,cancel:=context.WithTimeout(context.Background(),90*time.Second);defer cancel()
-	cmd:=exec.CommandContext(ctx,psql,"-X","-w","-v","ON_ERROR_STOP=1","-h","/data/data/com.termux/files/usr/tmp","-p",fmt.Sprint(req.Port),"-U","postgres","-d","postgres")
-	// Termux PostgreSQL normally uses a Unix socket in PREFIX/tmp. Try the default socket first.
-	cmd.Args=[]string{psql,"-X","-w","-v","ON_ERROR_STOP=1","-p",fmt.Sprint(req.Port),"-U","postgres","-d","postgres"}
+	prefix:=os.Getenv("PREFIX")
+	if prefix=="" { return fmt.Errorf("Termux PREFIX is not set") }
+	socketDir:=prefix+"/tmp"
+	cmd:=exec.CommandContext(ctx,psql,"-X","-w","-v","ON_ERROR_STOP=1","-h",socketDir,"-p",fmt.Sprint(req.Port),"-U","postgres","-d","postgres")
 	cmd.Stdin=strings.NewReader(sqlText)
 	var stderr bytes.Buffer;cmd.Stderr=&stderr
 	if err:=cmd.Run();err!=nil {
