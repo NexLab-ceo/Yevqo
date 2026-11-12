@@ -131,7 +131,7 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 		var in databaseServerInput;if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 		in.Name=strings.TrimSpace(in.Name);if in.DeviceID<1||len(in.Name)<2||len(in.Name)>64{apiError(w,shared.ErrBadRequest("device and server name are required"));return}
 		if in.Engine!="postgresql"&&in.Engine!="mariadb"&&in.Engine!="mysql"{apiError(w,shared.ErrBadRequest("unsupported database engine"));return}
-		if in.Port<1||in.Port>65535{apiError(w,shared.ErrBadRequest("invalid port"));return}
+		if in.Port<1024||in.Port>65535{apiError(w,shared.ErrBadRequest("invalid port"));return}
 		if in.NetworkAccess==""{in.NetworkAccess="private"}
 		if in.NetworkAccess!="private"&&in.NetworkAccess!="localhost"{apiError(w,shared.ErrBadRequest("network access must be private or localhost"));return}
 		var owned int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM devices WHERE id=? AND user_id=?`,in.DeviceID,u.ID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("device not found"));return}
@@ -148,11 +148,11 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context());raw:=strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/databases/servers/"),"/")
 	id,err:=strconv.ParseInt(raw,10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid server id"));return}
-	var did int64;var name,engine,version,dir,network,status string;var port int;var created time.Time
-	err=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE id=? AND user_id=?`,id,u.ID).Scan(&did,&name,&engine,&version,&port,&dir,&network,&status,&created)
+	var did int64;var name,engine,version,dir,network,status,storage,policy,bind,ssl,auth string;var port,ram,maxConnections int;var monitor,autoStart,remote bool;var created time.Time
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,name,engine,version,port,data_directory,network_access,status,created_at,storage_limit_gb,ram_budget_mb,max_connections,monitor_storage,auto_start,process_policy,bind_address,ssl_mode,auth_method,remote_access FROM database_servers WHERE id=? AND user_id=?`,id,u.ID).Scan(&did,&name,&engine,&version,&port,&dir,&network,&status,&created,&storage,&ram,&maxConnections,&monitor,&autoStart,&policy,&bind,&ssl,&auth,&remote)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}
 	switch r.Method{
-	case http.MethodGet:writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"server":map[string]interface{}{"id":id,"device_id":did,"name":name,"engine":engine,"version":version,"port":port,"data_directory":dir,"network_access":network,"status":status,"created_at":created}})
+	case http.MethodGet:writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"server":map[string]interface{}{"id":id,"device_id":did,"name":name,"engine":engine,"version":version,"port":port,"data_directory":dir,"network_access":network,"status":status,"created_at":created,"storage_limit_gb":storage,"ram_budget_mb":ram,"max_connections":maxConnections,"monitor_storage":monitor,"auto_start":autoStart,"process_policy":policy,"bind_address":bind,"ssl_mode":ssl,"auth_method":auth,"remote_access":remote}})
 	case http.MethodDelete:
 		var count int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM databases WHERE server_id=?`,id).Scan(&count);err!=nil{apiError(w,shared.ErrInternal("could not inspect databases"));return};if count>0{apiError(w,shared.ErrBadRequest("remove or migrate databases before removing this server"));return}
 		_,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM database_servers WHERE id=? AND user_id=? AND status='planned'`,id,u.ID);if err!=nil{apiError(w,shared.ErrInternal("could not remove server metadata"));return};writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})

@@ -1,8 +1,8 @@
 <script>
- import {onMount} from 'svelte';import {getSettings,saveSettings} from '$lib/api.js';import {notify} from '$lib/stores.js';import {locale} from '$lib/i18n.js';import Button from '$lib/components/Button.svelte';
+ import {onMount} from 'svelte';import {getSettings,saveSettings} from '$lib/api.js';import {notify,uiMode} from '$lib/stores.js';import {locale} from '$lib/i18n.js';import Button from '$lib/components/Button.svelte';
  let settings={mode:'simple',locale:'ru',theme:'dark'},loading=true,saving=false;
- onMount(async()=>{const r=await getSettings();if(r.ok){settings={...settings,...r.data.settings};locale.set(settings.locale)}else notify(r.error||'Не удалось загрузить настройки','error');loading=false});
- async function save(){saving=true;const r=await saveSettings(settings);saving=false;if(r.ok){locale.set(settings.locale);notify('Настройки сохранены','success')}else notify(r.error||'Не удалось сохранить','error')}
+ onMount(async()=>{const r=await getSettings();if(r.ok){settings={...settings,...r.data.settings};locale.set(settings.locale);uiMode.set(settings.mode)}else notify(r.error||'Не удалось загрузить настройки','error');loading=false});
+ async function save(){saving=true;const r=await saveSettings(settings);saving=false;if(r.ok){locale.set(settings.locale);uiMode.set(settings.mode);notify('Настройки сохранены','success')}else notify(r.error||'Не удалось сохранить','error')}
 </script>
 <div class="page-header"><div><div class="eyebrow">PREFERENCES</div><h1 class="page-title">Settings</h1><p class="page-desc">Режим интерфейса и предпочтения аккаунта.</p></div><Button variant="primary" loading={saving} on:click={save}>Сохранить</Button></div>
 {#if loading}<div class="empty">Загрузка настроек…</div>{:else}

@@ -91,7 +91,17 @@
             version: version === 'latest' ? '' : version,
             port: Number(port),
             data_directory: dataDirectory,
-            network_access: 'localhost'
+            network_access: 'localhost',
+            storage_limit_gb: storageLimit,
+            ram_budget_mb: ramBudget === 'auto' ? 0 : Number(ramBudget),
+            max_connections: Number(maxConnections),
+            monitor_storage: monitorStorage,
+            auto_start: autoStart,
+            process_policy: processPolicy,
+            bind_address: bindAddress,
+            ssl_mode: sslMode,
+            auth_method: authMethod,
+            remote_access: remoteAccess
         });
         if (!result.ok) { error = result.error || 'Не удалось сохранить конфигурацию'; return; }
         completed = true;

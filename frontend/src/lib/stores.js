@@ -8,6 +8,9 @@ import { writable, derived } from 'svelte/store';
 // Текущий пользователь (null = не залогинен).
 export const user = writable(null);
 
+// Persisted UI mode: simple for new accounts, advanced on explicit choice.
+export const uiMode = writable('simple');
+
 // Список устройств пользователя.
 export const devices = writable([]);
 

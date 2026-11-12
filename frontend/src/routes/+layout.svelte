@@ -3,8 +3,9 @@
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { user, isAuthenticated } from '$lib/stores.js';
-    import { logout, me } from '$lib/api.js';
+    import { user, isAuthenticated, uiMode } from '$lib/stores.js';
+    import { logout, me, getSettings } from '$lib/api.js';
+    import { locale } from '$lib/i18n.js';
 
     let loading = true;
     let mobileNavOpen = false;
@@ -28,16 +29,17 @@
             { title: 'Reports & Export', href: '/reports', icon: '▤' }
         ]},
         { label: 'MANAGEMENT', items: [
-            { title: 'Team & Permissions', href: '/team', icon: '♙', soon: true },
-            { title: 'Integrations', href: '/integrations', icon: '⌘', soon: true },
+            { title: 'Team & Permissions', href: '/team', icon: '♙' },
+            { title: 'Integrations', href: '/integrations', icon: '⌘' },
             { title: 'Backup & Restore', href: '/backups', icon: '⤓' },
-            { title: 'Maintenance', href: '/maintenance', icon: '⚙', soon: true }
+            { title: 'Maintenance', href: '/maintenance', icon: '⚙' }
         ]}
     ];
 
     onMount(async () => {
-        const res = await me();
+        const [res, prefs] = await Promise.all([me(), getSettings()]);
         if (res.ok && res.data?.user) user.set(res.data.user);
+        if (prefs.ok) { uiMode.set(prefs.data.settings?.mode || 'simple'); locale.set(prefs.data.settings?.locale || 'ru'); }
         loading = false;
     });
 
@@ -66,7 +68,7 @@
 {:else if !$isAuthenticated}
     <slot />
 {:else}
-    <div class="app-shell">
+    <div class="app-shell" data-mode={$uiMode}>
         {#if mobileNavOpen}
             <button class="mobile-scrim" aria-label="Закрыть меню" on:click={() => mobileNavOpen = false}></button>
         {/if}
@@ -126,7 +128,7 @@
                     <div class="breadcrumbs"><span>Workspace</span><b>/</b><strong>{currentTitle}</strong></div>
                 </div>
                 <div class="topbar-actions">
-                    <span class="connection-state"><i></i> Control plane online</span>
+                    <span class="connection-state"><i></i> Control plane online</span><span class="mode-indicator">{$uiMode === 'advanced' ? 'ADVANCED' : 'SIMPLE'}</span>
                     <button class="icon-action" aria-label="Уведомления" title="Уведомления">♧</button>
                     <a class="profile-action" href="/profile">{($user?.username || 'U').slice(0,1).toUpperCase()}</a>
                 </div>
@@ -162,4 +164,5 @@
     .page-scroll{flex:1;overflow:auto;padding:28px}.page-container{max-width:1440px;margin:0 auto;width:100%}.mobile-menu,.mobile-scrim{display:none}
     @media(max-width:900px){.sidebar{width:220px;flex-basis:220px}.page-scroll{padding:22px}}
     @media(max-width:700px){.sidebar{position:fixed;z-index:50;inset:0 auto 0 0;width:270px;transform:translateX(-100%);transition:transform .2s;box-shadow:20px 0 60px #0008}.sidebar.mobile-open{transform:translateX(0)}.mobile-scrim{display:block;position:fixed;inset:0;background:#020617aa;border:0;z-index:40}.mobile-menu{display:grid;place-items:center;width:30px;height:30px;border:1px solid #253149;background:#101727;color:#cbd5e1;border-radius:7px}.topbar{padding:0 14px}.page-scroll{padding:18px 14px}.connection-state{display:none}}
+    .mode-indicator{font-size:8px;letter-spacing:.1em;font-weight:700;color:#a5b4fc;border:1px solid #373b70;background:#171d39;border-radius:6px;padding:4px 6px}
 </style>
