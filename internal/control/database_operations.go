@@ -102,6 +102,16 @@ func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID i
 func (s *Server) handleDatabaseConnections(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	if r.Method==http.MethodGet {
+		if databaseID,_:=strconv.ParseInt(r.URL.Query().Get("database_id"),10,64);databaseID>0 {
+			rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT c.id,c.device_id,c.site_id,d.name,dc.username,ds.port
+				FROM site_database_connections c JOIN databases d ON d.id=c.database_id
+				JOIN database_servers ds ON ds.id=d.server_id JOIN database_credentials dc ON dc.database_id=d.id
+				WHERE c.user_id=? AND c.database_id=? ORDER BY c.id`,u.ID,databaseID)
+			if err!=nil { apiError(w,shared.ErrInternal("could not load database links"));return };defer rows.Close()
+			out:=make([]map[string]interface{},0)
+			for rows.Next(){var id,deviceID int64;var siteID,name,username string;var port int;if err:=rows.Scan(&id,&deviceID,&siteID,&name,&username,&port);err!=nil{apiError(w,shared.ErrInternal("could not read database links"));return};out=append(out,map[string]interface{}{"id":id,"device_id":deviceID,"site_id":siteID,"database":name,"username":username,"host":"127.0.0.1","port":port})}
+			writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connections":out});return
+		}
 		deviceID,_:=strconv.ParseInt(r.URL.Query().Get("device_id"),10,64)
 		siteID:=r.URL.Query().Get("site_id")
 		if deviceID<1 || siteID=="" { apiError(w,shared.ErrBadRequest("device_id and site_id are required"));return }
@@ -110,6 +120,19 @@ func (s *Server) handleDatabaseConnections(w http.ResponseWriter,r *http.Request
 		out:=make([]map[string]interface{},0)
 		for rows.Next(){var id,databaseID int64;var name,username string;var port int;if err:=rows.Scan(&id,&databaseID,&name,&port,&username);err!=nil{apiError(w,shared.ErrInternal("could not read connections"));return};out=append(out,map[string]interface{}{"id":id,"database_id":databaseID,"database":name,"username":username,"host":"127.0.0.1","port":port})}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connections":out});return
+	}
+	if r.Method==http.MethodPost {
+		var in struct{DeviceID int64 `json:"device_id"`;SiteID string `json:"site_id"`;DatabaseID int64 `json:"database_id"`}
+		if err:=decodeJSON(r,&in);err!=nil||in.DeviceID<1||in.DatabaseID<1||!validBackupSiteID(in.SiteID){apiError(w,shared.ErrBadRequest("invalid database connection request"));return}
+		var dbDeviceID int64;var dbStatus,serverStatus string
+		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT ds.device_id,d.status,ds.status FROM databases d JOIN database_servers ds ON ds.id=d.server_id WHERE d.id=? AND d.user_id=?`,in.DatabaseID,u.ID).Scan(&dbDeviceID,&dbStatus,&serverStatus)
+		if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not inspect database"));return}
+		if dbDeviceID!=in.DeviceID{apiError(w,shared.ErrBadRequest("website and database must be on the same device while database access is localhost-only"));return}
+		if dbStatus!="ready"||serverStatus!="ready"{apiError(w,shared.ErrBadRequest("database and server must be ready"));return}
+		var siteCount int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,in.DeviceID,in.SiteID,u.ID).Scan(&siteCount);err!=nil||siteCount!=1{apiError(w,shared.ErrNotFound("website not found"));return}
+		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO site_database_connections(user_id,device_id,site_id,database_id) VALUES(?,?,?,?)`,u.ID,in.DeviceID,in.SiteID,in.DatabaseID)
+		if err!=nil{apiError(w,shared.ErrBadRequest("this database is already linked to the website or the link could not be created"));return}
+		id,_:=res.LastInsertId();writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"connection":map[string]interface{}{"id":id,"device_id":in.DeviceID,"site_id":in.SiteID,"database_id":in.DatabaseID}});return
 	}
 	if r.Method!=http.MethodDelete { http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return }
 	var in struct{ID int64 `json:"id"`}
