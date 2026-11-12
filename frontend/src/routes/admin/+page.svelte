@@ -178,7 +178,7 @@
 
     .stat-label {
         font-size: 11px;
-        color: #71717a;
+        color: #64748B;
         text-transform: uppercase;
         letter-spacing: 0.04em;
     }
@@ -186,7 +186,7 @@
     .stat-value {
         font-size: 20px;
         font-weight: 600;
-        color: #fafafa;
+        color: #F1F5F9;
         margin-top: 4px;
         font-family: ui-monospace, monospace;
     }
@@ -201,12 +201,12 @@
     .section-title {
         font-size: 14px;
         font-weight: 600;
-        color: #fafafa;
+        color: #F1F5F9;
     }
 
     .section-count {
         font-size: 12px;
-        color: #71717a;
+        color: #64748B;
     }
 
     .users-list {
@@ -230,7 +230,7 @@
     .user-name {
         font-size: 14px;
         font-weight: 500;
-        color: #fafafa;
+        color: #F1F5F9;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -247,8 +247,8 @@
     }
 
     .status-free {
-        background: #18181b;
-        color: #a1a1aa;
+        background: #172136;
+        color: #94A3B8;
     }
 
     .status-commercial {
@@ -264,7 +264,7 @@
     .user-meta {
         font-family: ui-monospace, monospace;
         font-size: 11px;
-        color: #71717a;
+        color: #64748B;
         margin-top: 4px;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -283,12 +283,12 @@
 
     .user-stat-label {
         font-size: 11px;
-        color: #71717a;
+        color: #64748B;
     }
 
     .user-stat-value {
         font-size: 13px;
-        color: #a1a1aa;
+        color: #94A3B8;
         font-family: ui-monospace, monospace;
         margin-top: 2px;
     }
@@ -303,6 +303,6 @@
 
     .page-info {
         font-size: 12px;
-        color: #71717a;
+        color: #64748B;
     }
 </style>

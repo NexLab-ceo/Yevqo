@@ -198,8 +198,8 @@
     }
 
     .status-free {
-        background: #18181b;
-        color: #a1a1aa;
+        background: #172136;
+        color: #94A3B8;
     }
 
     .status-commercial {
@@ -224,7 +224,7 @@
 
     .info-label {
         font-size: 11px;
-        color: #71717a;
+        color: #64748B;
         text-transform: uppercase;
         letter-spacing: 0.04em;
         margin-bottom: 4px;
@@ -232,7 +232,7 @@
 
     .info-value {
         font-size: 13px;
-        color: #fafafa;
+        color: #F1F5F9;
         word-break: break-all;
     }
 
@@ -251,12 +251,12 @@
     .section-title {
         font-size: 14px;
         font-weight: 600;
-        color: #fafafa;
+        color: #F1F5F9;
     }
 
     .section-count {
         font-size: 12px;
-        color: #71717a;
+        color: #64748B;
     }
 
     .devices-list {
@@ -275,13 +275,13 @@
     .device-name {
         font-size: 13px;
         font-weight: 500;
-        color: #fafafa;
+        color: #F1F5F9;
     }
 
     .device-meta {
         font-family: ui-monospace, monospace;
         font-size: 11px;
-        color: #71717a;
+        color: #64748B;
         margin-top: 2px;
     }
 
@@ -294,12 +294,12 @@
 
     .status-text {
         font-size: 12px;
-        color: #a1a1aa;
+        color: #94A3B8;
     }
 
     .modal-text {
         font-size: 13px;
-        color: #a1a1aa;
+        color: #94A3B8;
         line-height: 1.6;
     }
 </style>

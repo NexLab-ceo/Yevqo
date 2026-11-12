@@ -96,7 +96,7 @@
     .site-name {
         font-size: 14px;
         font-weight: 500;
-        color: #fafafa;
+        color: #F1F5F9;
         display: flex;
         align-items: baseline;
         gap: 8px;
@@ -105,14 +105,14 @@
 
     .site-device {
         font-size: 12px;
-        color: #71717a;
+        color: #64748B;
         font-weight: 400;
     }
 
     .site-meta {
         font-family: ui-monospace, monospace;
         font-size: 11px;
-        color: #71717a;
+        color: #64748B;
         margin-top: 4px;
     }
 
@@ -125,12 +125,12 @@
 
     .status-text {
         font-size: 12px;
-        color: #a1a1aa;
+        color: #94A3B8;
     }
 
     .empty-hint {
         font-size: 12px;
-        color: #52525b;
+        color: #64748B;
         margin-top: 8px;
     }
 </style>

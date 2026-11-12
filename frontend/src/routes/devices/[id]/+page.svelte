@@ -278,7 +278,7 @@
         align-items: center;
         gap: 6px;
         font-size: 12px;
-        color: #a1a1aa;
+        color: #94A3B8;
     }
 
     .section-header {
@@ -291,7 +291,7 @@
     .section-title {
         font-size: 14px;
         font-weight: 600;
-        color: #fafafa;
+        color: #F1F5F9;
     }
 
     .sites-list {
@@ -310,13 +310,13 @@
     .site-name {
         font-weight: 500;
         font-size: 14px;
-        color: #fafafa;
+        color: #F1F5F9;
     }
 
     .site-meta {
         font-family: ui-monospace, monospace;
         font-size: 11px;
-        color: #71717a;
+        color: #64748B;
         margin-top: 4px;
     }
 
@@ -328,18 +328,18 @@
 
     .modal-text {
         font-size: 13px;
-        color: #a1a1aa;
+        color: #94A3B8;
         line-height: 1.6;
     }
 
     .logs {
-        background: #000;
-        border: 1px solid #27272a;
+        background: #080B14;
+        border: 1px solid #253149;
         border-radius: 6px;
         padding: 12px;
         font-family: ui-monospace, monospace;
         font-size: 11px;
-        color: #a1a1aa;
+        color: #94A3B8;
         max-height: 400px;
         overflow: auto;
         white-space: pre-wrap;
