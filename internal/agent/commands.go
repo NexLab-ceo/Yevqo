@@ -35,6 +35,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleCreateSiteBackup(cmd)
 	case "create_database_backup":
 		return h.handleCreateDatabaseBackup(cmd)
+	case "restore_database_backup":
+		return h.handleRestoreDatabaseBackup(cmd)
 	case "get_metrics":
 		return h.handleGetMetrics(cmd)
 	case "create_site":
@@ -210,4 +212,11 @@ func (h *CommandHandler) handleCreateDatabaseBackup(cmd *shared.Command) *shared
 	if err!=nil{return errorResult(cmd.Id,err.Error())}
 	payload,err:=shared.Marshal(result);if err!=nil{return errorResult(cmd.Id,"could not encode database backup result")}
 	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL database backup completed",Payload:payload}
+}
+
+func (h *CommandHandler) handleRestoreDatabaseBackup(cmd *shared.Command) *shared.Result {
+	var req shared.RestoreDatabaseBackup
+	if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid restore_database_backup payload")}
+	if err:=restorePostgresDatabase(req);err!=nil{return errorResult(cmd.Id,err.Error())}
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL backup restored into a new database"}
 }
