@@ -23,10 +23,9 @@ func createPostgresDatabase(req shared.CreateDatabase) error {
 	// The password is sent only through stdin, never command-line arguments or logs.
 	literal:=strings.ReplaceAll(req.Password,"'","''")
 	db,role:=req.Database,req.Username
-	sqlText:=fmt.Sprintf("CREATE ROLE %s LOGIN PASSWORD '%s';
+	sqlText:=fmt.Sprintf(`CREATE ROLE %s LOGIN PASSWORD '%s';
 CREATE DATABASE %s OWNER %s;
-GRANT CONNECT ON DATABASE %s TO %s;
-",role,literal,db,role,db,role)
+GRANT CONNECT ON DATABASE %s TO %s;`,role,literal,db,role,db,role)
 	ctx,cancel:=context.WithTimeout(context.Background(),90*time.Second);defer cancel()
 	prefix:=os.Getenv("PREFIX")
 	if prefix=="" { return fmt.Errorf("Termux PREFIX is not set") }
