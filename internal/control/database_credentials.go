@@ -11,7 +11,12 @@ import (
 )
 
 func loadCredentialKey(dataRoot string) ([]byte, error) {
-	path := filepath.Join(dataRoot, "credentials.key")
+	configRoot, err := os.UserConfigDir()
+	if err != nil { return nil, fmt.Errorf("resolve private config directory: %w", err) }
+	keyDir := filepath.Join(configRoot, "veltrix")
+	if err := os.MkdirAll(keyDir, 0o700); err != nil { return nil, err }
+	_ = os.Chmod(keyDir, 0o700)
+	path := filepath.Join(keyDir, "credentials.key")
 	if b, err := os.ReadFile(path); err == nil {
 		if len(b) != 32 { return nil, fmt.Errorf("invalid credential key length") }
 		if err := os.Chmod(path, 0o600); err != nil { return nil, err }
