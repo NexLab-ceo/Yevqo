@@ -80,6 +80,7 @@ type DatabaseBackupResult struct {
 	FileName string `json:"file_name"`
 	SizeBytes int64 `json:"size_bytes"`
 	Format string `json:"format"`
+	Verified bool `json:"verified"`
 }
 
 type SiteBackupResult struct {
