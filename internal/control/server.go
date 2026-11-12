@@ -112,7 +112,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/databases/servers", s.RequireAuth(s.handleDatabaseServers))
 	s.mux.HandleFunc("/api/databases/servers/", s.RequireAuth(s.handleDatabaseServerByID))
 	s.mux.HandleFunc("/api/databases", s.RequireAuth(s.handleDatabaseCollection))
-	s.mux.HandleFunc("/api/databases/", s.RequireAuth(s.handleDatabaseByID))
+	s.mux.HandleFunc("/api/databases/", s.RequireAuth(func(w http.ResponseWriter,r *http.Request) { if strings.HasSuffix(r.URL.Path,"/test") { s.handleDatabaseConnectionTest(w,r); return }; s.handleDatabaseByID(w,r) }))
 	s.mux.HandleFunc("/api/database-connections", s.RequireAuth(s.handleDatabaseConnections))
 	s.mux.HandleFunc("/api/logs", s.RequireAuth(s.handleLogs))
 	s.mux.HandleFunc("/api/notifications", s.RequireAuth(s.handleNotifications))
