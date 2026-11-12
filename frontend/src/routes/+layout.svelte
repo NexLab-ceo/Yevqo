@@ -1,4 +1,5 @@
 <script>
+    import '../app.css';
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
@@ -109,7 +110,7 @@
             </nav>
 
             <div class="sidebar-bottom">
-                <a href="/settings" class="nav-item nav-settings"><span class="nav-icon">⚙</span><span>Settings</span></a>
+                <div class="nav-item nav-disabled nav-settings"><span class="nav-icon">⚙</span><span>Settings</span><small>SOON</small></div>
                 <div class="account-row">
                     <span class="account-avatar">{($user?.username || 'U').slice(0,1).toUpperCase()}</span>
                     <span class="account-copy"><strong>{$user?.username}</strong><small>{$user?.email || 'Personal account'}</small></span>
