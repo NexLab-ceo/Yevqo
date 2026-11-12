@@ -29,6 +29,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 	switch cmd.Action {
 	case "install_database_server":
 		return h.handleInstallDatabaseServer(cmd)
+	case "create_database":
+		return h.handleCreateDatabase(cmd)
 	case "create_site_backup":
 		return h.handleCreateSiteBackup(cmd)
 	case "get_metrics":
@@ -190,4 +192,11 @@ func (h *CommandHandler) handleCreateTunnel(cmd *shared.Command) *shared.Result 
 
 func errorResult(cmdID, msg string) *shared.Result {
 	return &shared.Result{Id: cmdID, Ok: false, Message: msg}
+}
+
+func (h *CommandHandler) handleCreateDatabase(cmd *shared.Command) *shared.Result {
+	var req shared.CreateDatabase
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid create_database payload") }
+	if err := createPostgresDatabase(req); err != nil { return errorResult(cmd.Id, err.Error()) }
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL database and application role created"}
 }
