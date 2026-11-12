@@ -34,3 +34,10 @@ Database engine installation, database creation, credentials, backup execution a
 - The four-step wizard persists its storage budget, RAM budget, connection limit, local bind, SSL mode, authentication, startup policy and storage monitoring preferences.
 - These settings are configuration metadata only while the server remains `planned`; no package install or database initialization is implied.
 - Migration `003_database_server_options.sql` adds the optional settings without deleting existing database records.
+
+
+### Website backups
+- A typed Agent command creates a compressed TAR.GZ archive under the device's private VELTRIX data directory.
+- Archive files are created with private permissions, are isolated by site ID, skip symlinks and are not deleted when website metadata is removed.
+- Backup metadata is associated with the owning account and device through migration `004_backup_device_scope.sql`.
+- Restore is intentionally not exposed yet; safe extraction into a new site directory and archive verification are required first.
