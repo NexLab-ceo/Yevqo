@@ -50,3 +50,5 @@ Database engine installation, database creation, credentials, backup execution a
 - The Agent validates the Termux prefix, data path, port, storage headroom and connection limit; installs only the allowlisted `postgresql` package and initializes only an empty data directory.
 - Existing non-empty directories and detected PostgreSQL clusters are rejected without overwrite. PostgreSQL binds to localhost; remote access stays disabled.
 - MariaDB/MySQL installation, existing-cluster adoption, database/user creation and website credential provisioning remain separate follow-up work.
+
+- Storage and RAM budgets, process policy and auto-start preferences are persisted as configuration; enforcement is not claimed until runtime quota and boot integration are implemented.
