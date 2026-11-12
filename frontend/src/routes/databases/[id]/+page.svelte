@@ -94,8 +94,9 @@
                     <div><span>Username</span><strong>{database.username}</strong></div>
                     <div><span>Password</span><strong>Encrypted · hidden</strong></div>
                     <div><span>Network access</span><strong>Private / localhost</strong></div>
+                    <div><span>TLS mode</span><strong>{database.ssl_mode}</strong></div>
                 </div>
-                <div class="connection">postgresql://{database.username}@127.0.0.1:{database.port}/{database.name}</div>
+                <div class="connection">postgresql://{database.username}@127.0.0.1:{database.port}/{database.name}?sslmode={database.ssl_mode}</div>
                 <div class="notice">The connection is provisioned to linked websites as process environment variables. Existing .env files are not modified. Restart a website after changing its database link.</div>
                 {#if actionError}<div class="error">{actionError}</div>{/if}
                 <div class="link-heading"><strong>Connected websites</strong><span>{connections.length} linked</span></div>
