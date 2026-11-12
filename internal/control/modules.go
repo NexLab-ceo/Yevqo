@@ -297,7 +297,7 @@ func (s *Server) handleBackups(w http.ResponseWriter,r *http.Request) {
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"backups":out})
 }
 
-func (s *Server) runDatabaseBackup(backupID,userID,deviceID int64,conn *DeviceConn,req *shared.CreateDatabaseBackup) {
+func (s *Server) runDatabaseBackup(backupID,userID,deviceID int64,conn *AgentConn,req *shared.CreateDatabaseBackup) {
 	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='running' WHERE id=? AND user_id=?`,backupID,userID)
 	ctx,cancel:=context.WithTimeout(context.Background(),13*time.Minute);defer cancel()
 	result,err:=conn.SendCommand(ctx,"create_database_backup",req)
