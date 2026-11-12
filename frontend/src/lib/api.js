@@ -178,3 +178,5 @@ export async function listDatabaseConnections(databaseId) { return request('GET'
 export async function attachDatabaseToSite(databaseId, deviceId, siteId) { return request('POST', '/api/database-connections', { database_id: databaseId, device_id: deviceId, site_id: siteId }); }
 
 export async function restoreDatabaseBackup(backupId, input) { return request('POST', '/api/backups/restore', { backup_id: backupId, ...input }); }
+
+export async function testDatabaseConnection(id) { return request('POST', `/api/databases/${id}/test`, {}); }
