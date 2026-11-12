@@ -98,6 +98,7 @@ type StartSite struct {
 	Path    string
 	Port    uint32
 	Runtime string
+	Env map[string]string `json:"env,omitempty"`
 }
 
 type StopSite struct {
