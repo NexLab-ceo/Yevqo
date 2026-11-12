@@ -109,3 +109,9 @@ Database engine installation, database creation, credentials, backup execution a
 - Domains can be assigned as metadata to a site. DNS and reverse-proxy / tunnel routing are not reported as active until verified separately.
 - Deployment history records site create/start/stop and Git Pull actions without storing command payloads or credentials.
 - Monitoring currently reports device heartbeat, agent version and site/server counts. CPU, RAM and temperature require a future telemetry event from the Agent.
+
+
+### Device monitoring telemetry
+- The Agent now emits an application heartbeat every 30 seconds; Control Plane updates device `last_seen`.
+- The Monitoring screen requests typed metrics from online agents: CPU utilization sample, 1-minute load average, memory totals/available, storage totals/available, and thermal-zone temperature when readable.
+- Metrics are stored as time-stamped snapshots in the additive `002_device_metrics.sql` migration. Missing Android thermal sensors are represented as unavailable, not as zero.
