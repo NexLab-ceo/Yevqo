@@ -33,6 +33,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleCreateDatabase(cmd)
 	case "create_site_backup":
 		return h.handleCreateSiteBackup(cmd)
+	case "create_database_backup":
+		return h.handleCreateDatabaseBackup(cmd)
 	case "get_metrics":
 		return h.handleGetMetrics(cmd)
 	case "create_site":
@@ -199,4 +201,13 @@ func (h *CommandHandler) handleCreateDatabase(cmd *shared.Command) *shared.Resul
 	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid create_database payload") }
 	if err := createPostgresDatabase(req); err != nil { return errorResult(cmd.Id, err.Error()) }
 	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL database and application role created"}
+}
+
+func (h *CommandHandler) handleCreateDatabaseBackup(cmd *shared.Command) *shared.Result {
+	var req shared.CreateDatabaseBackup
+	if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid create_database_backup payload")}
+	result,err:=createDatabaseBackup(h.cfg.DataRoot,req)
+	if err!=nil{return errorResult(cmd.Id,err.Error())}
+	payload,err:=shared.Marshal(result);if err!=nil{return errorResult(cmd.Id,"could not encode database backup result")}
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL database backup completed",Payload:payload}
 }
