@@ -441,6 +441,7 @@ func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Reque
 	var duplicate int
 	if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM databases WHERE server_id=? AND name=?`,backupServerID.Int64,in.Name).Scan(&duplicate);err!=nil { apiError(w,shared.ErrInternal("could not validate target database name"));return }
 	if duplicate>0 { apiError(w,shared.ErrBadRequest("target database name already exists"));return }
+	conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
 	nonce,ciphertext,err:=encryptCredential(s.credentialKey,[]byte(in.Password));if err!=nil { apiError(w,shared.ErrInternal("could not protect target database credentials"));return }
 	res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO databases(user_id,server_id,name,status) VALUES(?,?,?,'planned')`,u.ID,backupServerID.Int64,in.Name)
 	if err!=nil { apiError(w,shared.ErrBadRequest("target database name already exists or could not be reserved"));return }
@@ -448,7 +449,6 @@ func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Reque
 	jobRes,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO database_restore_jobs(user_id,backup_id,target_database_id,status) VALUES(?,?,?,'queued')`,u.ID,in.BackupID,targetID)
 	if err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`DELETE FROM databases WHERE id=? AND user_id=?`,targetID,u.ID);apiError(w,shared.ErrInternal("could not queue restore job"));return }
 	jobID,_:=jobRes.LastInsertId()
-	conn,online:=s.hub.Get(deviceID);if !online { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Device offline' WHERE id=?`,jobID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE databases SET status='error' WHERE id=?`,targetID);apiError(w,shared.ErrBadRequest("device is offline"));return }
 	req:=&shared.RestoreDatabaseBackup{BackupServerID:backupServerID.Int64,BackupFileName:fileName,Database:shared.CreateDatabase{DatabaseID:targetID,ServerID:backupServerID.Int64,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)}}
 	go s.runDatabaseRestore(jobID,in.BackupID,targetID,u.ID,deviceID,conn,req,in.SiteID,nonce,ciphertext)
 	writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"job_id":jobID,"database":map[string]interface{}{"id":targetID,"name":in.Name,"status":"planned"},"status":"queued","message":"Backup will be restored into a new database; the source database and backup remain untouched."})
@@ -469,6 +469,6 @@ func (s *Server) runDatabaseRestore(jobID,backupID,targetID,userID,deviceID int6
 	if err==nil&&siteID!="" { _,err=tx.Exec(`INSERT INTO site_database_connections(user_id,device_id,site_id,database_id) VALUES(?,?,?,?)`,userID,deviceID,siteID,targetID) }
 	if err==nil { _,err=tx.Exec(`UPDATE database_restore_jobs SET status='completed',error_message=NULL WHERE id=? AND user_id=?`,jobID,userID) }
 	if err!=nil { _=tx.Rollback();_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata save failed' WHERE id=? AND user_id=?`,jobID,userID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE databases SET status='error' WHERE id=? AND user_id=?`,targetID,userID);return }
-	if err:=tx.Commit();err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata commit failed' WHERE id=? AND user_id=?`,jobID,userID);return }
+	if err:=tx.Commit();err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata commit failed' WHERE id=? AND user_id=?`,jobID,userID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE databases SET status='error' WHERE id=? AND user_id=?`,targetID,userID);return }
 	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(deviceID),Action:"database_backup_restored",Details:map[string]interface{}{"job_id":jobID,"backup_id":backupID,"database_id":targetID}})
 }
