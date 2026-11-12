@@ -58,6 +58,15 @@ type DatabaseServerInstallResult struct {
 	Port uint32 `json:"port"`
 }
 
+type CreateDatabase struct {
+	DatabaseID int64 `json:"database_id"`
+	ServerID int64 `json:"server_id"`
+	Database string `json:"database"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Port uint32 `json:"port"`
+}
+
 type CreateSiteBackup struct { SiteId string }
 
 type SiteBackupResult struct {
