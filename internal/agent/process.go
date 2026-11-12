@@ -168,7 +168,7 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 	// Environment values are injected into this site's process only; no .env file is modified.
 	env := append([]string{}, os.Environ()...)
 	for key, value := range extraEnv {
-		if key != "DB_CONNECTION" && key != "DB_HOST" && key != "DB_PORT" && key != "DB_DATABASE" && key != "DB_USERNAME" && key != "DB_PASSWORD" && key != "VELTRIX_DATABASES" {
+		if key != "DB_CONNECTION" && key != "DB_HOST" && key != "DB_PORT" && key != "DB_SSLMODE" && key != "DB_DATABASE" && key != "DB_USERNAME" && key != "DB_PASSWORD" && key != "VELTRIX_DATABASES" {
 			logFile.Close()
 			return 0, fmt.Errorf("unsupported managed environment key: %s", key)
 		}
