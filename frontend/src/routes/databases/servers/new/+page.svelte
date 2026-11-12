@@ -46,7 +46,7 @@
         const response = await listDevices();
         if (response.ok) {
             devices = response.data?.devices || [];
-            const online = devices.find((item) => item.online);
+            const online = devices.find((item) => item.status === 'online');
             const first = online || devices[0];
             if (first) deviceId = String(first.id);
         } else {
@@ -55,7 +55,7 @@
         loadingDevices = false;
     });
 
-    function next() {
+    function setEngine(value) {\n        engine = value;\n        port = value === 'postgresql' ? 5432 : 3306;\n        dataDirectory = value === 'postgresql' ? '$PREFIX/var/lib/postgresql' : '$PREFIX/var/lib/mysql';\n        if (value !== 'postgresql' && authMethod === 'scram') authMethod = 'password';\n    }\n\n    function next() {
         error = '';
         if (!canContinue) {
             error = step === 0
@@ -143,13 +143,13 @@
                     <section class="form-section">
                         <div class="section-heading"><h3>Database engine</h3><p>Выберите СУБД, которую будет обслуживать этот сервер.</p></div>
                         <div class="engine-grid">
-                            <button class="engine-option" class:selected={engine === 'postgresql'} on:click={() => { engine = 'postgresql'; port = 5432; dataDirectory = '$PREFIX/var/lib/postgresql'; }}>
+                            <button class="engine-option" class:selected={engine === 'postgresql'} on:click={() => setEngine('postgresql')}>
                                 <span class="engine-logo postgres">PG</span><span class="engine-text"><strong>PostgreSQL</strong><small>Рекомендуется · 5432</small></span>{#if engine === 'postgresql'}<span class="selected-mark">✓</span>{/if}
                             </button>
-                            <button class="engine-option" class:selected={engine === 'mariadb'} on:click={() => { engine = 'mariadb'; port = 3306; dataDirectory = '$PREFIX/var/lib/mysql'; }}>
+                            <button class="engine-option" class:selected={engine === 'mariadb'} on:click={() => setEngine('mariadb')}>
                                 <span class="engine-logo maria">M</span><span class="engine-text"><strong>MariaDB</strong><small>MySQL-compatible · 3306</small></span>{#if engine === 'mariadb'}<span class="selected-mark">✓</span>{/if}
                             </button>
-                            <button class="engine-option" class:selected={engine === 'mysql'} on:click={() => { engine = 'mysql'; port = 3306; dataDirectory = '$PREFIX/var/lib/mysql'; }}>
+                            <button class="engine-option" class:selected={engine === 'mysql'} on:click={() => setEngine('mysql')}>
                                 <span class="engine-logo mysql">MY</span><span class="engine-text"><strong>MySQL</strong><small>Classic relational DB · 3306</small></span>{#if engine === 'mysql'}<span class="selected-mark">✓</span>{/if}
                             </button>
                         </div>
@@ -166,11 +166,11 @@
                                 <label for="device">Устройство</label>
                                 <select id="device" bind:value={deviceId}>
                                     {#each devices as device}
-                                        <option value={String(device.id)}>{device.hostname || device.name || 'Android device'} · {device.online ? 'Online' : 'Offline'}</option>
+                                        <option value={String(device.id)}>{device.hostname || device.name || 'Android device'} · {device.status === 'online' ? 'Online' : 'Offline'}</option>
                                     {/each}
                                 </select>
                                 {#if selectedDevice}
-                                    <div class="device-meta"><span class:online={selectedDevice.online} class="status-dot"></span>{selectedDevice.online ? 'Подключено' : 'Не в сети'} <span>·</span> ID {selectedDevice.id}</div>
+                                    <div class="device-meta"><span class:online={selectedDevice.status === 'online'} class="status-dot"></span>{selectedDevice.status === 'online' ? 'Подключено' : 'Не в сети'} <span>·</span> ID {selectedDevice.id}</div>
                                 {/if}
                             </div>
                         {/if}
@@ -219,7 +219,7 @@
                         <div class="section-heading"><h3>Connection security</h3><p>Выберите режим защиты соединений и аутентификации.</p></div>
                         <div class="field-grid">
                             <div class="field"><label for="sslMode">SSL / TLS mode</label><select id="sslMode" bind:value={sslMode}><option value="require">Require SSL</option><option value="prefer">Prefer SSL</option><option value="disable">Disable (локальная разработка)</option></select></div>
-                            <div class="field"><label for="authMethod">Authentication</label><select id="authMethod" bind:value={authMethod}><option value="password">Password authentication</option><option value="scram">SCRAM-SHA-256 (PostgreSQL)</option></select></div>
+                            <div class="field"><label for="authMethod">Authentication</label><select id="authMethod" bind:value={authMethod}><option value="password">Password authentication</option>{#if isPostgres}<option value="scram">SCRAM-SHA-256</option>{/if}</select></div>
                         </div>
                         <div class="notice info">Публичный доступ выключен по умолчанию. Секреты и пароли не должны попадать в логи или отображаться повторно.</div>
                     </section>
@@ -282,7 +282,7 @@
     .engine-text{display:grid;gap:3px;min-width:0}.engine-text strong{font-size:11px}.engine-text small{font-size:9px;color:#64748b;white-space:nowrap}
     .selected-mark{margin-left:auto;color:#a5b4fc;font-size:13px}
     .field{display:grid;gap:6px;margin-top:15px;min-width:0}.field label,.device-select label{font-size:11px;color:#cbd5e1;font-weight:600}
-    .field input,.field select,.device-select select{width:100%;height:38px;border:1px solid #334155;border-radius:8px;background:#0a1120;color:#e2e8f0;padding:0 11px;font:12px inherit;outline:none}
+    .field input,.field select,.device-select select{width:100%;height:38px;border:1px solid #334155;border-radius:8px;background:#0a1120;color:#e2e8f0;padding:0 11px;font:inherit;font-size:12px;outline:none}
     .field input:focus,.field select:focus,.device-select select:focus{border-color:#818cf8;box-shadow:0 0 0 3px #6366f122}
     .field small{font-size:10px;color:#64748b;line-height:1.5}
     .field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
