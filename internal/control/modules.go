@@ -463,7 +463,7 @@ func (s *Server) runDatabaseRestore(jobID,backupID,targetID,userID,deviceID int6
 		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE databases SET status='error' WHERE id=? AND user_id=?`,targetID,userID)
 		return
 	}
-	tx,err:=s.db.conn.BeginTx(context.Background(),nil);if err!=nil{return}
+	tx,err:=s.db.conn.BeginTx(context.Background(),nil);if err!=nil{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_restore_jobs SET status='failed',error_message='metadata transaction failed' WHERE id=?",jobID);_,_=s.db.conn.ExecContext(context.Background(),"UPDATE databases SET status='error' WHERE id=?",targetID);return}
 	_,err=tx.Exec(`INSERT INTO database_credentials(database_id,username,ciphertext,nonce,key_version) VALUES(?,?,?,?,1)`,targetID,req.Database.Username,ciphertext,nonce)
 	if err==nil { _,err=tx.Exec(`UPDATE databases SET status='ready' WHERE id=? AND user_id=?`,targetID,userID) }
 	if err==nil&&siteID!="" { _,err=tx.Exec(`INSERT INTO site_database_connections(user_id,device_id,site_id,database_id) VALUES(?,?,?,?)`,userID,deviceID,siteID,targetID) }
