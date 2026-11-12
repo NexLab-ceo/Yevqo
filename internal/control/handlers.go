@@ -328,6 +328,11 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 
 	ctx, cancel := context.WithTimeout(r.Context(), 35*time.Second)
 	defer cancel()
+	if start, ok := payload.(*shared.StartSite); ok {
+		env, envErr := s.siteDatabaseEnvironment(ctx, dev.UserID, dev.ID, start.SiteId)
+		if envErr != nil { apiError(w, shared.ErrInternal("could not prepare protected database environment")); return }
+		start.Env = env
+	}
 
 	result, err := conn.SendCommand(ctx, req.Action, payload)
 	if err != nil {
