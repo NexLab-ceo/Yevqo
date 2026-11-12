@@ -37,7 +37,7 @@ PostgreSQL installation, database creation, application-role provisioning, encry
 
 
 ### Website backups
-- A typed Agent command creates a compressed TAR.GZ archive under $PREFIX/var/lib/veltrix-agent/backups/sites in private Termux storage. Site files continue to use the configured Agent data directory; new installs default that directory to $PREFIX/var/lib/veltrix-agent.
+- Website backups are queued asynchronously by the Control Plane. A typed Agent command creates a compressed TAR.GZ archive under $PREFIX/var/lib/veltrix-agent/backups/sites in private Termux storage. Site files continue to use the configured Agent data directory; new installs default that directory to $PREFIX/var/lib/veltrix-agent.
 - Archive files are created with private permissions, are isolated by site ID, skip symlinks and are not deleted when website metadata is removed.
 - Backup metadata is associated with the owning account and device through migration `004_backup_device_scope.sql`.
 - Restore is intentionally not exposed yet; safe extraction into a new site directory and archive verification are required first.
