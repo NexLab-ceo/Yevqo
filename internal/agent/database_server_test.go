@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,4 +37,14 @@ func TestSetPostgresConfigReplacesAndAddsValues(t *testing.T) {
 	b,err:=os.ReadFile(path);if err!=nil{t.Fatal(err)}
 	s:=string(b)
 	if !strings.Contains(s,"port = 6432")||!strings.Contains(s,"listen_addresses = '127.0.0.1'"){t.Fatalf("config not updated: %s",s)}
+}
+
+func TestEnsurePostgresSSLRejectsSymlink(t *testing.T) {
+	dir:=t.TempDir()
+	outside:=filepath.Join(t.TempDir(),"outside.key")
+	if err:=os.WriteFile(outside,[]byte("do not overwrite"),0o600);err!=nil{t.Fatal(err)}
+	if err:=os.Symlink(outside,filepath.Join(dir,"server.key"));err!=nil{t.Skipf("symlinks unavailable: %v",err)}
+	if _,_,err:=ensurePostgresSSL(context.Background(),dir);err==nil{t.Fatal("expected unsafe SSL key symlink to be rejected")}
+	got,err:=os.ReadFile(outside);if err!=nil{t.Fatal(err)}
+	if string(got)!="do not overwrite"{t.Fatal("outside file was modified")}
 }
