@@ -175,3 +175,25 @@ func (s *Server) handleDatabaseByID(w http.ResponseWriter,r *http.Request) {
 		"role_type":"Application user","permissions":[]string{"CONNECT","USAGE ON SCHEMA public","SELECT","INSERT","UPDATE","DELETE","USAGE/SELECT/UPDATE ON SEQUENCES"},
 	}})
 }
+
+func (s *Server) handleDatabaseConnectionTest(w http.ResponseWriter,r *http.Request) {
+	if r.Method!=http.MethodPost { http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return }
+	u:=UserFromContext(r.Context())
+	raw:=strings.TrimSuffix(strings.TrimPrefix(r.URL.Path,"/api/databases/"),"/test")
+	id,err:=strconv.ParseInt(strings.Trim(raw,"/"),10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid database id"));return}
+	var name,serverStatus,databaseStatus,sslMode string;var deviceID int64;var port int;var username sql.NullString;var ciphertext,nonce []byte
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT d.name,ds.device_id,ds.port,ds.ssl_mode,ds.status,d.status,dc.username,dc.ciphertext,dc.nonce
+		FROM databases d JOIN database_servers ds ON ds.id=d.server_id
+		JOIN database_credentials dc ON dc.database_id=d.id
+		WHERE d.id=? AND d.user_id=?`,id,u.ID).Scan(&name,&deviceID,&port,&sslMode,&serverStatus,&databaseStatus,&username,&ciphertext,&nonce)
+	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database credentials not found"));return}
+	if err!=nil{apiError(w,shared.ErrInternal("could not load database connection"));return}
+	if databaseStatus!="ready"||serverStatus!="ready"||!username.Valid{apiError(w,shared.ErrBadRequest("database and server must be ready"));return}
+	password,err:=decryptCredential(s.credentialKey,nonce,ciphertext);if err!=nil{apiError(w,shared.ErrInternal("could not decrypt database credentials"));return}
+	conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
+	ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
+	result,err:=conn.SendCommand(ctx,"test_database_connection",&shared.TestDatabaseConnection{DatabaseID:id,Database:name,Username:username.String,Password:string(password),Port:uint32(port),SSLMode:sslMode})
+	if err!=nil{apiError(w,shared.ErrInternal("database connection test command failed"));return}
+	if !result.Ok{apiError(w,shared.ErrBadRequest(result.Message));return}
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"message":"PostgreSQL connection test succeeded"})
+}
