@@ -166,26 +166,42 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 
 func (s *Server) handleInstallDatabaseServer(w http.ResponseWriter,r *http.Request,id int64) {
 	u:=UserFromContext(r.Context())
-	var deviceID int64;var engine,version,dataDir,status,bind,sslMode string;var port,maxConnections int;var remote bool
-	err:=s.db.conn.QueryRowContext(r.Context(),"SELECT device_id,engine,version,data_directory,status,port,max_connections,bind_address,remote_access,ssl_mode FROM database_servers WHERE id=? AND user_id=?",id,u.ID).Scan(&deviceID,&engine,&version,&dataDir,&status,&port,&maxConnections,&bind,&remote,&sslMode)
+	var deviceID int64;var engine,dataDir,status,bind,sslMode string;var port,maxConnections int;var remote bool
+	err:=s.db.conn.QueryRowContext(r.Context(),"SELECT device_id,engine,data_directory,status,port,max_connections,bind_address,remote_access,ssl_mode FROM database_servers WHERE id=? AND user_id=?",id,u.ID).Scan(&deviceID,&engine,&dataDir,&status,&port,&maxConnections,&bind,&remote,&sslMode)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}
 	if engine!="postgresql"{apiError(w,shared.ErrBadRequest("Agent installation currently supports PostgreSQL only"));return}
 	if status=="ready"{apiError(w,shared.ErrBadRequest("database server is already ready"));return}
 	if status!="planned"&&status!="error"{apiError(w,shared.ErrBadRequest("database server cannot be installed from its current state"));return}
 	if bind!="127.0.0.1"||remote{apiError(w,shared.ErrBadRequest("remote database access must remain disabled"));return}
 	conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
-	_,_ = s.db.conn.ExecContext(r.Context(),"UPDATE database_servers SET status='installing' WHERE id=? AND user_id=?",id,u.ID)
-	ctx,cancel:=context.WithTimeout(r.Context(),10*time.Minute);defer cancel()
-	result,err:=conn.SendCommand(ctx,"install_database_server",&shared.InstallDatabaseServer{ServerID:id,Engine:engine,Port:uint32(port),DataDirectory:dataDir,MaxConnections:uint32(maxConnections),SSLMode:sslMode})
-	if err!=nil{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,u.ID);apiError(w,shared.ErrInternal("Agent installation command failed"));return}
-	if !result.Ok{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,u.ID);apiError(w,shared.ErrBadRequest(result.Message));return}
-	var installed shared.DatabaseServerInstallResult
-	if err:=shared.Unmarshal(result.Payload,&installed);err!=nil{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,u.ID);apiError(w,shared.ErrInternal("invalid Agent install response"));return}
-	_,err=s.db.conn.ExecContext(r.Context(),"UPDATE database_servers SET status='ready',version=?,data_directory=? WHERE id=? AND user_id=?",installed.Version,installed.DataDirectory,id,u.ID)
-	if err!=nil{apiError(w,shared.ErrInternal("PostgreSQL started but Control Plane metadata update failed"));return}
-	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_installed",Details:map[string]interface{}{"server_id":id,"engine":engine,"version":installed.Version}})
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"server_id":id,"status":"ready","version":installed.Version,"port":installed.Port})
+	res,err:=s.db.conn.ExecContext(r.Context(),"UPDATE database_servers SET status='installing' WHERE id=? AND user_id=? AND status IN ('planned','error')",id,u.ID)
+	if err!=nil{apiError(w,shared.ErrInternal("could not queue PostgreSQL installation"));return}
+	if n,_:=res.RowsAffected();n!=1{apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return}
+	req:=&shared.InstallDatabaseServer{ServerID:id,Engine:engine,Port:uint32(port),DataDirectory:dataDir,MaxConnections:uint32(maxConnections),SSLMode:sslMode}
+	go s.runDatabaseServerInstall(id,u.ID,deviceID,conn,req)
+	writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"server_id":id,"status":"installing","message":"PostgreSQL installation queued on the Android device"})
 }
+
+func (s *Server) runDatabaseServerInstall(id,userID,deviceID int64,conn *AgentConn,req *shared.InstallDatabaseServer) {
+	ctx,cancel:=context.WithTimeout(context.Background(),10*time.Minute);defer cancel()
+	result,err:=conn.SendCommand(ctx,"install_database_server",req)
+	if err!=nil || !result.Ok {
+		_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,userID)
+		_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_install_failed",Details:map[string]interface{}{"server_id":id}})
+		return
+	}
+	var installed shared.DatabaseServerInstallResult
+	if err:=shared.Unmarshal(result.Payload,&installed);err!=nil {
+		_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,userID)
+		return
+	}
+	if _,err:=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='ready',version=?,data_directory=? WHERE id=? AND user_id=?",installed.Version,installed.DataDirectory,id,userID);err!=nil {
+		_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,userID)
+		return
+	}
+	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_installed",Details:map[string]interface{}{"server_id":id,"engine":req.Engine,"version":installed.Version}})
+}
+
 func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context());raw:=strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/databases/servers/"),"/")
 	parts:=strings.Split(raw,"/")
