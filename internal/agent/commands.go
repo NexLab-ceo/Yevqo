@@ -27,6 +27,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 	log.Printf("command: id=%s action=%s", cmd.Id, cmd.Action)
 
 	switch cmd.Action {
+	case "get_metrics":
+		return h.handleGetMetrics(cmd)
 	case "create_site":
 		return h.handleCreateSite(cmd)
 	case "start_site":
@@ -42,6 +44,16 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 	default:
 		return errorResult(cmd.Id, "unknown action: "+cmd.Action)
 	}
+}
+
+func (h *CommandHandler) handleGetMetrics(cmd *shared.Command) *shared.Result {
+	var req shared.GetMetrics
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid get_metrics payload") }
+	metrics, err := collectMetrics(h.cfg.DataRoot)
+	if err != nil { return errorResult(cmd.Id, err.Error()) }
+	payload, err := shared.Marshal(metrics)
+	if err != nil { return errorResult(cmd.Id, "could not encode metrics") }
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: "metrics collected", Payload: payload}
 }
 
 func (h *CommandHandler) handleCreateSite(cmd *shared.Command) *shared.Result {

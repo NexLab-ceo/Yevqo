@@ -273,13 +273,15 @@ func (s *Server) handleMonitoring(w http.ResponseWriter,r *http.Request) {
 	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE d.user_id=?",u.ID).Scan(&totalSites)
 	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE d.user_id=? AND st.status='running'",u.ID).Scan(&runningSites)
 	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM database_servers WHERE user_id=?",u.ID).Scan(&totalDB)
-	rows,err:=s.db.conn.QueryContext(r.Context(),"SELECT d.id,COALESCE(d.hostname,'Android host'),d.status,d.agent_version,d.last_seen,(SELECT COUNT(*) FROM sites st WHERE st.device_id=d.id),(SELECT COUNT(*) FROM sites st WHERE st.device_id=d.id AND st.status='running') FROM devices d WHERE d.user_id=? ORDER BY d.last_seen DESC",u.ID)
+	rows,err:=s.db.conn.QueryContext(r.Context(),"SELECT d.id,COALESCE(d.hostname,'Android host'),d.status,d.agent_version,d.last_seen,(SELECT COUNT(*) FROM sites st WHERE st.device_id=d.id),(SELECT COUNT(*) FROM sites st WHERE st.device_id=d.id AND st.status='running'),m.cpu_percent,m.load_1m,m.memory_total_bytes,m.memory_available_bytes,m.storage_total_bytes,m.storage_available_bytes,m.temperature_celsius,m.captured_at FROM devices d LEFT JOIN device_metrics m ON m.id=(SELECT MAX(mx.id) FROM device_metrics mx WHERE mx.device_id=d.id) WHERE d.user_id=? ORDER BY d.last_seen DESC",u.ID)
 	if err!=nil{apiError(w,shared.ErrInternal("could not load monitoring data"));return};defer rows.Close()
 	devices:=make([]map[string]interface{},0)
-	for rows.Next(){var id int64;var hostname,status,version string;var lastSeen sql.NullTime;var sites,running int
-		if err:=rows.Scan(&id,&hostname,&status,&version,&lastSeen,&sites,&running);err!=nil{apiError(w,shared.ErrInternal("could not read monitoring data"));return}
-		var seen interface{};if lastSeen.Valid{seen=lastSeen.Time}
-		devices=append(devices,map[string]interface{}{"id":id,"hostname":hostname,"status":status,"agent_version":version,"last_seen":seen,"site_count":sites,"running_sites":running})
+	for rows.Next(){var id int64;var hostname,status,version string;var lastSeen,metricAt sql.NullTime;var sites,running int
+		var cpu,load,temp sql.NullFloat64;var memTotal,memAvailable,storageTotal,storageAvailable sql.NullInt64
+		if err:=rows.Scan(&id,&hostname,&status,&version,&lastSeen,&sites,&running,&cpu,&load,&memTotal,&memAvailable,&storageTotal,&storageAvailable,&temp,&metricAt);err!=nil{apiError(w,shared.ErrInternal("could not read monitoring data"));return}
+		var seen,metricsAt interface{};if lastSeen.Valid{seen=lastSeen.Time};if metricAt.Valid{metricsAt=metricAt.Time}
+		metrics:=map[string]interface{}{};if cpu.Valid{metrics["cpu_percent"]=cpu.Float64};if load.Valid{metrics["load_1m"]=load.Float64};if memTotal.Valid{metrics["memory_total_bytes"]=memTotal.Int64};if memAvailable.Valid{metrics["memory_available_bytes"]=memAvailable.Int64};if storageTotal.Valid{metrics["storage_total_bytes"]=storageTotal.Int64};if storageAvailable.Valid{metrics["storage_available_bytes"]=storageAvailable.Int64};if temp.Valid{metrics["temperature_celsius"]=temp.Float64};if metricsAt!=nil{metrics["captured_at"]=metricsAt}
+		devices=append(devices,map[string]interface{}{"id":id,"hostname":hostname,"status":status,"agent_version":version,"last_seen":seen,"site_count":sites,"running_sites":running,"metrics":metrics})
 	}
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"summary":map[string]int{"devices":totalDevices,"online_devices":onlineDevices,"sites":totalSites,"running_sites":runningSites,"database_servers":totalDB},"devices":devices})
 }

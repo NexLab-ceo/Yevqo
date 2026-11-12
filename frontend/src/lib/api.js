@@ -158,3 +158,5 @@ export async function listDomains() { return request('GET', '/api/domains'); }
 export async function updateSiteDomain(deviceId, siteId, domain) { return request('PATCH', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId), { domain }); }
 export async function listDeployments() { return request('GET', '/api/deployments'); }
 export async function getMonitoring() { return request('GET', '/api/monitoring'); }
+
+export async function refreshDeviceMetrics(deviceId) { return request('POST', `/api/devices/${deviceId}/metrics`); }

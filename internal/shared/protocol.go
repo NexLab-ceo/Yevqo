@@ -2,7 +2,7 @@
 // Этот файл — вручную написанная замена сгенерированному protoc-коду.
 package shared
 
-import "encoding/json"
+import ("encoding/json"; "time")
 
 // ============================================================
 // ENVELOPE — обёртка для всех сообщений
@@ -42,6 +42,19 @@ type Command struct {
 	Id      string
 	Action  string
 	Payload []byte
+}
+
+type GetMetrics struct{}
+
+type MetricsResult struct {
+	CPUPercent float64 `json:"cpu_percent"`
+	Load1m float64 `json:"load_1m"`
+	MemoryTotalBytes uint64 `json:"memory_total_bytes"`
+	MemoryAvailableBytes uint64 `json:"memory_available_bytes"`
+	StorageTotalBytes uint64 `json:"storage_total_bytes"`
+	StorageAvailableBytes uint64 `json:"storage_available_bytes"`
+	TemperatureCelsius *float64 `json:"temperature_celsius,omitempty"`
+	CapturedAt time.Time `json:"captured_at"`
 }
 
 type CreateSite struct {

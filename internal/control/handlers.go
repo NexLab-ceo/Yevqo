@@ -259,9 +259,27 @@ func (s *Server) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 		s.handleDeleteDevice(w, r, dev)
 	case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "cmd":
 		s.handleSendCommand(w, r, dev)
+	case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "metrics":
+		s.handleDeviceMetrics(w, r, dev)
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (s *Server) handleDeviceMetrics(w http.ResponseWriter, r *http.Request, dev *shared.Device) {
+	conn, online := s.hub.Get(dev.ID)
+	if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	result, err := conn.SendCommand(ctx, "get_metrics", &shared.GetMetrics{})
+	if err != nil { apiError(w, shared.ErrInternal("metrics command failed")); return }
+	if !result.Ok { apiError(w, shared.ErrBadRequest(result.Message)); return }
+	var m shared.MetricsResult
+	if err := shared.Unmarshal(result.Payload, &m); err != nil { apiError(w, shared.ErrInternal("invalid metrics response")); return }
+	_, err = s.db.conn.ExecContext(r.Context(), "INSERT INTO device_metrics(device_id,cpu_percent,load_1m,memory_total_bytes,memory_available_bytes,storage_total_bytes,storage_available_bytes,temperature_celsius,captured_at) VALUES(?,?,?,?,?,?,?,?,?)",
+		dev.ID,m.CPUPercent,m.Load1m,m.MemoryTotalBytes,m.MemoryAvailableBytes,m.StorageTotalBytes,m.StorageAvailableBytes,m.TemperatureCelsius,m.CapturedAt)
+	if err != nil { apiError(w, shared.ErrInternal("could not store device metrics")); return }
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"metrics":m})
 }
 
 func (s *Server) handleGetDevice(w http.ResponseWriter, r *http.Request, dev *shared.Device) {
