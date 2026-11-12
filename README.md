@@ -83,3 +83,19 @@ veltrix-dock/
 └── systemd/                 # (опционально) для termux-services
     ├── veltrix-control.sh
     └── veltrix-agent.sh
+
+
+## VELTRIX Aurora migration track
+
+The `feature/database-server-wizard` branch contains the in-progress VELTRIX Dock UI and Control Plane migration. It does not change `main` or production data.
+
+### Workspace and operations foundation
+- Projects can group devices and websites. Deleting a project deletes only its grouping records; devices, sites, files and databases remain untouched.
+- Database Server configurations are stored as `planned` metadata. Saving a configuration does not install packages or modify an Android device.
+- Database Server records are isolated per account and device. A server cannot be removed while database metadata references it.
+- Account settings persist Simple / Advanced mode, locale and theme.
+- Activity logs, notifications, account summary reports and backup metadata have read APIs.
+- New additive schema is in `migrations/001_modules.sql`; the Termux installer copies SQL migrations into the control-plane data directory and applies them at startup.
+
+### Important implementation boundary
+Database engine installation, database creation, credentials, backup execution and restore are not yet wired to the Android Agent. The current UI must not imply those device-side operations have completed. These capabilities require typed Agent protocol commands, device-side validation, idempotent execution and rollback-safe behavior.
