@@ -115,6 +115,16 @@ type databaseServerInput struct {
 	Port int `json:"port"`
 	DataDirectory string `json:"data_directory"`
 	NetworkAccess string `json:"network_access"`
+	StorageLimitGB string `json:"storage_limit_gb"`
+	RAMBudgetMB int `json:"ram_budget_mb"`
+	MaxConnections int `json:"max_connections"`
+	MonitorStorage bool `json:"monitor_storage"`
+	AutoStart bool `json:"auto_start"`
+	ProcessPolicy string `json:"process_policy"`
+	BindAddress string `json:"bind_address"`
+	SSLMode string `json:"ssl_mode"`
+	AuthMethod string `json:"auth_method"`
+	RemoteAccess bool `json:"remote_access"`
 }
 
 func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
@@ -138,10 +148,18 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 		var owned int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM devices WHERE id=? AND user_id=?`,in.DeviceID,u.ID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("device not found"));return}
 		if in.DataDirectory==""{if in.Engine=="postgresql"{in.DataDirectory="$PREFIX/var/lib/postgresql"}else{in.DataDirectory="$PREFIX/var/lib/mysql"}}
 		if !strings.HasPrefix(in.DataDirectory,"$PREFIX/")||strings.Contains(in.DataDirectory,".."){apiError(w,shared.ErrBadRequest("data directory must be inside Termux PREFIX"));return}
-		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO database_servers(user_id,device_id,name,engine,version,port,data_directory,network_access,status) VALUES(?,?,?,?,?,?,?,?, 'planned')`,u.ID,in.DeviceID,in.Name,in.Engine,in.Version,in.Port,in.DataDirectory,in.NetworkAccess)
+		if in.StorageLimitGB==""{in.StorageLimitGB="unlimited"}
+		if in.StorageLimitGB!="unlimited"{n,e:=strconv.Atoi(in.StorageLimitGB);if e!=nil||n<1||n>100000{apiError(w,shared.ErrBadRequest("storage limit must be unlimited or 1–100000 GB"));return}}
+		if in.RAMBudgetMB<0||in.RAMBudgetMB>262144{apiError(w,shared.ErrBadRequest("RAM budget must be between 0 and 262144 MB"));return}
+		if in.MaxConnections==0{in.MaxConnections=100};if in.MaxConnections<1||in.MaxConnections>1000{apiError(w,shared.ErrBadRequest("max connections must be 1–1000"));return}
+		if in.ProcessPolicy==""{in.ProcessPolicy="balanced"};if in.ProcessPolicy!="balanced"&&in.ProcessPolicy!="persistent"&&in.ProcessPolicy!="manual"{apiError(w,shared.ErrBadRequest("invalid process policy"));return}
+		if in.BindAddress==""{in.BindAddress="127.0.0.1"};if in.BindAddress!="127.0.0.1"||in.RemoteAccess{apiError(w,shared.ErrBadRequest("database servers must remain bound to localhost; remote access is disabled"));return}
+		if in.SSLMode==""{in.SSLMode="require"};if in.SSLMode!="require"&&in.SSLMode!="prefer"&&in.SSLMode!="disable"{apiError(w,shared.ErrBadRequest("invalid SSL mode"));return}
+		if in.AuthMethod==""{in.AuthMethod="password"};if in.AuthMethod!="password"&&in.AuthMethod!="scram-sha-256"{apiError(w,shared.ErrBadRequest("invalid authentication method"));return}
+		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO database_servers(user_id,device_id,name,engine,version,port,data_directory,network_access,status,storage_limit_gb,ram_budget_mb,max_connections,monitor_storage,auto_start,process_policy,bind_address,ssl_mode,auth_method,remote_access) VALUES(?,?,?,?,?,?,?,?,'planned',?,?,?,?,?,?,?,?,?,?)`,u.ID,in.DeviceID,in.Name,in.Engine,in.Version,in.Port,in.DataDirectory,in.NetworkAccess,in.StorageLimitGB,in.RAMBudgetMB,in.MaxConnections,in.MonitorStorage,in.AutoStart,in.ProcessPolicy,in.BindAddress,in.SSLMode,in.AuthMethod,in.RemoteAccess)
 		if err!=nil{apiError(w,shared.ErrBadRequest("server name or port already in use on this device"));return}
 		id,_:=res.LastInsertId()
-		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"server":map[string]interface{}{"id":id,"device_id":in.DeviceID,"name":in.Name,"engine":in.Engine,"version":in.Version,"port":in.Port,"status":"planned"},"message":"Configuration saved. Agent installation is not available until the database lifecycle protocol is deployed."})
+		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"server":map[string]interface{}{"id":id,"device_id":in.DeviceID,"name":in.Name,"engine":in.Engine,"version":in.Version,"port":in.Port,"status":"planned","ssl_mode":in.SSLMode,"max_connections":in.MaxConnections},"message":"Configuration saved. Install the PostgreSQL server when the selected device is online."})
 	default:http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
 }
