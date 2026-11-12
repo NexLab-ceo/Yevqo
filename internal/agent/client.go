@@ -13,18 +13,16 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"google.golang.org/protobuf/proto"
-	pb "veltrix/internal/shared"
+	"veltrix/internal/shared"
 )
 
-// Константы.
 const (
-	Version          = "1.0.0"
-	ReconnectDelay   = 5 * time.Second  // пауза между переподключениями
-	WriteWait        = 10 * time.Second // таймаут записи
-	PongWait         = 60 * time.Second // ждём pong от сервера
-	PingPeriod       = 30 * time.Second // шлём ping каждые 30 сек
-	MaxMessageSize   = 1 << 20          // 1 MB
+	Version        = "1.0.0"
+	ReconnectDelay = 5 * time.Second
+	WriteWait      = 10 * time.Second
+	PongWait       = 60 * time.Second
+	PingPeriod     = 30 * time.Second
+	MaxMessageSize = 1 << 20
 )
 
 // Client — WebSocket-клиент агента.
@@ -32,10 +30,10 @@ type Client struct {
 	cfg     *Config
 	handler *CommandHandler
 
-	ws      *websocket.Conn
-	send    chan []byte
-	mu      sync.Mutex
-	closed  bool
+	ws     *websocket.Conn
+	send   chan []byte
+	mu     sync.Mutex
+	closed bool
 }
 
 // NewClient создаёт клиент.
@@ -47,8 +45,7 @@ func NewClient(cfg *Config) *Client {
 	}
 }
 
-// Run — главный цикл. Подключается к серверу, переподключается при обрыве.
-// Блокируется, пока не будет вызван Stop().
+// Run — главный цикл. Подключается, переподключается при обрыве.
 func (c *Client) Run(ctx context.Context) error {
 	for {
 		select {
@@ -63,10 +60,8 @@ func (c *Client) Run(ctx context.Context) error {
 			continue
 		}
 
-		// Подключились, работаем.
 		c.runSession(ctx)
 
-		// Сессия закончилась (обрыв или Stop).
 		c.mu.Lock()
 		closed := c.closed
 		c.mu.Unlock()
@@ -93,7 +88,6 @@ func (c *Client) Stop() {
 // CONNECT
 // ============================================================
 
-// connect подключается к серверу и проходит аутентификацию.
 func (c *Client) connect(ctx context.Context) error {
 	if c.cfg.ServerURL == "" {
 		return errors.New("server_url is empty (edit agent.json)")
@@ -102,7 +96,6 @@ func (c *Client) connect(ctx context.Context) error {
 		return errors.New("token is empty (edit agent.json)")
 	}
 
-	// Настраиваем dialer (для ws:// без TLS — обычный, для wss:// — с TLS).
 	dialer := websocket.Dialer{
 		HandshakeTimeout: 10 * time.Second,
 		TLSClientConfig:  &tls.Config{InsecureSkipVerify: false},
@@ -118,33 +111,29 @@ func (c *Client) connect(ctx context.Context) error {
 	c.ws = ws
 	c.mu.Unlock()
 
-	// Настраиваем лимиты.
 	ws.SetReadLimit(MaxMessageSize)
 	_ = ws.SetReadDeadline(time.Now().Add(PongWait))
 	ws.SetPongHandler(func(string) error {
 		return ws.SetReadDeadline(time.Now().Add(PongWait))
 	})
 
-	// Получаем IP из Tailscale (если не удалось — пустая строка).
 	tailscaleIP, err := GetTailscaleIP()
 	if err != nil {
 		log.Printf("warning: tailscale: %v", err)
 	}
 
 	// Отправляем AuthRequest.
-	authReq := &pb.Envelope{
-		Payload: &pb.Envelope_AuthReq{
-			AuthReq: &pb.AuthRequest{
-				Token:        c.cfg.Token,
-				DeviceId:     c.cfg.DeviceID,
-				Hostname:     c.cfg.resolveHostname(),
-				TailscaleIp:  tailscaleIP,
-				AgentVersion: Version,
-			},
+	authEnv := shared.Envelope{
+		AuthReq: &shared.AuthRequest{
+			Token:        c.cfg.Token,
+			DeviceId:     c.cfg.DeviceID,
+			Hostname:     c.cfg.resolveHostname(),
+			TailscaleIp:  tailscaleIP,
+			AgentVersion: Version,
 		},
 	}
 
-	msg, err := proto.Marshal(authReq)
+	msg, err := shared.Marshal(authEnv)
 	if err != nil {
 		return fmt.Errorf("marshal auth: %w", err)
 	}
@@ -161,21 +150,20 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("read auth response: %w", err)
 	}
 
-	var respEnv pb.Envelope
-	if err := proto.Unmarshal(respBytes, &respEnv); err != nil {
+	var respEnv shared.Envelope
+	if err := shared.Unmarshal(respBytes, &respEnv); err != nil {
 		return fmt.Errorf("unmarshal auth response: %w", err)
 	}
 
-	authResp, ok := respEnv.Payload.(*pb.Envelope_AuthResp)
-	if !ok {
+	if respEnv.AuthResp == nil {
 		return errors.New("expected auth response")
 	}
 
-	if !authResp.AuthResp.Ok {
-		return fmt.Errorf("auth rejected: %s", authResp.AuthResp.Message)
+	if !respEnv.AuthResp.Ok {
+		return fmt.Errorf("auth rejected: %s", respEnv.AuthResp.Message)
 	}
 
-	log.Printf("authenticated as user %d", authResp.AuthResp.UserId)
+	log.Printf("authenticated as user %d", respEnv.AuthResp.UserId)
 	return nil
 }
 
@@ -183,7 +171,6 @@ func (c *Client) connect(ctx context.Context) error {
 // SESSION
 // ============================================================
 
-// runSession запускает reader и writer, ждёт закрытия.
 func (c *Client) runSession(ctx context.Context) {
 	done := make(chan struct{})
 	var once sync.Once
@@ -191,22 +178,18 @@ func (c *Client) runSession(ctx context.Context) {
 		once.Do(func() { close(done) })
 	}
 
-	// Writer.
 	go func() {
 		defer stop()
 		c.writePump()
 	}()
 
-	// Reader.
 	go func() {
 		defer stop()
 		c.readPump(ctx)
 	}()
 
-	// Ждём завершения любой из горутин.
 	<-done
 
-	// Закрываем соединение.
 	c.mu.Lock()
 	if c.ws != nil {
 		_ = c.ws.Close()
@@ -241,21 +224,19 @@ func (c *Client) readPump(ctx context.Context) {
 			return
 		}
 
-		// Парсим Envelope.
-		var env pb.Envelope
-		if err := proto.Unmarshal(msg, &env); err != nil {
+		var env shared.Envelope
+		if err := shared.Unmarshal(msg, &env); err != nil {
 			log.Printf("unmarshal: %v", err)
 			continue
 		}
 
-		// Обрабатываем Command.
-		if cmd, ok := env.Payload.(*pb.Envelope_Command); ok {
-			go c.handleCommand(ctx, cmd.Command)
+		if env.Command != nil {
+			go c.handleCommand(ctx, env.Command)
 		}
 	}
 }
 
-// writePump пишет сообщения серверу (единственная горутина-писатель).
+// writePump пишет сообщения серверу.
 func (c *Client) writePump() {
 	ticker := time.NewTicker(PingPeriod)
 	defer ticker.Stop()
@@ -268,7 +249,6 @@ func (c *Client) writePump() {
 			return
 		}
 
-		// Отправляем ping (WebSocket-уровень).
 		_ = ws.SetWriteDeadline(time.Now().Add(WriteWait))
 		if err := ws.WriteMessage(websocket.PingMessage, nil); err != nil {
 			return
@@ -280,19 +260,14 @@ func (c *Client) writePump() {
 // ОБРАБОТКА КОМАНД
 // ============================================================
 
-// handleCommand обрабатывает одну команду и отправляет Result.
-func (c *Client) handleCommand(ctx context.Context, cmd *pb.Command) {
-	// Обрабатываем (это может занять время).
+func (c *Client) handleCommand(ctx context.Context, cmd *shared.Command) {
 	result := c.handler.HandleCommand(cmd)
 
-	// Отправляем Result серверу.
-	respEnv := &pb.Envelope{
-		Payload: &pb.Envelope_Result{
-			Result: result,
-		},
+	respEnv := shared.Envelope{
+		Result: result,
 	}
 
-	msg, err := proto.Marshal(respEnv)
+	msg, err := shared.Marshal(respEnv)
 	if err != nil {
 		log.Printf("marshal result: %v", err)
 		return
@@ -318,22 +293,20 @@ func (c *Client) handleCommand(ctx context.Context, cmd *pb.Command) {
 // ============================================================
 
 // SendEvent отправляет событие серверу (например, лог или ping).
-func (c *Client) SendEvent(event string, payload proto.Message) error {
-	payloadBytes, err := proto.Marshal(payload)
+func (c *Client) SendEvent(event string, payload interface{}) error {
+	payloadBytes, err := shared.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal event payload: %w", err)
 	}
 
-	env := &pb.Envelope{
-		Payload: &pb.Envelope_Event{
-			Event: &pb.Event{
-				Event:   event,
-				Payload: payloadBytes,
-			},
+	env := shared.Envelope{
+		Event: &shared.Event{
+			Event:   event,
+			Payload: payloadBytes,
 		},
 	}
 
-	msg, err := proto.Marshal(env)
+	msg, err := shared.Marshal(env)
 	if err != nil {
 		return fmt.Errorf("marshal envelope: %w", err)
 	}
