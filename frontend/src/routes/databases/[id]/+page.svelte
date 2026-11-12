@@ -24,6 +24,7 @@
     let restoreSiteID = '';
     let restoreBusy = false;
     let restoreNotice = '';
+    let restoreTargetId = '';
 
     $: deviceSites = database ? sites.filter((entry) => Number(entry.device_id) === Number(database.device_id)) : [];
     $: availableSites = deviceSites.filter((entry) => !connections.some((link) => link.site_id === entry.site?.site_id));
@@ -56,7 +57,7 @@
         restoreBusy = true; actionError = ''; restoreNotice = '';
         const result = await restoreDatabaseBackup(Number(restoreBackupID), { name: restoreName, username: restoreUsername, password: restorePassword, site_id: restoreSiteID });
         restoreBusy = false;
-        if (result.ok) { restorePassword = ''; restoreNotice = 'Restore queued. A new independent database will appear in the Databases inventory when the Agent finishes. The source database and backup remain unchanged.'; }
+        if (result.ok) { restorePassword = ''; restoreTargetId = String(result.data?.database?.id || ''); restoreNotice = 'Restore queued. A new independent database is being prepared; the source database and backup remain unchanged.'; }
         else actionError = result.error || 'Could not queue database restore';
     }
 
@@ -100,7 +101,7 @@
                 <div class="engine">PG</div>
                 <div><div class="eyebrow">POSTGRESQL DATABASE</div><h1>{database.name}</h1><p>{database.server_name} · Android Host #{database.device_id}</p></div>
             </div>
-            <div class="status"><StatusDot status={database.status === 'ready' ? 'online' : 'offline'} />{database.status}</div>
+            <div class="status"><StatusDot status={database.status === 'ready' ? 'online' : 'offline'} />{database.status === 'planned' && database.restore_status ? 'restore: ' + database.restore_status : database.status}</div>
         </div>
         <nav class="tabs" aria-label="Database sections">
             {#each tabs as tab}
@@ -112,7 +113,7 @@
             <div class="stats">
                 <article><small>ENGINE</small><strong>PostgreSQL</strong><span>Server #{database.server_id}</span></article>
                 <article><small>CONNECTIONS</small><strong>{database.linked_sites}</strong><span>Linked websites</span></article>
-                <article><small>STATUS</small><strong>{database.status}</strong><span>Database health</span></article>
+                <article><small>STATUS</small><strong>{database.status === 'planned' && database.restore_status ? database.restore_status : database.status}</strong><span>Database health</span></article>
                 <article><small>CREATED</small><strong>{new Date(database.created_at).toLocaleDateString()}</strong><span>Creation date</span></article>
             </div>
             <section class="panel"><h2>Database information</h2><div class="rows">
@@ -158,7 +159,7 @@
                         <label>New application password<input type="password" bind:value={restorePassword} minlength="12" maxlength="256" autocomplete="new-password" placeholder="At least 12 characters" /></label>
                         <label>Connect website (optional)<select bind:value={restoreSiteID}><option value="">Do not connect yet</option>{#each deviceSites as site}<option value={site.site.site_id}>{site.site.site_id}</option>{/each}</select></label>
                         <button class="attach" disabled={!restoreBackupID || !/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/.test(restoreName) || !/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/.test(restoreUsername) || restorePassword.length < 12 || restoreBusy} on:click={restoreBackup}>{restoreBusy ? 'Queuing restore…' : 'Restore into new database'}</button>
-                        {#if restoreNotice}<div class="notice">{restoreNotice}</div>{/if}
+                        {#if restoreNotice}<div class="notice">{restoreNotice} {#if restoreTargetId}<a href={'/databases/'+restoreTargetId}>Open restored database</a>{/if}</div>{/if}
                     </div>
                 {/if}</section>
         {:else if active === 'Import / Export'}
