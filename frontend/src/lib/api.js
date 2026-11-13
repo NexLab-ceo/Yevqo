@@ -76,6 +76,10 @@ export async function me() {
     return request('GET', '/api/me');
 }
 
+export async function changePassword(currentPassword, newPassword) {
+    return request('POST', '/api/password', { current_password: currentPassword, new_password: newPassword });
+}
+
 // === Devices ===
 
 export async function listDevices() {
