@@ -164,6 +164,7 @@ export async function refreshDeviceMetrics(deviceId) { return request('POST', `/
 export async function createSiteBackup(deviceId, siteId) { return request('POST', '/api/backups', { device_id: deviceId, site_id: siteId }); }
 
 export async function installDatabaseServer(id) { return request('POST', `/api/databases/servers/${id}/install`); }
+export async function listDatabaseServerRoles(id) { return request('GET', `/api/databases/servers/${id}/roles`); }
 
 // === Database provisioning and site connections ===
 export async function createDatabase(input) { return request('POST', '/api/databases', input); }
