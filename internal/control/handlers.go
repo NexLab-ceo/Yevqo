@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net"
 	"regexp"
 	"strconv"
 	"strings"
@@ -45,12 +46,17 @@ func apiError(w http.ResponseWriter, err error) {
 	})
 }
 
-// clientIP вытаскивает IP из запроса (учитывает X-Forwarded-For).
+// clientIP uses the direct TCP peer. Forwarded headers are deliberately ignored
+// until an explicit trusted-proxy configuration exists.
 func clientIP(r *http.Request) string {
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		return strings.TrimSpace(strings.Split(fwd, ",")[0])
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err == nil && net.ParseIP(host) != nil {
+		return host
 	}
-	return strings.Split(r.RemoteAddr, ":")[0]
+	if ip := net.ParseIP(strings.Trim(r.RemoteAddr, "[]")); ip != nil {
+		return ip.String()
+	}
+	return "unknown"
 }
 
 // ============================================================
@@ -131,14 +137,38 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ip := clientIP(r)
+	if ip == "unknown" {
+		apiError(w, shared.ErrInternal("could not determine client IP"))
+		return
+	}
+	if blockedUntil, err := s.db.LoginBlockedUntil(r.Context(), ip); err != nil {
+		apiError(w, shared.ErrInternal("login protection unavailable"))
+		return
+	} else if blockedUntil != nil {
+		retry := int(time.Until(*blockedUntil).Seconds())
+		if retry < 1 { retry = 1 }
+		w.Header().Set("Retry-After", strconv.Itoa(retry))
+		writeJSON(w, http.StatusTooManyRequests, map[string]interface{}{"error":"too many failed login attempts; try again later"})
+		return
+	}
+
 	sess, user, err := s.Login(r.Context(), LoginInput{
 		Username:  req.Username,
 		Password:  req.Password,
-		IP:        clientIP(r),
+		IP:        ip,
 		UserAgent: r.UserAgent(),
 	})
 	if err != nil {
-		apiError(w, shared.ErrUnauthorized(err.Error()))
+		if recordErr := s.db.RecordFailedLogin(r.Context(), ip); recordErr != nil {
+			apiError(w, shared.ErrInternal("login protection unavailable"))
+			return
+		}
+		apiError(w, shared.ErrUnauthorized("invalid credentials"))
+		return
+	}
+	if err := s.db.ClearLoginFailures(r.Context(), ip); err != nil {
+		apiError(w, shared.ErrInternal("login protection unavailable"))
 		return
 	}
 
