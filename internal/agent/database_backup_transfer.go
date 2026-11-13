@@ -16,7 +16,9 @@ func readDatabaseBackupChunk(req shared.ReadDatabaseBackupChunk)(shared.Database
  if req.ServerID<1||!safeDatabaseBackupFile.MatchString(req.FileName)||strings.Contains(req.FileName,"..")||req.Offset<0||req.Length<1||req.Length>256*1024{return shared.DatabaseBackupChunk{},fmt.Errorf("invalid backup chunk request")}
  prefix:=os.Getenv("PREFIX");if prefix==""{return shared.DatabaseBackupChunk{},fmt.Errorf("Termux PREFIX is not set")}
  root:=filepath.Join(prefix,"var","lib","veltrix-agent","backups","databases",fmt.Sprint(req.ServerID))
+ prefixReal,err:=filepath.EvalSymlinks(prefix);if err!=nil{return shared.DatabaseBackupChunk{},err}
  rootReal,err:=filepath.EvalSymlinks(root);if err!=nil{return shared.DatabaseBackupChunk{},fmt.Errorf("backup directory unavailable")}
+ rootRel,err:=filepath.Rel(prefixReal,rootReal);if err!=nil||rootRel==".."||strings.HasPrefix(rootRel,".."+string(filepath.Separator)){return shared.DatabaseBackupChunk{},fmt.Errorf("backup directory escapes Termux private storage")}
  full:=filepath.Join(root,req.FileName);info,err:=os.Lstat(full);if err!=nil{return shared.DatabaseBackupChunk{},fmt.Errorf("backup file not found")}
  if !info.Mode().IsRegular()||info.Mode()&os.ModeSymlink!=0{return shared.DatabaseBackupChunk{},fmt.Errorf("backup file is not a regular file")}
  real,err:=filepath.EvalSymlinks(full);if err!=nil{return shared.DatabaseBackupChunk{},err}
