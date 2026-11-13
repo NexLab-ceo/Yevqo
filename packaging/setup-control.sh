@@ -2,6 +2,10 @@
 set -euo pipefail
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
+if [ ! -d /sdcard ]; then
+  echo "Shared storage is not available. Run termux-setup-storage and grant permission first." >&2
+  exit 1
+fi
 CONFIG_FILE="$DATA_ROOT/config/config.json"
 SERVICE_DIR="$PREFIX/var/service/veltrix-control"
 log(){ printf '==> %s\n' "$*"; }
