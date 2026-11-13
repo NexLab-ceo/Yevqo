@@ -30,7 +30,7 @@
 <div class="page-header">
     <div>
         <h1 class="page-title">Сайты</h1>
-        <p class="page-desc">Все сайты на всех устройствах</p>
+        <p class="page-desc">Все сайты на всех устройствах · обновите страницу, чтобы получить актуальный список</p>
     </div>
 </div>
 
