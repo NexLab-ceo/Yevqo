@@ -21,10 +21,10 @@ func managePostgresRole(req shared.ManageDatabaseRole, action string) error {
 	if req.Name == "postgres" {
 		return fmt.Errorf("the postgres administrative role cannot be changed here")
 	}
-	if action != "create" && action != "drop" {
+	if action != "create" && action != "drop" && action != "password" {
 		return fmt.Errorf("unsupported PostgreSQL role action")
 	}
-	if action == "create" && (len(req.Password) < 12 || len(req.Password) > 256) {
+	if (action == "create" || action == "password") && (len(req.Password) < 12 || len(req.Password) > 256) {
 		return fmt.Errorf("role password must be 12–256 characters")
 	}
 	if action == "drop" && req.Password != "" {
@@ -40,6 +40,7 @@ func managePostgresRole(req shared.ManageDatabaseRole, action string) error {
 	}
 	identifier := `"` + strings.ReplaceAll(req.Name, `"`, `""`) + `"`
 	query := "CREATE ROLE " + identifier + " LOGIN PASSWORD " + postgresSQLLiteral(req.Password)
+	if action == "password" { query = "ALTER ROLE " + identifier + " PASSWORD " + postgresSQLLiteral(req.Password) }
 	if action == "drop" {
 		query = "DROP ROLE " + identifier
 	}
