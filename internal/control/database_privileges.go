@@ -37,6 +37,6 @@ func (s *Server) handleDatabaseServerPrivileges(w http.ResponseWriter,r *http.Re
  ctx,cancel:=context.WithTimeout(r.Context(),25*time.Second);defer cancel()
  req:=&shared.ManageDatabasePrivilege{ServerID:serverID,Port:uint32(port),Database:in.Database,Role:in.Role,Privilege:in.Privilege,Scope:in.Scope,Schema:in.Schema,Action:in.Action}
  result,err:=conn.SendCommand(ctx,"manage_database_privilege",req);if err!=nil{apiError(w,shared.ErrInternal("Agent database privilege command failed"));return};if !result.Ok{apiError(w,shared.ErrBadRequest(result.Message));return}
- _=s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_privilege_"+in.Action,Details:map[string]interface{}{"server_id":serverID,"database":in.Database,"role":in.Role,"privilege":in.Privilege}})
+ _=s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_privilege_"+in.Action,Details:map[string]interface{}{"server_id":serverID,"database":in.Database,"role":in.Role,"privilege":in.Privilege,"scope":in.Scope,"schema":in.Schema}})
  writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"message":"Database privilege "+in.Action+" completed"})
 }
