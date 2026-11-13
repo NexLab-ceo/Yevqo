@@ -156,12 +156,14 @@ jobs:
           test "$(dpkg-deb --field "$AGENT" Package)" = "veltrix-agent"
           dpkg-deb --field "$ALL" Architecture | grep -x aarch64
           dpkg-deb --field "$AGENT" Architecture | grep -x aarch64
-          dpkg-deb --contents "$ALL" | grep -q '/bin/veltrix-control'
-          dpkg-deb --contents "$ALL" | grep -q '/bin/veltrix-agent'
-          dpkg-deb --contents "$ALL" | grep -q '/share/veltrix/public/index.html'
-          dpkg-deb --contents "$AGENT" | grep -q '/bin/veltrix-agent$'
-          dpkg-deb --contents "$AGENT" | grep -q '/bin/veltrix-setup-agent$'
-          if dpkg-deb --contents "$AGENT" | grep -q 'veltrix-control\|share/veltrix/public\|migrations'; then
+          dpkg-deb --contents "$ALL" > /tmp/veltrix-all.contents
+          dpkg-deb --contents "$AGENT" > /tmp/veltrix-agent.contents
+          grep -q '/bin/veltrix-control' /tmp/veltrix-all.contents
+          grep -q '/bin/veltrix-agent' /tmp/veltrix-all.contents
+          grep -q '/share/veltrix/public/index.html' /tmp/veltrix-all.contents
+          grep -q '/bin/veltrix-agent$' /tmp/veltrix-agent.contents
+          grep -q '/bin/veltrix-setup-agent$' /tmp/veltrix-agent.contents
+          if grep -Eq 'veltrix-control|share/veltrix/public|migrations' /tmp/veltrix-agent.contents; then
             echo "Agent-only package contains server payload" >&2
             exit 1
           fi
