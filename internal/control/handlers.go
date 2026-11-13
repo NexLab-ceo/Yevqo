@@ -216,6 +216,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user.IsAdmin = user.Username == s.adminUsername
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":   true,
 		"user": user,
