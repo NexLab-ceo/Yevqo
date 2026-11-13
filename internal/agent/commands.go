@@ -31,6 +31,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleInstallDatabaseServer(cmd)
 	case "create_database":
 		return h.handleCreateDatabase(cmd)
+	case "list_database_roles":
+		return h.handleListDatabaseRoles(cmd)
 	case "create_site_backup":
 		return h.handleCreateSiteBackup(cmd)
 	case "create_database_backup":
@@ -228,4 +230,21 @@ func (h *CommandHandler) handleTestDatabaseConnection(cmd *shared.Command) *shar
 	if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid test_database_connection payload")}
 	if err:=testPostgresConnection(req);err!=nil{return errorResult(cmd.Id,err.Error())}
 	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL connection test succeeded"}
+}
+
+
+func (h *CommandHandler) handleListDatabaseRoles(cmd *shared.Command) *shared.Result {
+	var req shared.ListDatabaseRoles
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
+		return errorResult(cmd.Id, "invalid list_database_roles payload")
+	}
+	roles, err := listPostgresRoles(req)
+	if err != nil {
+		return errorResult(cmd.Id, err.Error())
+	}
+	payload, err := shared.Marshal(&shared.DatabaseRolesResult{Roles: roles})
+	if err != nil {
+		return errorResult(cmd.Id, "could not encode PostgreSQL role inventory")
+	}
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: "PostgreSQL role inventory loaded", Payload: payload}
 }
