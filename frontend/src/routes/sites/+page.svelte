@@ -59,6 +59,7 @@
     async function stopSelected() {
         if (busyBulk || selectedRunning.length === 0) return;
         busyBulk = true;
+        const total = selectedRunning.length;
         let failed = 0;
         for (const item of selectedRunning) {
             const result = await sendCommand(item.device_id, 'stop_site', { site_id: item.site.site_id });
@@ -67,7 +68,7 @@
         busyBulk = false;
         selectedSites = [];
         await loadSites();
-        notify(failed ? `Остановлено с ошибками: ${selectedRunning.length - failed}, ошибок: ${failed}` : 'Выбранные сайты остановлены', failed ? 'error' : 'success');
+        notify(failed ? `Остановлено: ${total - failed}, ошибок: ${failed}` : `Остановлено сайтов: ${total}`, failed ? 'error' : 'success');
     }
 
     async function runSiteAction(item, action) {
