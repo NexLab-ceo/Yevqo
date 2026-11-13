@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page as route } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDatabase, getDatabaseStats, listDatabaseConnections, listSites, attachDatabaseToSite, removeSiteDatabaseConnection, listBackups, createDatabaseBackup, restoreDatabaseBackup, testDatabaseConnection } from '$lib/api.js';
+    import { getDatabase, getDatabaseStats, getDatabaseBackupChunk, listDatabaseConnections, listSites, attachDatabaseToSite, removeSiteDatabaseConnection, listBackups, createDatabaseBackup, restoreDatabaseBackup, testDatabaseConnection } from '$lib/api.js';
     import StatusDot from '$lib/components/StatusDot.svelte';
 
     const tabs = ['Overview', 'Connection', 'Users & Permissions', 'Backups', 'Import / Export', 'Logs', 'Settings'];
@@ -26,7 +26,7 @@
     let restoreNotice = '';
     let testingConnection = false;
     let connectionTestResult = '';
-    let restoreTargetId = '';\n    let liveStats = null;\n    let statsBusy = false;\n    let statsError = '';
+    let restoreTargetId = '';\n    let liveStats = null;\n    let statsBusy = false;\n    let statsError = '';\n    let downloadingBackupID = '';
 
     $: deviceSites = database ? sites.filter((entry) => Number(entry.device_id) === Number(database.device_id)) : [];
     $: availableSites = deviceSites.filter((entry) => !connections.some((link) => link.site_id === entry.site?.site_id));
@@ -71,6 +71,22 @@
         restoreBusy = false;
         if (result.ok) { restorePassword = ''; restoreTargetId = String(result.data?.database?.id || ''); restoreNotice = 'Restore queued. A new independent database is being prepared; the source database and backup remain unchanged.'; }
         else actionError = result.error || 'Could not queue database restore';
+    }
+
+    async function downloadBackup(backup) {
+        if (!backup || backup.status !== 'verified' || downloadingBackupID) return;
+        downloadingBackupID = String(backup.id); actionError = '';
+        try {
+            const parts = []; let offset = 0; const total = Number(backup.size_bytes);
+            while (offset < total) {
+                const result = await getDatabaseBackupChunk(backup.id, offset, 262144); if (!result.ok) throw new Error(result.error || 'Backup download failed');
+                const encoded = result.data?.data; if (typeof encoded !== 'string') throw new Error('Invalid backup chunk');
+                const raw = atob(encoded); if (!raw.length || raw.length > 262144) throw new Error('Invalid backup chunk size');
+                const bytes = new Uint8Array(raw.length); for (let i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i); parts.push(bytes); offset += bytes.length; if (offset > total) throw new Error('Backup size mismatch');
+            }
+            if (offset !== total) throw new Error('Incomplete backup download');
+            const blob = new Blob(parts,{type:'application/octet-stream'}); const url=URL.createObjectURL(blob); const link=document.createElement('a'); link.href=url; link.download=backup.file_name; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+        } catch(e) { actionError=e.message || 'Backup download failed'; } finally { downloadingBackupID=''; }
     }
 
     async function refreshBackups() {
