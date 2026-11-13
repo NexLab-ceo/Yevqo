@@ -156,6 +156,7 @@
             </section>
         {:else if active === 'Users & Permissions'}
             <section class="panel"><h2>Users & Permissions</h2><p class="muted">Application roles are separate from the PostgreSQL administrator account.</p>
+                <a class="attach" href={'/databases/servers/'+database.server_id}>Manage server roles and database grants →</a>
                 <div class="role"><div><strong>{database.username}</strong><small>Application user · not database owner · password encrypted</small></div><span class="role-tag">LOGIN</span></div>
                 <div class="permissions">{#each database.permissions || [] as permission}<span>{permission}</span>{/each}</div>
             </section>
