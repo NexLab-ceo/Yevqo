@@ -502,8 +502,8 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				_ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteStopped, 0)
 			} else {
 				var started shared.StartSiteResult
-				_ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteRunning, 0)
-				_ = started
+				_ = shared.Unmarshal(result.Payload, &started)
+				_ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteRunning, int(started.Pid))
 			}
 			_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(user.ID), DeviceID: shared.PtrInt64(deviceID), Action: "site_" + in.Action, Details: map[string]interface{}{"site_id": siteID, "ok": true}, IP: clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": result.Message})
