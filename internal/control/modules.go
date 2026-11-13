@@ -233,7 +233,7 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 	switch r.Method{
 	case http.MethodGet:writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"server":map[string]interface{}{"id":id,"device_id":did,"name":name,"engine":engine,"version":version,"port":port,"data_directory":dir,"network_access":network,"status":status,"created_at":created,"storage_limit_gb":storage,"ram_budget_mb":ram,"max_connections":maxConnections,"monitor_storage":monitor,"auto_start":autoStart,"process_policy":policy,"bind_address":bind,"ssl_mode":ssl,"auth_method":auth,"remote_access":remote}})
 	case http.MethodDelete:
-		var count int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM databases WHERE server_id=?`,id).Scan(&count);err!=nil{apiError(w,shared.ErrInternal("could not inspect databases"));return};if count>0{apiError(w,shared.ErrBadRequest("remove or migrate databases before removing this server"));return}
+		var count int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM db_instances WHERE server_id=?`,id).Scan(&count);err!=nil{apiError(w,shared.ErrInternal("could not inspect databases"));return};if count>0{apiError(w,shared.ErrBadRequest("remove or migrate databases before removing this server"));return}
 		_,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM database_servers WHERE id=? AND user_id=? AND status IN ('planned','error','stopped')`,id,u.ID);if err!=nil{apiError(w,shared.ErrInternal("could not remove server metadata"));return};writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	default:http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
@@ -276,7 +276,7 @@ func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Reques
 func (s *Server) handleDatabases(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	if r.Method!=http.MethodGet{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
-	rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.name,ds.engine,ds.device_id FROM databases d JOIN database_servers ds ON ds.id=d.server_id WHERE d.user_id=? ORDER BY d.created_at DESC`,u.ID)
+	rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.name,ds.engine,ds.device_id FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id WHERE d.user_id=? ORDER BY d.created_at DESC`,u.ID)
 	if err!=nil{apiError(w,shared.ErrInternal("could not load databases"));return};defer rows.Close()
 	out:=make([]map[string]interface{},0);for rows.Next(){var id,sid,did int64;var name,status,serverName,engine string;var created time.Time;if err:=rows.Scan(&id,&sid,&name,&status,&created,&serverName,&engine,&did);err!=nil{apiError(w,shared.ErrInternal("could not read databases"));return};out=append(out,map[string]interface{}{"id":id,"server_id":sid,"name":name,"status":status,"created_at":created,"server_name":serverName,"engine":engine,"device_id":did})}
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"databases":out})
@@ -350,7 +350,7 @@ func (s *Server) handleBackups(w http.ResponseWriter,r *http.Request) {
 		if in.DatabaseID>0 {
 			var deviceID int64;var serverID int64;var database,engine,databaseStatus,serverStatus string;var port int
 			err:=s.db.conn.QueryRowContext(r.Context(),`SELECT ds.device_id,ds.id,d.name,ds.engine,d.status,ds.status,ds.port
-				FROM databases d JOIN database_servers ds ON ds.id=d.server_id
+				FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id
 				WHERE d.id=? AND d.user_id=?`,in.DatabaseID,u.ID).Scan(&deviceID,&serverID,&database,&engine,&databaseStatus,&serverStatus,&port)
 			if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database not found"));return }
 			if err!=nil { apiError(w,shared.ErrInternal("could not load database backup target"));return }
@@ -501,15 +501,15 @@ func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Reque
 		var count int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,deviceID,in.SiteID,u.ID).Scan(&count);err!=nil||count!=1 { apiError(w,shared.ErrNotFound("website not found on source device"));return }
 	}
 	var duplicate int
-	if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM databases WHERE server_id=? AND name=?`,backupServerID.Int64,in.Name).Scan(&duplicate);err!=nil { apiError(w,shared.ErrInternal("could not validate target database name"));return }
+	if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM db_instances WHERE server_id=? AND name=?`,backupServerID.Int64,in.Name).Scan(&duplicate);err!=nil { apiError(w,shared.ErrInternal("could not validate target database name"));return }
 	if duplicate>0 { apiError(w,shared.ErrBadRequest("target database name already exists"));return }
 	conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
 	nonce,ciphertext,err:=encryptCredential(s.credentialKey,[]byte(in.Password));if err!=nil { apiError(w,shared.ErrInternal("could not protect target database credentials"));return }
-	res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO databases(user_id,server_id,name,status) VALUES(?,?,?,'planned')`,u.ID,backupServerID.Int64,in.Name)
+	res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO db_instances(user_id,server_id,name,status) VALUES(?,?,?,'planned')`,u.ID,backupServerID.Int64,in.Name)
 	if err!=nil { apiError(w,shared.ErrBadRequest("target database name already exists or could not be reserved"));return }
 	targetID,_:=res.LastInsertId()
 	jobRes,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO database_restore_jobs(user_id,backup_id,target_database_id,status) VALUES(?,?,?,'queued')`,u.ID,in.BackupID,targetID)
-	if err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`DELETE FROM databases WHERE id=? AND user_id=?`,targetID,u.ID);apiError(w,shared.ErrInternal("could not queue restore job"));return }
+	if err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`DELETE FROM db_instances WHERE id=? AND user_id=?`,targetID,u.ID);apiError(w,shared.ErrInternal("could not queue restore job"));return }
 	jobID,_:=jobRes.LastInsertId()
 	req:=&shared.RestoreDatabaseBackup{BackupServerID:backupServerID.Int64,BackupFileName:fileName,Database:shared.CreateDatabase{DatabaseID:targetID,ServerID:backupServerID.Int64,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)}}
 	go s.runDatabaseRestore(jobID,in.BackupID,targetID,u.ID,deviceID,conn,req,in.SiteID,nonce,ciphertext)
@@ -522,15 +522,15 @@ func (s *Server) runDatabaseRestore(jobID,backupID,targetID,userID,deviceID int6
 	result,err:=conn.SendCommand(ctx,"restore_database_backup",req)
 	if err!=nil||!result.Ok {
 		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Agent restore failed' WHERE id=? AND user_id=?`,jobID,userID)
-		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE databases SET status='error' WHERE id=? AND user_id=?`,targetID,userID)
+		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,targetID,userID)
 		return
 	}
 	tx,err:=s.db.conn.BeginTx(context.Background(),nil);if err!=nil{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_restore_jobs SET status='failed',error_message='metadata transaction failed' WHERE id=?",jobID);_,_=s.db.conn.ExecContext(context.Background(),"UPDATE databases SET status='error' WHERE id=?",targetID);return}
 	_,err=tx.Exec(`INSERT INTO database_credentials(database_id,username,ciphertext,nonce,key_version) VALUES(?,?,?,?,1)`,targetID,req.Database.Username,ciphertext,nonce)
-	if err==nil { _,err=tx.Exec(`UPDATE databases SET status='ready' WHERE id=? AND user_id=?`,targetID,userID) }
+	if err==nil { _,err=tx.Exec(`UPDATE db_instances SET status='ready' WHERE id=? AND user_id=?`,targetID,userID) }
 	if err==nil&&siteID!="" { _,err=tx.Exec(`INSERT INTO site_database_connections(user_id,device_id,site_id,database_id) VALUES(?,?,?,?)`,userID,deviceID,siteID,targetID) }
 	if err==nil { _,err=tx.Exec(`UPDATE database_restore_jobs SET status='completed',error_message=NULL WHERE id=? AND user_id=?`,jobID,userID) }
-	if err!=nil { _=tx.Rollback();_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata save failed' WHERE id=? AND user_id=?`,jobID,userID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE databases SET status='error' WHERE id=? AND user_id=?`,targetID,userID);return }
-	if err:=tx.Commit();err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata commit failed' WHERE id=? AND user_id=?`,jobID,userID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE databases SET status='error' WHERE id=? AND user_id=?`,targetID,userID);return }
+	if err!=nil { _=tx.Rollback();_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata save failed' WHERE id=? AND user_id=?`,jobID,userID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,targetID,userID);return }
+	if err:=tx.Commit();err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata commit failed' WHERE id=? AND user_id=?`,jobID,userID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,targetID,userID);return }
 	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(deviceID),Action:"database_backup_restored",Details:map[string]interface{}{"job_id":jobID,"backup_id":backupID,"database_id":targetID}})
 }
