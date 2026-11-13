@@ -206,6 +206,22 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 	u:=UserFromContext(r.Context());raw:=strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/databases/servers/"),"/")
 	parts:=strings.Split(raw,"/")
 	id,err:=strconv.ParseInt(parts[0],10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid server id"));return}
+	if len(parts)==2&&parts[1]=="roles"&&r.Method==http.MethodGet {
+		var deviceID int64;var engine,status string;var port int
+		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`,id,u.ID).Scan(&deviceID,&engine,&status,&port)
+		if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
+		if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
+		if engine!="postgresql"||status!="ready" { apiError(w,shared.ErrBadRequest("a ready PostgreSQL server is required to inspect roles"));return }
+		conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
+		ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
+		result,err:=conn.SendCommand(ctx,"list_database_roles",&shared.ListDatabaseRoles{ServerID:id,Port:uint32(port)})
+		if err!=nil { apiError(w,shared.ErrInternal("Agent role inventory command failed"));return }
+		if !result.Ok { apiError(w,shared.ErrBadRequest(result.Message));return }
+		var inventory shared.DatabaseRolesResult
+		if err:=shared.Unmarshal(result.Payload,&inventory);err!=nil { apiError(w,shared.ErrInternal("Agent returned an invalid role inventory"));return }
+		if inventory.Roles==nil { inventory.Roles=[]shared.DatabaseRole{} }
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"roles":inventory.Roles});return
+	}
 	if len(parts)==2&&parts[1]=="install"&&r.Method==http.MethodPost{s.handleInstallDatabaseServer(w,r,id);return}
 	if len(parts)!=1{http.NotFound(w,r);return}
 	var did int64;var name,engine,version,dir,network,status,storage,policy,bind,ssl,auth string;var port,ram,maxConnections int;var monitor,autoStart,remote bool;var created time.Time
