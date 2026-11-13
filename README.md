@@ -2,6 +2,18 @@
 
 The `feature/database-server-wizard` branch contains the in-progress VELTRIX Dock UI and Control Plane migration. It does not change `main` or production data.
 
+## Что скачать
+
+В CI собираются два отдельных Android/Termux-пакета. Оба файла в одном выпуске всегда имеют **одинаковую версию**:
+
+- **Если вы хотите запустить панель и тестировать её на том же телефоне — скачайте `veltrix-all_<version>_aarch64.deb`.** Внутри Control Plane, Agent, веб-интерфейс, миграции и сценарии настройки. После установки выберите: сервер, агент или оба компонента.
+- **Если вам нужно только подключить телефон к чужой панели — скачайте `veltrix-agent_<version>_aarch64.deb`.** Пакет содержит только Agent и сценарий настройки. При установке (или при запуске `veltrix-setup-agent`) укажите WebSocket URL панели и токен устройства.
+
+Пакет `veltrix-all` требует MariaDB, PHP, Git и `termux-services`. Пакет `veltrix-agent` требует PHP, Git и `termux-services`. `cloudflared` не является обязательной зависимостью: устанавливайте его отдельно, только если используете Cloudflare Tunnel.
+
+Для автозапуска после перезагрузки Android установите приложение **Termux:Boot** из того же источника, что и Termux, и откройте его один раз. Также разрешите Termux работать в фоне в настройках батареи Android.
+
+
 ### Workspace and operations foundation
 - Projects can group devices and websites. Deleting a project deletes only its grouping records; devices, sites, files and databases remain untouched.
 - Database Server configurations are stored as `planned` metadata. Saving a configuration does not install packages or modify an Android device.
