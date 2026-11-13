@@ -71,7 +71,7 @@
 <div class="page-header">
     <div>
         <h1 class="page-title">Админка</h1>
-        <p class="page-desc">Статистика и управление пользователями</p>
+        <p class="page-desc">Статистика и управление пользователями</p><Button on:click={async () => { loading = true; await loadAll(); loading = false; }}>Обновить данные</Button>
     </div>
 </div>
 
