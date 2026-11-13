@@ -188,6 +188,13 @@ type GitPull struct {
 	SiteId string `json:"site_id"`
 }
 
+type SiteAction struct {
+	SiteId string `json:"site_id"`
+	Path string `json:"path"`
+	Port uint32 `json:"port"`
+	Runtime string `json:"runtime"`
+}
+
 type GetLogs struct {
 	SiteId string `json:"site_id"`
 	Lines  uint32 `json:"lines"`
