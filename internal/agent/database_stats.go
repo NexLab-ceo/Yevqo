@@ -6,7 +6,6 @@ import (
  "fmt"
  "os"
  "os/exec"
- "regexp"
  "strings"
  "time"
  "veltrix/internal/shared"
