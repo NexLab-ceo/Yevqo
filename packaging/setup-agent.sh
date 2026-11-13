@@ -1,5 +1,6 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-/sdcard/veltrix-agent}"
 CONFIG_FILE="$DATA_ROOT/config/agent.json"
