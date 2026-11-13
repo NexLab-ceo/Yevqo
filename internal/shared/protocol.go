@@ -102,6 +102,8 @@ type ManageDatabasePrivilege struct {
  Database string `json:"database"`
  Role string `json:"role"`
  Privilege string `json:"privilege"`
+ Scope string `json:"scope"`
+ Schema string `json:"schema,omitempty"`
  Action string `json:"action"`
 }
 
