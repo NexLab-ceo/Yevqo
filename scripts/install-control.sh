@@ -117,13 +117,9 @@ GRANT ALL PRIVILEGES ON veltrix.* TO 'veltrix'@'localhost';
 FLUSH PRIVILEGES;
 SQL
 
-# Применяем схему.
-log "  → applying schema"
-if [ -f "scripts/mysql-setup.sql" ]; then
-    mysql -u root veltrix < scripts/mysql-setup.sql 2>/dev/null || warn "schema already applied"
-else
-    warn "scripts/mysql-setup.sql not found"
-fi
+# Таблицы создаёт сам Control Plane при первом запуске.
+# Установщик только подготавливает серверную БД и учётную запись.
+log "  → core tables will be created by Control Plane migrations on first start"
 
 # ============================================================
 # 4. КОНФИГ
