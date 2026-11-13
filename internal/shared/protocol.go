@@ -93,6 +93,15 @@ type DatabaseRolesResult struct {
 	Roles []DatabaseRole `json:"roles"`
 }
 
+type ManageDatabasePrivilege struct {
+ ServerID int64 `json:"server_id"`
+ Port uint32 `json:"port"`
+ Database string `json:"database"`
+ Role string `json:"role"`
+ Privilege string `json:"privilege"`
+ Action string `json:"action"`
+}
+
 type ManageDatabaseRole struct {
 	ServerID int64 `json:"server_id"`
 	Port uint32 `json:"port"`
