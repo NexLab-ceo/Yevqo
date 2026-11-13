@@ -29,6 +29,10 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 	switch cmd.Action {
 	case "install_database_server":
 		return h.handleInstallDatabaseServer(cmd)
+	case "start_database_server":
+		return h.handleDatabaseServerAction(cmd, "start")
+	case "stop_database_server":
+		return h.handleDatabaseServerAction(cmd, "stop")
 	case "create_database":
 		return h.handleCreateDatabase(cmd)
 	case "list_database_roles":
@@ -247,4 +251,16 @@ func (h *CommandHandler) handleListDatabaseRoles(cmd *shared.Command) *shared.Re
 		return errorResult(cmd.Id, "could not encode PostgreSQL role inventory")
 	}
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: "PostgreSQL role inventory loaded", Payload: payload}
+}
+
+
+func (h *CommandHandler) handleDatabaseServerAction(cmd *shared.Command, action string) *shared.Result {
+	var req shared.DatabaseServerAction
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
+		return errorResult(cmd.Id, "invalid database server action payload")
+	}
+	if err := managePostgresServer(req, action); err != nil {
+		return errorResult(cmd.Id, err.Error())
+	}
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: "PostgreSQL server " + action + " completed"}
 }
