@@ -65,6 +65,12 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleStartSite(cmd)
 	case "stop_site":
 		return h.handleStopSite(cmd)
+	case "restart":
+		return h.handleSiteLifecycle(cmd, "restart")
+	case "deploy":
+		return h.handleSiteLifecycle(cmd, "deploy")
+	case "rebuild":
+		return h.handleSiteLifecycle(cmd, "rebuild")
 	case "git_pull":
 		return h.handleGitPull(cmd)
 	case "get_logs":
@@ -150,6 +156,24 @@ func (h *CommandHandler) handleStopSite(cmd *shared.Command) *shared.Result {
 	}
 
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: "stopped"}
+}
+
+func (h *CommandHandler) handleSiteLifecycle(cmd *shared.Command, action string) *shared.Result {
+	var req shared.SiteAction
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid site action payload") }
+	var pid int
+	var output string
+	var err error
+	switch action {
+	case "restart":
+		pid, err = h.processes.RestartSite(req.SiteId, req.Path, int(req.Port), req.Runtime)
+	case "deploy":
+		pid, output, err = h.processes.DeploySite(req.SiteId, req.Path, int(req.Port), req.Runtime, false)
+	case "rebuild":
+		pid, output, err = h.processes.DeploySite(req.SiteId, req.Path, int(req.Port), req.Runtime, true)
+	}
+	if err != nil { return errorResult(cmd.Id, err.Error()) }
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: fmt.Sprintf("%s completed (pid %d): %s", action, pid, output)}
 }
 
 func (h *CommandHandler) handleGitPull(cmd *shared.Command) *shared.Result {
