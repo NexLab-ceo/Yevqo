@@ -143,6 +143,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/admin/api/users", s.RequireAdmin(s.handleAdminUsers))
 	s.mux.HandleFunc("/admin/api/users/", s.RequireAdmin(s.handleAdminUserByID))
 	s.mux.HandleFunc("/admin/api/stats", s.RequireAdmin(s.handleAdminStats))
+	s.mux.HandleFunc("/admin/api/backups/control-plane", s.RequireAdmin(s.handleControlPlaneBackup))
 
 	// --- Статика SvelteKit (последний маршрут — fallback) ---
 	s.mux.HandleFunc("/", s.handleStatic)
