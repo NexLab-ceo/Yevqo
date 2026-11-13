@@ -43,7 +43,7 @@
 {:else}<p class="muted">No non-system roles were returned by PostgreSQL.</p>{/if}
 {/if}
 </section>
-<section class="panel"><h2>Database access grants</h2><p class="muted">Grant or revoke PostgreSQL database-level CONNECT, CREATE and TEMPORARY rights. Changes apply immediately.</p>
+<section class="panel"><h2>Database access grants</h2><p class="muted">Grant/revoke database CONNECT, CREATE, TEMPORARY or schema USAGE/CREATE rights. Changes apply immediately.</p>
 <form class="role-create" on:submit|preventDefault={async()=>{if(privilegeBusy)return;if(!privDB||!privRole||(privilegeScope==='schema'&&!privSchema)){notify('Select database, role and schema','error');return}if(!confirm(`${privilegeAction.toUpperCase()} ${privilege} on ${privDB} ${privilegeAction==='grant'?'TO':'FROM'} ${privRole}?${privilegeAction==='revoke'?' REVOKE uses CASCADE and may remove dependent grants.':''}`))return;privilegeBusy=true;const result=await mutateDatabasePrivilege(server.id,privilegeAction,privDB,privRole,privilege,privilegeScope,privSchema);privilegeBusy=false;if(result.ok)notify('Database privilege updated','success');else notify(result.error||'Privilege operation failed','error')}}>
 <label>Database<select bind:value={privDB} required><option value="">Select database…</option>{#each databases as db}<option value={db.name}>{db.name}</option>{/each}</select></label>
 <label>Role<select bind:value={privRole} required><option value="">Select role…</option>{#each roles.filter(role=>role.name!=='postgres'&&!role.name.startsWith('pg_')) as role}<option value={role.name}>{role.name}</option>{/each}</select></label>
