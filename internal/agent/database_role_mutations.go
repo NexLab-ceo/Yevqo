@@ -61,7 +61,7 @@ func managePostgresRole(req shared.ManageDatabaseRole, action string) error {
 		if ctx.Err() != nil {
 			return fmt.Errorf("PostgreSQL role operation timed out")
 		}
-		message := strings.TrimSpace(stderr.String())
+		message := strings.ReplaceAll(strings.TrimSpace(stderr.String()), req.Password, "[redacted]")
 		if len(message) > 240 {
 			message = message[len(message)-240:]
 		}
