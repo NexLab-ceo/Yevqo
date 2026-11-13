@@ -43,11 +43,15 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: |
-          npm install
+          npm ci || npm install
           npm run build
 
-      - name: Verify packaged frontend
-        run: test -s public/index.html
+      - name: Verify frontend output
+        run: |
+          test -s public/index.html
+          test -d public/_app
+          echo "Frontend files:"
+          find public -type f | sort
 
       - name: Package .deb
         run: |
@@ -61,13 +65,11 @@ jobs:
           rm -rf "$DEB_DIR"
           mkdir -p "$DEB_DIR/DEBIAN"
           mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/bin"
-          mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix"
+          mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/public"
 
-          cp bin/veltrix-control "$DEB_DIR/data/data/com.termux/files/usr/bin/"
-          cp bin/veltrix-agent "$DEB_DIR/data/data/com.termux/files/usr/bin/"
-          chmod +x "$DEB_DIR/data/data/com.termux/files/usr/bin/"*
-
-          cp -r public/. "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/"
+          install -m 0755 bin/veltrix-control "$DEB_DIR/data/data/com.termux/files/usr/bin/veltrix-control"
+          install -m 0755 bin/veltrix-agent "$DEB_DIR/data/data/com.termux/files/usr/bin/veltrix-agent"
+          cp -a public/. "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/public/"
 
           cat > "$DEB_DIR/DEBIAN/control" <<EOF
           Package: veltrix
@@ -82,7 +84,26 @@ jobs:
            Includes the Control Plane, Android Agent and static web interface.
           EOF
 
+          cat > "$DEB_DIR/DEBIAN/postinst" <<'EOF'
+          #!/data/data/com.termux/files/usr/bin/sh
+          set -e
+          PREFIX="/data/data/com.termux/files/usr"
+          DATA_ROOT="/sdcard/veltrix-control"
+          mkdir -p "$DATA_ROOT/public"
+          cp -a "$PREFIX/share/veltrix/public/." "$DATA_ROOT/public/"
+          chmod -R a+rX "$DATA_ROOT/public"
+          exit 0
+          EOF
+          chmod 0755 "$DEB_DIR/DEBIAN/postinst"
+
           dpkg-deb --build "$DEB_DIR" "veltrix_${VERSION}_aarch64.deb"
+          dpkg-deb --contents "veltrix_${VERSION}_aarch64.deb" | grep -E 'veltrix-control|veltrix-agent|index.html|_app'
+
+      - name: Verify Debian package
+        run: |
+          test -s veltrix_*_aarch64.deb
+          dpkg-deb --field veltrix_*_aarch64.deb Architecture | grep -x aarch64
+          dpkg-deb --info veltrix_*_aarch64.deb
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
