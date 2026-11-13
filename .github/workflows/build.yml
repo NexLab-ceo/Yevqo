@@ -2,6 +2,8 @@ name: Build VELTRIX Dock
 
 on:
   push:
+    branches:
+      - feature/database-server-wizard
     tags:
       - 'v*'
   workflow_dispatch:
@@ -37,13 +39,17 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Build frontend
+        working-directory: frontend
         run: |
-          cd frontend
-          npm install
+          npm ci
           npm run build
-          cd ..
+
+      - name: Verify packaged frontend
+        run: test -s public/index.html
 
       - name: Package .deb
         run: |
@@ -60,31 +66,31 @@ jobs:
           mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix"
 
           cp bin/veltrix-control "$DEB_DIR/data/data/com.termux/files/usr/bin/"
-          cp bin/veltrix-agent   "$DEB_DIR/data/data/com.termux/files/usr/bin/"
+          cp bin/veltrix-agent "$DEB_DIR/data/data/com.termux/files/usr/bin/"
           chmod +x "$DEB_DIR/data/data/com.termux/files/usr/bin/"*
 
-          if [ -d "public" ]; then
-            cp -r public/* "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/"
-          fi
+          cp -r public/. "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/"
 
           cat > "$DEB_DIR/DEBIAN/control" <<EOF
           Package: veltrix
           Version: $VERSION
           Architecture: aarch64
-          Maintainer: Your Name <you@example.com>
+          Maintainer: VELTRIX
           Depends: php, git
           Section: utils
           Priority: optional
-          Homepage: https://github.com/your-username/veltrix-dock
-          Description: Lightweight server manager for Termux
-           VELTRIX Dock manages PHP sites, monitors resources, and handles git deployments.
+          Homepage: https://github.com/NexLab-ceo/veltrix
+          Description: VELTRIX Dock server manager for Termux
+           Includes the Control Plane, Android Agent and static web interface.
           EOF
 
           dpkg-deb --build "$DEB_DIR" "veltrix_${VERSION}_aarch64.deb"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: veltrix-binaries
+          name: veltrix-android-aarch64
+          if-no-files-found: error
           path: |
             bin/veltrix-control
             bin/veltrix-agent
