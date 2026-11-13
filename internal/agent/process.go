@@ -390,6 +390,37 @@ func procAttr() *syscall.SysProcAttr {
 func parsePID(s string) (int, error) {
 	return strconv.Atoi(strings.TrimSpace(s))
 }
+// RestartSite restarts a site without pulling source changes.
+func (m *ProcessManager) RestartSite(siteID, path string, port int, runtime string) (int, error) {
+	if err := m.StopSite(siteID); err != nil && !strings.Contains(err.Error(), "is not running") {
+		return 0, err
+	}
+	return m.StartSite(siteID, path, port, runtime)
+}
+
+// DeploySite pulls the fast-forwardable Git revision, optionally rebuilds Go,
+// then performs a stop/start cycle. Git conflicts and build errors are returned.
+func (m *ProcessManager) DeploySite(siteID, path string, port int, runtime string, rebuild bool) (int, string, error) {
+	if !validSiteID(siteID) { return 0, "", fmt.Errorf("invalid site id") }
+	if filepath.Clean(path) != filepath.Join("sites", siteID) || filepath.IsAbs(path) {
+		return 0, "", fmt.Errorf("site path must be sites/<site_id>")
+	}
+	absPath, err := safeSiteDirectory(m.DataRoot, siteID)
+	if err != nil { return 0, "", err }
+	if _, err := os.Stat(absPath); err != nil { return 0, "", fmt.Errorf("site directory not found: %w", err) }
+	out, err := runGitPull(absPath)
+	if err != nil { return 0, out, err }
+	if rebuild && runtime == "go" {
+		cmd := exec.Command("go", "build", "-o", "site", ".")
+		cmd.Dir = absPath
+		buildOut, buildErr := cmd.CombinedOutput()
+		out += string(buildOut)
+		if buildErr != nil { return 0, out, fmt.Errorf("go build: %w", buildErr) }
+	}
+	pid, err := m.RestartSite(siteID, path, port, runtime)
+	return pid, out, err
+}
+
 // runGitPull выполняет git pull в папке сайта и возвращает вывод.
 func runGitPull(path string) (string, error) {
 	// Проверяем, что это git-репозиторий.
