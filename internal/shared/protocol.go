@@ -138,6 +138,9 @@ type RestoreDatabaseBackup struct {
 	Database CreateDatabase `json:"database"`
 }
 
+type ReadDatabaseBackupChunk struct { ServerID int64 `json:"server_id"`; FileName string `json:"file_name"`; Offset int64 `json:"offset"`; Length int `json:"length"` }
+type DatabaseBackupChunk struct { Data []byte `json:"data"`; TotalSize int64 `json:"total_size"`; Offset int64 `json:"offset"`; EOF bool `json:"eof"` }
+
 type DatabaseBackupResult struct {
 	FileName string `json:"file_name"`
 	SizeBytes int64 `json:"size_bytes"`
