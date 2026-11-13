@@ -27,7 +27,11 @@
 
     onMount(loadSites);
 
-    // Переход к устройству (где находится сайт).
+    // Открываем страницу конкретного сайта.
+    function openSite(item) {
+        goto(`/sites/${item.device_id}/${encodeURIComponent(item.site.site_id)}`);
+    }
+
     function openDevice(deviceId) {
         goto(`/devices/${deviceId}`);
     }
@@ -75,7 +79,7 @@
 {:else}
     <div class="sites-list">
         {#each sites as item (item.device_id + '-' + item.site.site_id)}
-            <Card clickable on:click={() => openDevice(item.device_id)}>
+            <Card clickable on:click={() => openSite(item)}>
                 <div class="site-row">
                     <div class="site-info">
                         <div class="site-name">
