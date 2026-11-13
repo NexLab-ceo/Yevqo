@@ -61,3 +61,17 @@ func TestRestoreDatabaseRejectsBackupDirectorySymlinkEscape(t *testing.T) {
 	req:=shared.RestoreDatabaseBackup{BackupServerID:7,BackupFileName:name,Database:shared.CreateDatabase{DatabaseID:2,ServerID:7,Database:"target_db",Username:"target_user",Password:"long-enough-password",Port:5432}}
 	if err:=restorePostgresDatabase(req);err==nil{t.Fatal("expected backup directory symlink escape to be rejected")}
 }
+
+
+func TestManagePostgresServerRejectsInvalidRequest(t *testing.T) {
+	if err := managePostgresServer(shared.DatabaseServerAction{}, "start"); err == nil {
+		t.Fatal("expected invalid server request to be rejected")
+	}
+}
+
+func TestManagePostgresServerRejectsUnknownAction(t *testing.T) {
+	req := shared.DatabaseServerAction{ServerID: 1, Port: 5432, DataDirectory: "$PREFIX/var/lib/postgresql"}
+	if err := managePostgresServer(req, "restart"); err == nil {
+		t.Fatal("expected unsupported action to be rejected")
+	}
+}
