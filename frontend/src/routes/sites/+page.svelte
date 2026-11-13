@@ -99,14 +99,14 @@
                         </span>
                     </div>
                 </div>
-                <div class="site-actions">
+                <div class="site-actions" on:click|stopPropagation>
                     {#if item.site.status === 'running'}
-                        <Button size="sm" disabled={busySite !== ''} on:click|stopPropagation={() => runSiteAction(item, 'stop_site')}>Остановить</Button>
-                        <Button size="sm" disabled={busySite !== ''} on:click|stopPropagation={() => runSiteAction(item, 'start_site')}>Перезапустить</Button>
+                        <Button size="sm" disabled={busySite !== ''} on:click={() => runSiteAction(item, 'stop_site')}>Остановить</Button>
+                        <Button size="sm" disabled={busySite !== ''} on:click={() => runSiteAction(item, 'start_site')}>Перезапустить</Button>
                     {:else}
-                        <Button size="sm" variant="primary" disabled={busySite !== ''} loading={busySite === siteKey(item)} on:click|stopPropagation={() => runSiteAction(item, 'start_site')}>Запустить</Button>
+                        <Button size="sm" variant="primary" disabled={busySite !== ''} loading={busySite === siteKey(item)} on:click={() => runSiteAction(item, 'start_site')}>Запустить</Button>
                     {/if}
-                    <Button size="sm" variant="ghost" on:click|stopPropagation={() => openDevice(item.device_id)}>Устройство</Button>
+                    <Button size="sm" variant="ghost" on:click={() => openDevice(item.device_id)}>Устройство</Button>
                 </div>
             </Card>
         {/each}
