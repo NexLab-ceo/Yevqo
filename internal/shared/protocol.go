@@ -93,6 +93,9 @@ type DatabaseRolesResult struct {
 	Roles []DatabaseRole `json:"roles"`
 }
 
+type GetDatabaseStats struct { ServerID int64 `json:"server_id"`; Port uint32 `json:"port"`; Database string `json:"database"` }
+type DatabaseStats struct { SizeBytes int64 `json:"size_bytes"`; ActiveConnections int `json:"active_connections"`; MaxConnections int `json:"max_connections"`; TransactionsCommitted int64 `json:"transactions_committed"`; TransactionsRolledBack int64 `json:"transactions_rolled_back"`; Deadlocks int64 `json:"deadlocks"`; CapturedAt time.Time `json:"captured_at"` }
+
 type ManageDatabasePrivilege struct {
  ServerID int64 `json:"server_id"`
  Port uint32 `json:"port"`
