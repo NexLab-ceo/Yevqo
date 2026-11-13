@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page as route } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDatabase, listDatabaseConnections, listSites, attachDatabaseToSite, removeSiteDatabaseConnection, listBackups, createDatabaseBackup, restoreDatabaseBackup, testDatabaseConnection } from '$lib/api.js';
+    import { getDatabase, getDatabaseStats, listDatabaseConnections, listSites, attachDatabaseToSite, removeSiteDatabaseConnection, listBackups, createDatabaseBackup, restoreDatabaseBackup, testDatabaseConnection } from '$lib/api.js';
     import StatusDot from '$lib/components/StatusDot.svelte';
 
     const tabs = ['Overview', 'Connection', 'Users & Permissions', 'Backups', 'Import / Export', 'Logs', 'Settings'];
@@ -26,7 +26,7 @@
     let restoreNotice = '';
     let testingConnection = false;
     let connectionTestResult = '';
-    let restoreTargetId = '';
+    let restoreTargetId = '';\n    let liveStats = null;\n    let statsBusy = false;\n    let statsError = '';
 
     $: deviceSites = database ? sites.filter((entry) => Number(entry.device_id) === Number(database.device_id)) : [];
     $: availableSites = deviceSites.filter((entry) => !connections.some((link) => link.site_id === entry.site?.site_id));
@@ -44,6 +44,8 @@
         linking = false;
     }
 
+    async function refreshStats() { if(!database||statsBusy)return;statsBusy=true;statsError='';const result=await getDatabaseStats(database.id);statsBusy=false;if(result.ok)liveStats=result.data?.stats||null;else statsError=result.error||'Could not load live statistics'; }
+    
     async function runConnectionTest() {
         if (!database || testingConnection) return;
         testingConnection = true; connectionTestResult = '';
@@ -133,6 +135,10 @@
                 <div><span>Application role</span><strong>{database.username || 'Not available'}</strong></div>
                 <div><span>Website links</span><strong>{database.linked_sites}</strong></div>
             </div></section>
+            <section class="panel"><div class="backup-heading"><div><h2>Live PostgreSQL statistics</h2><p class="muted">Collected directly from pg_stat_database and pg_database_size on the Android host.</p></div><button class="attach" disabled={statsBusy||database.status!=='ready'} on:click={refreshStats}>{statsBusy?'Refreshing…':'Refresh stats'}</button></div>
+                {#if statsError}<div class="error">{statsError}</div>{:else if liveStats}
+                <div class="stats"><article><small>DATABASE SIZE</small><strong>{(liveStats.size_bytes/1048576).toFixed(2)} MB</strong></article><article><small>ACTIVE SESSIONS</small><strong>{liveStats.active_connections} / {liveStats.max_connections}</strong></article><article><small>COMMITTED</small><strong>{liveStats.transactions_committed}</strong></article><article><small>ROLLBACKS</small><strong>{liveStats.transactions_rolled_back}</strong></article></div><div class="rows"><div><span>Deadlocks</span><strong>{liveStats.deadlocks}</strong></div><div><span>Captured at</span><strong>{new Date(liveStats.captured_at).toLocaleString()}</strong></div></div>
+                {:else}<p class="muted">Press Refresh stats to query live values. The database is not polled automatically.</p>{/if}</section>
         {:else if active === 'Connection'}
             <section class="panel"><h2>Private connection</h2><p class="muted">This database is bound to localhost on its Android device. Credentials are never returned to the browser.</p>
                 <div class="rows">
