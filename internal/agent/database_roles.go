@@ -68,8 +68,12 @@ func listPostgresRoles(req shared.ListDatabaseRoles) ([]shared.DatabaseRole, err
 		return nil, fmt.Errorf("could not read PostgreSQL roles: %s", message)
 	}
 
+	return parsePostgresRoles(stdout.String())
+}
+
+func parsePostgresRoles(raw string) ([]shared.DatabaseRole, error) {
 	var roles []shared.DatabaseRole
-	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &roles); err != nil {
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &roles); err != nil {
 		return nil, fmt.Errorf("PostgreSQL returned an invalid role inventory")
 	}
 	if roles == nil {
