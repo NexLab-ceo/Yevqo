@@ -19,7 +19,7 @@ if command -v mysqld_safe >/dev/null 2>&1 && ! pgrep -x mariadbd >/dev/null 2>&1
 fi
 
 # Wait up to 45 seconds for the existing local database.
-if command -v mysqladmin >/dev/null 2>&1; then
+if command -v mysqld_safe >/dev/null 2>&1; then
   ready=0
   for i in $(seq 1 45); do
     if mysqladmin ping --silent >/dev/null 2>&1; then ready=1; break; fi
