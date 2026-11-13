@@ -11,6 +11,8 @@ The `feature/database-server-wizard` branch contains the in-progress VELTRIX Doc
 
 Пакет `veltrix-all` требует MariaDB, PHP, Git и `termux-services`. Пакет `veltrix-agent` требует PHP, Git и `termux-services`. `cloudflared` не является обязательной зависимостью: устанавливайте его отдельно, только если используете Cloudflare Tunnel.
 
+Перед настройкой Control Plane или Agent выполните `termux-setup-storage` в Termux и разрешите доступ к общему хранилищу: конфигурация и данные по умолчанию размещаются в `/sdcard/veltrix-control` и `/sdcard/veltrix-agent`.
+
 Для автозапуска после перезагрузки Android установите приложение **Termux:Boot** из того же источника, что и Termux, и откройте его один раз. Также разрешите Termux работать в фоне в настройках батареи Android.
 
 
