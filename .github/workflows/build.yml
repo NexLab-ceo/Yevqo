@@ -67,10 +67,12 @@ jobs:
           mkdir -p "$DEB_DIR/DEBIAN"
           mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/bin"
           mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/public"
+          mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/migrations"
 
           install -m 0755 bin/veltrix-control "$DEB_DIR/data/data/com.termux/files/usr/bin/veltrix-control"
           install -m 0755 bin/veltrix-agent "$DEB_DIR/data/data/com.termux/files/usr/bin/veltrix-agent"
           cp -a public/. "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/public/"
+          cp -a migrations/. "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/migrations/"
 
           cat > "$DEB_DIR/DEBIAN/control" <<EOF
           Package: veltrix
@@ -90,9 +92,10 @@ jobs:
           set -e
           PREFIX="/data/data/com.termux/files/usr"
           DATA_ROOT="/sdcard/veltrix-control"
-          mkdir -p "$DATA_ROOT/public"
+          mkdir -p "$DATA_ROOT/public" "$DATA_ROOT/migrations"
           cp -a "$PREFIX/share/veltrix/public/." "$DATA_ROOT/public/"
-          chmod -R a+rX "$DATA_ROOT/public"
+          cp -a "$PREFIX/share/veltrix/migrations/." "$DATA_ROOT/migrations/"
+          chmod -R a+rX "$DATA_ROOT/public" "$DATA_ROOT/migrations"
           exit 0
           EOF
           chmod 0755 "$DEB_DIR/DEBIAN/postinst"
