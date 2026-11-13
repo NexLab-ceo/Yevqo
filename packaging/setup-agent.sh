@@ -25,8 +25,22 @@ if [ ! -s "$CONFIG_FILE" ]; then
   [ -n "$TOKEN" ] || { echo "Token is required" >&2; exit 1; }
   DEVICE_ID="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
   HOSTNAME_VALUE="$(getprop net.hostname 2>/dev/null || hostname 2>/dev/null || echo android-device)"
-  export SERVER_URL TOKEN DEVICE_ID DATA_ROOT HOSTNAME_VALUE CONFIG_FILE
-  "$PREFIX/bin/veltrix-agent-config-write"
+  json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+  SERVER_JSON="$(json_escape "$SERVER_URL")"
+  TOKEN_JSON="$(json_escape "$TOKEN")"
+  DEVICE_JSON="$(json_escape "$DEVICE_ID")"
+  HOST_JSON="$(json_escape "$HOSTNAME_VALUE")"
+  DATA_JSON="$(json_escape "$DATA_ROOT")"
+  cat > "$CONFIG_FILE" <<JSON
+{
+  "server_url": "$SERVER_JSON",
+  "token": "$TOKEN_JSON",
+  "device_id": "$DEVICE_JSON",
+  "hostname": "$HOST_JSON",
+  "data_root": "$DATA_JSON"
+}
+JSON
+  chmod 600 "$CONFIG_FILE"
 else
   log "Existing Agent config preserved: $CONFIG_FILE"
 fi
@@ -47,10 +61,20 @@ chmod 700 "$SERVICE_DIR/run"
 sv-enable veltrix-agent >/dev/null 2>&1 || true
 
 mkdir -p "$BOOT_DIR"
-if [ -f "$PREFIX/share/veltrix/termux-boot.sh" ]; then
-  cp "$PREFIX/share/veltrix/termux-boot.sh" "$BOOT_DIR/00-veltrix"
-  chmod 700 "$BOOT_DIR/00-veltrix"
-fi
+cat > "$BOOT_DIR/00-veltrix" <<'BOOT'
+#!/data/data/com.termux/files/usr/bin/bash
+set -u
+LOG_DIR="${HOME}/.local/var/log"
+mkdir -p "$LOG_DIR"
+exec >>"$LOG_DIR/veltrix-boot.log" 2>&1
+command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock || true
+for service in veltrix-control veltrix-agent; do
+  if [ -d "${PREFIX}/var/service/$service" ] || [ -L "${PREFIX}/var/service/$service" ]; then
+    sv up "$service" || true
+  fi
+done
+BOOT
+chmod 700 "$BOOT_DIR/00-veltrix"
 if command -v sv >/dev/null 2>&1; then sv up veltrix-agent || warn "Could not start Agent service now"; fi
 
 log "Agent configured."
