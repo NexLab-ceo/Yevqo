@@ -155,6 +155,18 @@ chmod +x "$SERVICE_DIR/run"
 
 sv-enable veltrix-agent 2>/dev/null || true
 
+# Termux:Boot hook. The Termux:Boot Android add-on must also be installed by the user.
+BOOT_DIR="$HOME/.termux/boot"
+mkdir -p "$BOOT_DIR"
+if [ -f "scripts/termux-boot.sh" ]; then
+    cp scripts/termux-boot.sh "$BOOT_DIR/00-veltrix"
+    chmod 700 "$BOOT_DIR/00-veltrix"
+    log "Termux:Boot hook installed at $BOOT_DIR/00-veltrix"
+    warn "Install and open the Termux:Boot Android add-on once; then reboot to verify autostart."
+else
+    warn "scripts/termux-boot.sh not found; install the boot hook manually."
+fi
+
 # ============================================================
 # 7. TAILSCALE
 # ============================================================
