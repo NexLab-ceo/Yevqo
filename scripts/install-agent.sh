@@ -151,6 +151,8 @@ log "setting up service..."
 SERVICE_DIR="$PREFIX/var/service/veltrix-agent"
 mkdir -p "$SERVICE_DIR"
 cp systemd/veltrix-agent.sh "$SERVICE_DIR/run"
+# Bind the service to the exact config path selected by this installer.
+sed -i "s|^CONFIG=.*|CONFIG=\"$CONFIG_FILE\"|" "$SERVICE_DIR/run"
 chmod +x "$SERVICE_DIR/run"
 
 sv-enable veltrix-agent 2>/dev/null || true
