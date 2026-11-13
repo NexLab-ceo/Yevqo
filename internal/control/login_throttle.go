@@ -10,18 +10,19 @@ import (
 // Login throttling is stored in MariaDB so limits survive Control Plane restarts.
 // Five failed attempts in a rolling one-minute window trigger a 15-minute IP block.
 func (db *DB) LoginBlockedUntil(ctx context.Context, ip string) (*time.Time, error) {
-	var blocked sql.NullTime
+	var seconds sql.NullInt64
 	err := db.conn.QueryRowContext(ctx,
-		"SELECT blocked_until FROM login_attempts WHERE ip = ?", ip,
-	).Scan(&blocked)
-	if err == sql.ErrNoRows || !blocked.Valid {
+		"SELECT TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), blocked_until) FROM login_attempts WHERE ip = ? AND blocked_until IS NOT NULL", ip,
+	).Scan(&seconds)
+	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read login throttle: %w", err)
 	}
-	if time.Now().Before(blocked.Time) {
-		return &blocked.Time, nil
+	if seconds.Valid && seconds.Int64 > 0 {
+		until := time.Now().Add(time.Duration(seconds.Int64) * time.Second)
+		return &until, nil
 	}
 	return nil, nil
 }
