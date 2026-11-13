@@ -37,6 +37,10 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleCreateDatabase(cmd)
 	case "list_database_roles":
 		return h.handleListDatabaseRoles(cmd)
+	case "create_database_role":
+		return h.handleManageDatabaseRole(cmd, "create")
+	case "drop_database_role":
+		return h.handleManageDatabaseRole(cmd, "drop")
 	case "create_site_backup":
 		return h.handleCreateSiteBackup(cmd)
 	case "create_database_backup":
@@ -236,6 +240,17 @@ func (h *CommandHandler) handleTestDatabaseConnection(cmd *shared.Command) *shar
 	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL connection test succeeded"}
 }
 
+
+func (h *CommandHandler) handleManageDatabaseRole(cmd *shared.Command, action string) *shared.Result {
+	var req shared.ManageDatabaseRole
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
+		return errorResult(cmd.Id, "invalid PostgreSQL role payload")
+	}
+	if err := managePostgresRole(req, action); err != nil {
+		return errorResult(cmd.Id, err.Error())
+	}
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: "PostgreSQL role " + action + " completed"}
+}
 
 func (h *CommandHandler) handleListDatabaseRoles(cmd *shared.Command) *shared.Result {
 	var req shared.ListDatabaseRoles
