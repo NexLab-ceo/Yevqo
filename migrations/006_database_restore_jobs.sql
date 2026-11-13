@@ -14,5 +14,5 @@ CREATE TABLE IF NOT EXISTS database_restore_jobs (
     KEY idx_database_restore_user (user_id, created_at),
     CONSTRAINT fk_database_restore_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_database_restore_backup FOREIGN KEY (backup_id) REFERENCES backups(id) ON DELETE CASCADE,
-    CONSTRAINT fk_database_restore_target FOREIGN KEY (target_database_id) REFERENCES databases(id) ON DELETE CASCADE
+    CONSTRAINT fk_database_restore_target FOREIGN KEY (target_database_id) REFERENCES db_instances(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
