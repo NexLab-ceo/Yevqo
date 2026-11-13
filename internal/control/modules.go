@@ -253,8 +253,8 @@ func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Reques
 		res,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status='stopping' WHERE id=? AND user_id=? AND status='ready'`,id,u.ID)
 		if err!=nil { apiError(w,shared.ErrInternal("could not lock database server state"));return }
 		if n,_:=res.RowsAffected();n!=1 { apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return }
-	} else if status=="stopped" {
-		res,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status='starting' WHERE id=? AND user_id=? AND status='stopped'`,id,u.ID)
+	} else {
+		res,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status='starting' WHERE id=? AND user_id=? AND status=?`,id,u.ID,status)
 		if err!=nil { apiError(w,shared.ErrInternal("could not lock database server state"));return }
 		if n,_:=res.RowsAffected();n!=1 { apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return }
 	}
