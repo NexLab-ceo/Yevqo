@@ -151,6 +151,7 @@ export async function getSettings() { return request('GET', '/api/settings'); }
 export async function saveSettings(settings) { return request('PUT', '/api/settings', settings); }
 export async function getReports() { return request('GET', '/api/reports'); }
 export async function listBackups() { return request('GET', '/api/backups'); }
+export async function getDatabaseBackupChunk(id, offset, length = 262144) { return request('GET', `/api/backups/${id}/chunk?offset=${offset}&length=${length}`); }
 
 export async function deleteSite(deviceId, siteId) { return request('DELETE', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}`); }
 
