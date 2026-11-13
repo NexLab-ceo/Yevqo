@@ -8,18 +8,23 @@
     import StatusDot from '$lib/components/StatusDot.svelte';
 
     let loading = true;
+    let refreshing = false;
     let sites = [];
 
-    // Загружаем все сайты.
-    onMount(async () => {
+    // Загружаем сайты повторно по запросу пользователя.
+    async function loadSites() {
+        refreshing = true;
         const res = await listSites();
         if (res.ok) {
-            sites = res.data.sites || [];
+            sites = res.data?.sites || [];
         } else {
             notify(res.error || 'Не удалось загрузить сайты', 'error');
         }
         loading = false;
-    });
+        refreshing = false;
+    }
+
+    onMount(loadSites);
 
     // Переход к устройству (где находится сайт).
     function openDevice(deviceId) {
@@ -30,8 +35,9 @@
 <div class="page-header">
     <div>
         <h1 class="page-title">Сайты</h1>
-        <p class="page-desc">Все сайты на всех устройствах · обновите страницу, чтобы получить актуальный список</p>
+        <p class="page-desc">Все сайты на всех подключённых устройствах</p>
     </div>
+    <Button on:click={loadSites} disabled={refreshing} loading={refreshing}>↻ Обновить</Button>
 </div>
 
 {#if loading}
