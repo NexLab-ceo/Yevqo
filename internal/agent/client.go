@@ -192,6 +192,8 @@ func (c *Client) runSession(ctx context.Context) {
 		c.readPump(ctx)
 	}()
 
+	go c.metricsPump(ctx, done)
+
 	<-done
 
 	c.mu.Lock()
@@ -334,4 +336,29 @@ func (c *Client) SendEvent(event string, payload interface{}) error {
 	defer c.writeMu.Unlock()
 	_ = ws.SetWriteDeadline(time.Now().Add(WriteWait))
 	return ws.WriteMessage(websocket.BinaryMessage, msg)
+}
+
+
+// metricsPump periodically pushes device metrics to the Control Plane.
+func (c *Client) metricsPump(ctx context.Context, done <-chan struct{}) {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-done:
+			return
+		case <-ticker.C:
+			metrics, err := collectMetrics(c.cfg.DataRoot)
+			if err != nil {
+				log.Printf("metrics collection: %v", err)
+				continue
+			}
+			if err := c.SendEvent("metrics", metrics); err != nil {
+				log.Printf("metrics push: %v", err)
+				return
+			}
+		}
+	}
 }
