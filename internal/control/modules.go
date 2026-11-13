@@ -232,7 +232,7 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 	case http.MethodGet:writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"server":map[string]interface{}{"id":id,"device_id":did,"name":name,"engine":engine,"version":version,"port":port,"data_directory":dir,"network_access":network,"status":status,"created_at":created,"storage_limit_gb":storage,"ram_budget_mb":ram,"max_connections":maxConnections,"monitor_storage":monitor,"auto_start":autoStart,"process_policy":policy,"bind_address":bind,"ssl_mode":ssl,"auth_method":auth,"remote_access":remote}})
 	case http.MethodDelete:
 		var count int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM databases WHERE server_id=?`,id).Scan(&count);err!=nil{apiError(w,shared.ErrInternal("could not inspect databases"));return};if count>0{apiError(w,shared.ErrBadRequest("remove or migrate databases before removing this server"));return}
-		_,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM database_servers WHERE id=? AND user_id=? AND status IN ('planned','error')`,id,u.ID);if err!=nil{apiError(w,shared.ErrInternal("could not remove server metadata"));return};writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
+		_,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM database_servers WHERE id=? AND user_id=? AND status IN ('planned','error','stopped')`,id,u.ID);if err!=nil{apiError(w,shared.ErrInternal("could not remove server metadata"));return};writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	default:http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
 }
