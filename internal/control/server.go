@@ -113,6 +113,7 @@ func (s *Server) registerRoutes() {
 	// --- API для пользователей ---
 	s.mux.HandleFunc("/api/register", s.handleRegister)
 	s.mux.HandleFunc("/api/login", s.handleLogin)
+	s.mux.HandleFunc("/api/password", s.RequireAuth(s.handleChangePassword))
 	s.mux.HandleFunc("/api/logout", s.handleLogout)
 	s.mux.HandleFunc("/api/me", s.RequireAuth(s.handleMe))
 	s.mux.HandleFunc("/api/devices", s.RequireAuth(s.handleDevices))
