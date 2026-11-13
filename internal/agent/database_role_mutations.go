@@ -46,7 +46,8 @@ func managePostgresRole(req shared.ManageDatabaseRole, action string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, psql, "-X", "-w", "-v", "ON_ERROR_STOP=1", "-h", prefix+"/tmp", "-p", fmt.Sprint(req.Port), "-d", "postgres", "-c", query)
+	cmd := exec.CommandContext(ctx, psql, "-X", "-w", "-v", "ON_ERROR_STOP=1", "-h", prefix+"/tmp", "-p", fmt.Sprint(req.Port), "-d", "postgres")
+	cmd.Stdin = strings.NewReader(query)
 	env := make([]string, 0, len(os.Environ())+1)
 	for _, item := range os.Environ() {
 		if !strings.HasPrefix(item, "PG") {
