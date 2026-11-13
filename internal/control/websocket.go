@@ -257,6 +257,17 @@ func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 		if err := shared.Unmarshal(ev.Payload, &le); err == nil {
 			log.Printf("[%s/%s] %s", c.Device.Hostname, le.SiteId, le.Line)
 		}
+	case "metrics":
+		var metrics shared.MetricsResult
+		if err := shared.Unmarshal(ev.Payload, &metrics); err == nil && c.Device != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			_, dbErr := srv.db.conn.ExecContext(ctx,
+				"INSERT INTO device_metrics(device_id,cpu_percent,load_1m,memory_total_bytes,memory_available_bytes,storage_total_bytes,storage_available_bytes,temperature_celsius,captured_at) VALUES(?,?,?,?,?,?,?,?,?)",
+				c.Device.ID, metrics.CPUPercent, metrics.Load1m, metrics.MemoryTotalBytes, metrics.MemoryAvailableBytes,
+				metrics.StorageTotalBytes, metrics.StorageAvailableBytes, metrics.TemperatureCelsius, metrics.CapturedAt)
+			cancel()
+			if dbErr != nil { log.Printf("store pushed metrics: %v", dbErr) }
+		}
 	case "status":
 		var se shared.StatusEvent
 		if err := shared.Unmarshal(ev.Payload, &se); err == nil {
