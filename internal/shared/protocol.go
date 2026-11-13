@@ -53,6 +53,12 @@ type InstallDatabaseServer struct {
 	SSLMode string `json:"ssl_mode"`
 }
 
+type DatabaseServerAction struct {
+	ServerID int64 `json:"server_id"`
+	Port uint32 `json:"port"`
+	DataDirectory string `json:"data_directory"`
+}
+
 type DatabaseServerInstallResult struct {
 	Version string `json:"version"`
 	DataDirectory string `json:"data_directory"`
