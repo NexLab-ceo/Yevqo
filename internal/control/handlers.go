@@ -50,13 +50,21 @@ func apiError(w http.ResponseWriter, err error) {
 // until an explicit trusted-proxy configuration exists.
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
-	if err == nil && net.ParseIP(host) != nil {
-		return host
+	if err != nil {
+		host = strings.Trim(r.RemoteAddr, "[]")
 	}
-	if ip := net.ParseIP(strings.Trim(r.RemoteAddr, "[]")); ip != nil {
-		return ip.String()
+	peer := net.ParseIP(host)
+	if peer == nil {
+		return "unknown"
 	}
-	return "unknown"
+	// Cloudflared commonly connects from loopback. Only in that case accept
+	// its single-hop CF-Connecting-IP header; never trust arbitrary X-Forwarded-For.
+	if peer.IsLoopback() {
+		if forwarded := net.ParseIP(strings.TrimSpace(r.Header.Get("CF-Connecting-IP"))); forwarded != nil {
+			return forwarded.String()
+		}
+	}
+	return peer.String()
 }
 
 // ============================================================
