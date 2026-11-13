@@ -17,8 +17,7 @@ func managePostgresDatabasePrivilege(req shared.ManageDatabasePrivilege) error {
  if req.ServerID<1 || req.Port<1024 || req.Port>65535 || !postgresDatabaseName.MatchString(req.Database) || !postgresRoleName.MatchString(req.Role) || strings.HasPrefix(strings.ToLower(req.Role),"pg_") || req.Role=="postgres" { return fmt.Errorf("invalid database privilege request") }
  if req.Action!="grant" && req.Action!="revoke" { return fmt.Errorf("action must be grant or revoke") }
  scope:=req.Scope;if scope==""{scope="database"}
- if scope=="database" {if req.Privilege!="CONNECT"&&req.Privilege!="CREATE"&&req.Privilege!="TEMPORARY"{return fmt.Errorf("database privilege must be CONNECT, CREATE or TEMPORARY")};if req.Schema!=""{return fmt.Errorf("schema must be empty for database scope")}}
- else if scope=="schema" {if !postgresDatabaseName.MatchString(req.Schema){return fmt.Errorf("invalid schema name")};if req.Privilege!="USAGE"&&req.Privilege!="CREATE"{return fmt.Errorf("schema privilege must be USAGE or CREATE")}}
+ if scope=="database" {if req.Privilege!="CONNECT"&&req.Privilege!="CREATE"&&req.Privilege!="TEMPORARY"{return fmt.Errorf("database privilege must be CONNECT, CREATE or TEMPORARY")};if req.Schema!=""{return fmt.Errorf("schema must be empty for database scope")}} else if scope=="schema" {if !postgresDatabaseName.MatchString(req.Schema){return fmt.Errorf("invalid schema name")};if req.Privilege!="USAGE"&&req.Privilege!="CREATE"{return fmt.Errorf("schema privilege must be USAGE or CREATE")}}
  else{return fmt.Errorf("scope must be database or schema")}
  prefix:=os.Getenv("PREFIX"); if prefix=="" {return fmt.Errorf("Termux PREFIX is not set")}
  psql,err:=exec.LookPath("psql");if err!=nil{return fmt.Errorf("psql is not installed")}
