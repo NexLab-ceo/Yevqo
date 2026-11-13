@@ -26,7 +26,11 @@
     let restoreNotice = '';
     let testingConnection = false;
     let connectionTestResult = '';
-    let restoreTargetId = '';\n    let liveStats = null;\n    let statsBusy = false;\n    let statsError = '';\n    let downloadingBackupID = '';
+    let restoreTargetId = '';
+    let liveStats = null;
+    let statsBusy = false;
+    let statsError = '';
+    let downloadingBackupID = '';
 
     $: deviceSites = database ? sites.filter((entry) => Number(entry.device_id) === Number(database.device_id)) : [];
     $: availableSites = deviceSites.filter((entry) => !connections.some((link) => link.site_id === entry.site?.site_id));
