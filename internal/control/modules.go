@@ -222,6 +222,7 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 		if inventory.Roles==nil { inventory.Roles=[]shared.DatabaseRole{} }
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"roles":inventory.Roles});return
 	}
+	if len(parts)==2&&(parts[1]=="start"||parts[1]=="stop")&&r.Method==http.MethodPost{s.handleDatabaseServerAction(w,r,id,parts[1]);return}
 	if len(parts)==2&&parts[1]=="install"&&r.Method==http.MethodPost{s.handleInstallDatabaseServer(w,r,id);return}
 	if len(parts)!=1{http.NotFound(w,r);return}
 	var did int64;var name,engine,version,dir,network,status,storage,policy,bind,ssl,auth string;var port,ram,maxConnections int;var monitor,autoStart,remote bool;var created time.Time
@@ -234,6 +235,40 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 		_,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM database_servers WHERE id=? AND user_id=? AND status IN ('planned','error')`,id,u.ID);if err!=nil{apiError(w,shared.ErrInternal("could not remove server metadata"));return};writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	default:http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Request,id int64,action string) {
+	u:=UserFromContext(r.Context())
+	var deviceID int64;var engine,status,dataDir string;var port int
+	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,data_directory,port FROM database_servers WHERE id=? AND user_id=?`,id,u.ID).Scan(&deviceID,&engine,&status,&dataDir,&port)
+	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
+	if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
+	if engine!="postgresql" { apiError(w,shared.ErrBadRequest("Agent lifecycle actions currently support PostgreSQL only"));return }
+	if action=="start"&&status!="stopped"&&status!="ready" { apiError(w,shared.ErrBadRequest("only a stopped PostgreSQL server can be started"));return }
+	if action=="stop"&&status=="stopped" { writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"status":"stopped","message":"PostgreSQL is already stopped"});return }
+	if action=="stop"&&status!="ready" { apiError(w,shared.ErrBadRequest("only a ready PostgreSQL server can be stopped"));return }
+	conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
+	previous:=status
+	if action=="stop" {
+		res,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status='stopping' WHERE id=? AND user_id=? AND status='ready'`,id,u.ID)
+		if err!=nil { apiError(w,shared.ErrInternal("could not lock database server state"));return }
+		if n,_:=res.RowsAffected();n!=1 { apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return }
+	} else if status=="stopped" {
+		res,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status='starting' WHERE id=? AND user_id=? AND status='stopped'`,id,u.ID)
+		if err!=nil { apiError(w,shared.ErrInternal("could not lock database server state"));return }
+		if n,_:=res.RowsAffected();n!=1 { apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return }
+	}
+	ctx,cancel:=context.WithTimeout(r.Context(),110*time.Second);defer cancel()
+	result,err:=conn.SendCommand(ctx,action+"_database_server",&shared.DatabaseServerAction{ServerID:id,Port:uint32(port),DataDirectory:dataDir})
+	if err!=nil||!result.Ok {
+		if previous=="ready"||previous=="stopped" { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=? AND status IN ('starting','stopping')`,previous,id,u.ID) }
+		if err!=nil { apiError(w,shared.ErrInternal("Agent PostgreSQL lifecycle command failed"));return }
+		apiError(w,shared.ErrBadRequest(result.Message));return
+	}
+	target:="ready";if action=="stop" { target="stopped" }
+	if _,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=?`,target,id,u.ID);err!=nil { apiError(w,shared.ErrInternal("PostgreSQL action succeeded but server status could not be saved"));return }
+	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_"+action,Details:map[string]interface{}{"server_id":id}})
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"status":target,"message":"PostgreSQL server "+action+" completed"})
 }
 
 func (s *Server) handleDatabases(w http.ResponseWriter,r *http.Request) {
