@@ -63,7 +63,8 @@ func NewServer(cfg Config) (*Server, error) {
 		}
 		log.Printf("migrations applied from %s", migrationsDir)
 	} else {
-		log.Printf("no migrations dir at %s (skipping)", migrationsDir)
+		db.Close()
+		return nil, fmt.Errorf("required migrations directory is missing: %s: %w", migrationsDir, err)
 	}
 
 	// Чистим просроченные сессии при старте (не критично, если упадёт).
