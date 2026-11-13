@@ -1,8 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/sh
 set -e
 PREFIX="/data/data/com.termux/files/usr"
-if [ -t 0 ]; then
-  "$PREFIX/bin/veltrix-setup"
+if [ -r /dev/tty ]; then
+  "$PREFIX/bin/veltrix-setup" </dev/tty >/dev/tty 2>&1
 else
   echo "VELTRIX all installed. Run: veltrix-setup (choose server, agent or both)."
 fi
