@@ -167,30 +167,30 @@ type MetricsResult struct {
 }
 
 type CreateSite struct {
-	SiteId string
-	Port uint32
-	Runtime string
+	SiteId  string `json:"site_id"`
+	Port    uint32 `json:"port"`
+	Runtime string `json:"runtime"`
 }
 
 type StartSite struct {
-	SiteId  string
-	Path    string
-	Port    uint32
-	Runtime string
-	Env map[string]string `json:"env,omitempty"`
+	SiteId  string            `json:"site_id"`
+	Path    string            `json:"path"`
+	Port    uint32            `json:"port"`
+	Runtime string            `json:"runtime"`
+	Env     map[string]string `json:"env,omitempty"`
 }
 
 type StopSite struct {
-	SiteId string
+	SiteId string `json:"site_id"`
 }
 
 type GitPull struct {
-	SiteId string
+	SiteId string `json:"site_id"`
 }
 
 type GetLogs struct {
-	SiteId string
-	Lines  uint32
+	SiteId string `json:"site_id"`
+	Lines  uint32 `json:"lines"`
 }
 
 type CreateTunnel struct {
