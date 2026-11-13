@@ -93,6 +93,13 @@ type DatabaseRolesResult struct {
 	Roles []DatabaseRole `json:"roles"`
 }
 
+type ManageDatabaseRole struct {
+	ServerID int64 `json:"server_id"`
+	Port uint32 `json:"port"`
+	Name string `json:"name"`
+	Password string `json:"password,omitempty"`
+}
+
 type CreateSiteBackup struct { SiteId string }
 
 type CreateDatabaseBackup struct {
