@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/go-sql-driver/mysql"
 )
@@ -49,6 +48,3 @@ func ensureMySQLDatabase(ctx context.Context, appDSN string) error {
 	return nil
 }
 
-func defaultDatabaseBootstrapTimeout() time.Duration {
-	return 10 * time.Second
-}
