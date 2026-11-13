@@ -43,7 +43,17 @@ func NewServer(cfg Config) (*Server, error) {
 	credentialKey, err := loadCredentialKey(cfg.DataRoot)
 	if err != nil { return nil, fmt.Errorf("load database credential key: %w", err) }
 
-	// Подключаемся к MySQL.
+	// Создаём собственную базу Control Plane, если она ещё не существует.
+	// MariaDB уже запущена установщиком; локальный root доступ используется
+	// только для CREATE DATABASE. Все рабочие запросы идут через отдельную учётную запись из MySQLDSN.
+	bootstrapCtx, bootstrapCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := ensureMySQLDatabase(bootstrapCtx, cfg.MySQLDSN); err != nil {
+		bootstrapCancel()
+		return nil, fmt.Errorf("bootstrap Control Plane database: %w", err)
+	}
+	bootstrapCancel()
+
+	// Подключаемся к собственной базе под обычной учётной записью приложения.
 	db, err := NewDB(cfg.MySQLDSN)
 	if err != nil {
 		return nil, fmt.Errorf("connect mysql: %w", err)
