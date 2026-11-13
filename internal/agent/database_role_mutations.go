@@ -39,7 +39,7 @@ func managePostgresRole(req shared.ManageDatabaseRole, action string) error {
 		return fmt.Errorf("psql is not installed")
 	}
 	identifier := `"` + strings.ReplaceAll(req.Name, `"`, `""`) + `"`
-	query := "CREATE ROLE " + identifier + " LOGIN PASSWORD " + postgresSQLLiteral(req.Password)
+	query := "CREATE ROLE " + identifier + " LOGIN PASSWORD " + postgresSQLLiteral(req.Password) + " NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
 	if action == "password" { query = "ALTER ROLE " + identifier + " PASSWORD " + postgresSQLLiteral(req.Password) }
 	if action == "drop" {
 		query = "DROP ROLE " + identifier
