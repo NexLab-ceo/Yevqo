@@ -223,6 +223,7 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"roles":inventory.Roles});return
 	}
 	if len(parts)==2&&(parts[1]=="roles")&&r.Method==http.MethodPost{s.handleDatabaseServerRoleMutation(w,r,id);return}
+	if len(parts)==2&&parts[1]=="privileges"&&r.Method==http.MethodPost{s.handleDatabaseServerPrivileges(w,r,id);return}
 	if len(parts)==2&&(parts[1]=="start"||parts[1]=="stop")&&r.Method==http.MethodPost{s.handleDatabaseServerAction(w,r,id,parts[1]);return}
 	if len(parts)==2&&parts[1]=="install"&&r.Method==http.MethodPost{s.handleInstallDatabaseServer(w,r,id);return}
 	if len(parts)!=1{http.NotFound(w,r);return}
