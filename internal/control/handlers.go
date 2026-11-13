@@ -457,8 +457,8 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 
 	rest := strings.TrimPrefix(r.URL.Path, "/api/sites/")
 	parts := strings.Split(rest, "/")
-	if len(parts) != 2 {
-		apiError(w, shared.ErrBadRequest("expected /api/sites/{deviceID}/{siteID}"))
+	if len(parts) != 2 && !(len(parts) == 3 && parts[2] == "cmd") {
+		apiError(w, shared.ErrBadRequest("expected /api/sites/{deviceID}/{siteID}[/cmd]"))
 		return
 	}
 
@@ -478,6 +478,37 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 	sites, _ := s.db.ListSitesByDevice(r.Context(), deviceID)
 	for _, st := range sites {
 		if st.SiteID != siteID { continue }
+		if len(parts) == 3 && parts[2] == "cmd" {
+			if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+			var in struct { Action string `json:"action"` }
+			if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
+			if in.Action != "deploy" && in.Action != "rebuild" && in.Action != "restart" && in.Action != "stop" {
+				apiError(w, shared.ErrBadRequest("unsupported site action")); return
+			}
+			conn, online := s.hub.Get(deviceID)
+			if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
+			agentAction := in.Action
+			payload := interface{}(&shared.SiteAction{SiteId: st.SiteID, Path: st.Path, Port: uint32(st.Port), Runtime: st.Runtime})
+			if in.Action == "stop" {
+				agentAction = "stop_site"
+				payload = &shared.StopSite{SiteId: st.SiteID}
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+			defer cancel()
+			result, err := conn.SendCommand(ctx, agentAction, payload)
+			if err != nil { apiError(w, shared.ErrInternal("site command failed: " + err.Error())); return }
+			if !result.Ok { writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "message": result.Message}); return }
+			if in.Action == "stop" {
+				_ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteStopped, 0)
+			} else {
+				var started shared.StartSiteResult
+				_ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteRunning, 0)
+				_ = started
+			}
+			_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(user.ID), DeviceID: shared.PtrInt64(deviceID), Action: "site_" + in.Action, Details: map[string]interface{}{"site_id": siteID, "ok": true}, IP: clientIP(r)})
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": result.Message})
+			return
+		}
 		if r.Method == http.MethodPatch {
 			var in struct { Domain string }
 			if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
