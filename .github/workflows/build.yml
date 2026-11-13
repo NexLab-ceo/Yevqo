@@ -64,6 +64,14 @@ jobs:
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Both packages will use version $VERSION"
 
+      - name: Validate package setup scripts
+        run: |
+          bash -n packaging/setup-agent.sh
+          bash -n packaging/setup-control.sh
+          bash -n packaging/setup-all.sh
+          sh -n packaging/postinst-all
+          sh -n packaging/postinst-agent
+
       - name: Package veltrix-all and veltrix-agent
         shell: bash
         run: |
