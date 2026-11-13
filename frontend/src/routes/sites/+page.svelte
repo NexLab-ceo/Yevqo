@@ -10,6 +10,8 @@
     let loading = true;
     let refreshing = false;
     let busySite = '';
+    let busyBulk = false;
+    let selectedSites = [];
     let sites = [];
 
     // Загружаем сайты повторно по запросу пользователя.
@@ -40,6 +42,34 @@
         return item.device_id + ':' + item.site.site_id;
     }
 
+    $: selectedRunning = sites.filter(item => selectedSites.includes(siteKey(item)) && item.site.status === 'running');
+    $: allSelected = sites.length > 0 && selectedSites.length === sites.length;
+
+    function toggleSelected(item) {
+        const key = siteKey(item);
+        selectedSites = selectedSites.includes(key)
+            ? selectedSites.filter(value => value !== key)
+            : [...selectedSites, key];
+    }
+
+    function toggleAll() {
+        selectedSites = allSelected ? [] : sites.map(siteKey);
+    }
+
+    async function stopSelected() {
+        if (busyBulk || selectedRunning.length === 0) return;
+        busyBulk = true;
+        let failed = 0;
+        for (const item of selectedRunning) {
+            const result = await sendCommand(item.device_id, 'stop_site', { site_id: item.site.site_id });
+            if (!result.ok || !result.data?.ok) failed++;
+        }
+        busyBulk = false;
+        selectedSites = [];
+        await loadSites();
+        notify(failed ? `Остановлено с ошибками: ${selectedRunning.length - failed}, ошибок: ${failed}` : 'Выбранные сайты остановлены', failed ? 'error' : 'success');
+    }
+
     async function runSiteAction(item, action) {
         const site = item.site;
         const key = siteKey(item);
@@ -64,7 +94,13 @@
         <h1 class="page-title">Сайты</h1>
         <p class="page-desc">Все сайты на всех подключённых устройствах</p>
     </div>
-    <Button on:click={loadSites} disabled={refreshing} loading={refreshing}>↻ Обновить</Button>
+    <div class="header-actions">
+        {#if sites.length > 0}
+            <Button size="sm" on:click={toggleAll}>{allSelected ? 'Снять выбор' : 'Выбрать все'}</Button>
+            <Button size="sm" variant="danger" disabled={selectedRunning.length === 0 || busyBulk} loading={busyBulk} on:click={stopSelected}>Остановить выбранные ({selectedRunning.length})</Button>
+        {/if}
+        <Button on:click={loadSites} disabled={refreshing || busyBulk} loading={refreshing}>↻ Обновить</Button>
+    </div>
 </div>
 
 {#if loading}
@@ -81,6 +117,9 @@
         {#each sites as item (item.device_id + '-' + item.site.site_id)}
             <Card clickable on:click={() => openSite(item)}>
                 <div class="site-row">
+                    <label class="site-select" on:click|stopPropagation>
+                        <input type="checkbox" checked={selectedSites.includes(siteKey(item))} on:change={() => toggleSelected(item)} aria-label={'Выбрать '+item.site.site_id}/>
+                    </label>
                     <div class="site-info">
                         <div class="site-name">
                             {item.site.site_id}
@@ -118,6 +157,9 @@
 {/if}
 
 <style>
+    .header-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+    .site-select{display:flex;align-items:center;flex-shrink:0;cursor:pointer}
+    .site-select input{width:16px;height:16px;accent-color:#3B82F6;cursor:pointer}
     .sites-list {
         display: flex;
         flex-direction: column;
@@ -128,7 +170,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        gap: 16px;
+        gap: 12px;
     }
 
     .site-info {
