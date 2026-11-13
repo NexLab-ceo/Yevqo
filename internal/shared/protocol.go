@@ -68,6 +68,25 @@ type CreateDatabase struct {
 	Port uint32 `json:"port"`
 }
 
+type ListDatabaseRoles struct {
+	ServerID int64 `json:"server_id"`
+	Port uint32 `json:"port"`
+}
+
+type DatabaseRole struct {
+	Name string `json:"name"`
+	CanLogin bool `json:"can_login"`
+	IsSuperuser bool `json:"is_superuser"`
+	IsReplication bool `json:"is_replication"`
+	BypassRLS bool `json:"bypass_rls"`
+	Inherit bool `json:"inherit"`
+	ConnectionLimit int `json:"connection_limit"`
+}
+
+type DatabaseRolesResult struct {
+	Roles []DatabaseRole `json:"roles"`
+}
+
 type CreateSiteBackup struct { SiteId string }
 
 type CreateDatabaseBackup struct {
