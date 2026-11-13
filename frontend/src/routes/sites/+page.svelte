@@ -1,7 +1,7 @@
 <script>
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
-    import { listSites } from '$lib/api.js';
+    import { listSites, sendCommand } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -9,6 +9,7 @@
 
     let loading = true;
     let refreshing = false;
+    let busySite = '';
     let sites = [];
 
     // Загружаем сайты повторно по запросу пользователя.
@@ -29,6 +30,28 @@
     // Переход к устройству (где находится сайт).
     function openDevice(deviceId) {
         goto(`/devices/${deviceId}`);
+    }
+
+    function siteKey(item) {
+        return item.device_id + ':' + item.site.site_id;
+    }
+
+    async function runSiteAction(item, action) {
+        const site = item.site;
+        const key = siteKey(item);
+        if (busySite) return;
+        busySite = key;
+        const payload = action === 'start_site'
+            ? { site_id: site.site_id, path: site.path, port: site.port, runtime: site.runtime }
+            : { site_id: site.site_id };
+        const result = await sendCommand(item.device_id, action, payload);
+        if (!result.ok || !result.data?.ok) {
+            notify(result.error || result.data?.message || 'Не удалось выполнить команду', 'error');
+        } else {
+            notify(action === 'start_site' ? 'Сайт запущен' : 'Сайт остановлен', 'success');
+            await loadSites();
+        }
+        busySite = '';
     }
 </script>
 
@@ -72,9 +95,18 @@
                     <div class="site-status">
                         <StatusDot status={item.site.status} />
                         <span class="status-text">
-                            {item.site.status === 'running' ? 'Работает' : 'Остановлен'}
+                            {item.site.status === 'running' ? 'Работает' : item.site.status === 'error' ? 'Ошибка' : 'Остановлен'}
                         </span>
                     </div>
+                </div>
+                <div class="site-actions">
+                    {#if item.site.status === 'running'}
+                        <Button size="sm" disabled={busySite !== ''} on:click|stopPropagation={() => runSiteAction(item, 'stop_site')}>Остановить</Button>
+                        <Button size="sm" disabled={busySite !== ''} on:click|stopPropagation={() => runSiteAction(item, 'start_site')}>Перезапустить</Button>
+                    {:else}
+                        <Button size="sm" variant="primary" disabled={busySite !== ''} loading={busySite === siteKey(item)} on:click|stopPropagation={() => runSiteAction(item, 'start_site')}>Запустить</Button>
+                    {/if}
+                    <Button size="sm" variant="ghost" on:click|stopPropagation={() => openDevice(item.device_id)}>Устройство</Button>
                 </div>
             </Card>
         {/each}
@@ -120,6 +152,14 @@
         font-size: 11px;
         color: #64748B;
         margin-top: 4px;
+    }
+
+    .site-actions {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin-top: 12px;
     }
 
     .site-status {
