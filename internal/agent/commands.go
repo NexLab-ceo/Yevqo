@@ -45,6 +45,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleManageDatabaseRole(cmd, "password")
 	case "manage_database_privilege":
 		return h.handleManageDatabasePrivilege(cmd)
+	case "get_database_stats":
+		return h.handleGetDatabaseStats(cmd)
 	case "create_site_backup":
 		return h.handleCreateSiteBackup(cmd)
 	case "create_database_backup":
