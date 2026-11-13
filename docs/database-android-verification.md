@@ -36,28 +36,50 @@ PGPASSWORD='<TEMP_PASSWORD>' psql -h "$PREFIX/tmp" -p <PORT> \
 
 При отказе назначьте минимум CONNECT на database, USAGE на schema и необходимые table privileges. Не выдавайте SUPERUSER.
 
-## 4. Тестовый сайт и PDO
+## 4. Проверка именно из процесса тестового сайта (PDO)
 
-Создайте отдельный тестовый сайт на устройстве и передайте credentials через Environment/Secrets (не в репозитории):
+VELTRIX Agent запускает PHP-сайт непосредственно в Termux, не в Docker-контейнере. DB environment не следует экспортировать в обычный Termux shell: Control Plane защищённо инжектирует её в процесс сайта при старте.
 
-```env
-DB_CONNECTION=pgsql
-DB_HOST=<host-reachable-from-site-container>
-DB_PORT=<PORT>
-DB_DATABASE=veltrix_chain_test
-DB_USERNAME=veltrix_chain_app
-DB_PASSWORD=<TEMP_PASSWORD>
-```
+1. Создайте отдельный PHP-сайт, например \`veltrix-db-check\`.
+2. В Database Details для \`veltrix_chain_test\` привяжите тестовый сайт через **Attach to site**. Связь доступна только для сайта и БД на одном Android device; хост автоматически устанавливается как \`127.0.0.1\`.
+3. Если сайт уже запущен — остановите и запустите его заново. DB_* переменные подаются именно при старте процесса.
+4. В редакторе файлов сайта временно создайте \`db-check.php\` с содержимым ниже. Этот файл не выводит пароль и не отображает детали исключения.
 
-`DB_HOST`/`DB_PORT` должны быть доступны из network namespace сайта. `127.0.0.1` внутри контейнера обычно указывает на контейнер, а не Android host. Используйте фактический адрес/forwarding из Dock, не угадывайте.
+\`\`\`php
+<?php
+header('Content-Type: application/json; charset=utf-8');
+try {
+    if (!in_array('pgsql', PDO::getAvailableDrivers(), true)) {
+        throw new RuntimeException('PDO_PGSQL driver unavailable');
+    }
+    $host = getenv('DB_HOST') ?: '127.0.0.1';
+    $port = getenv('DB_PORT') ?: '5432';
+    $database = getenv('DB_DATABASE') ?: '';
+    $username = getenv('DB_USERNAME') ?: '';
+    $password = getenv('DB_PASSWORD');
+    $sslmode = getenv('DB_SSLMODE') ?: 'prefer';
+    if ($database === '' || $username === '' || $password === false) {
+        throw new RuntimeException('Managed DB environment is missing');
+    }
+    $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s;sslmode=%s',
+        $host, $port, $database, $sslmode);
+    $pdo = new PDO($dsn, $username, $password, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
+    $row = $pdo->query('SELECT current_database() AS db, current_user AS role, 1 AS connection_ok')
+        ->fetch(PDO::FETCH_ASSOC);
+    echo json_encode(['ok' => true, 'result' => $row], JSON_UNESCAPED_SLASHES);
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'error' => 'PDO/database connection check failed']);
+}
+\`\`\`
 
-В контейнере сайта:
+5. Откройте \`http://127.0.0.1:<SITE_PORT>/db-check.php\` на самом телефоне (или фактический локальный адрес/домен тестового сайта). Ожидается JSON \`ok: true\`, имя \`veltrix_chain_test\`, роль приложения и \`connection_ok: 1\`.
+6. После успешной проверки **удалите db-check.php**. Не оставляйте диагностический endpoint доступным публично.
 
-```sh
-php -r '$p=new PDO("pgsql:host=".getenv("DB_HOST").";port=".getenv("DB_PORT").";dbname=".getenv("DB_DATABASE"),getenv("DB_USERNAME"),getenv("DB_PASSWORD")); echo $p->query("SELECT current_database(), current_user")->fetchColumn(), PHP_EOL;'
-```
-
-Для Laravel также проверьте безопасный `SELECT 1` или `php artisan db:show`, если команда поддерживается. Не запускайте миграции до подтверждения тестового target.
+Для Laravel дополнительно проверьте безопасный \`SELECT 1\` или \`php artisan db:show\` из запущенного сайта, если команда поддерживается. Не запускайте миграции до подтверждения, что target — тестовая БД.
 
 ## 5. Критерии успешного теста
 
