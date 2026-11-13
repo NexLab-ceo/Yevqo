@@ -25,7 +25,7 @@
 {:else if active==='Resources'}
 <section class="panel"><h2>Resource budget</h2><dl><div><dt>RAM budget</dt><dd>{server.ram_budget_mb?server.ram_budget_mb+' MB':'Auto'}</dd></div><div><dt>Storage allocation</dt><dd>{server.storage_limit_gb==='unlimited'?'Unlimited':server.storage_limit_gb+' GB'}</dd></div><div><dt>Maximum connections</dt><dd>{server.max_connections}</dd></div><div><dt>Storage monitoring</dt><dd>{server.monitor_storage?'Enabled':'Disabled'}</dd></div></dl></section>
 {:else if active==='Logs'}
-<section class="panel"><h2>Database Server logs</h2><p class="muted">No engine logs are available before installation. Control Plane activity is recorded in the global Logs section.</p></section>
+<section class="panel"><h2>Database Server activity</h2><p class="muted">Control Plane events associated with this server. PostgreSQL engine logs require a separate agent log-stream feature.</p>{#if logs.length}{#each logs as entry}<div class="resource"><strong>{entry.action.replaceAll('_',' ')}</strong><small>{new Date(entry.created_at).toLocaleString()} · {JSON.stringify(entry.details||{})}</small></div>{/each}{:else}<p class="muted">No recorded events for this server yet.</p>{/if}<a href="/logs">Open all activity logs</a></section>
 {:else if active==='Backups'}
 <section class="panel"><h2>Server backups</h2>{#if backups.length}{#each backups as b}<div class="resource"><strong>{b.file_name}</strong><small>{b.status}</small></div>{/each}{:else}<p class="muted">No database-server backups have been created.</p>{/if}</section>
 {:else if active==='Configuration'}
