@@ -167,6 +167,7 @@ export async function installDatabaseServer(id) { return request('POST', `/api/d
 export async function startDatabaseServer(id) { return request('POST', `/api/databases/servers/${id}/start`, {}); }
 export async function stopDatabaseServer(id) { return request('POST', `/api/databases/servers/${id}/stop`, {}); }
 export async function listDatabaseServerRoles(id) { return request('GET', `/api/databases/servers/${id}/roles`); }
+export async function mutateDatabaseServerRole(id, action, name, password = '') { return request('POST', `/api/databases/servers/${id}/roles`, { action, name, password }); }
 
 // === Database provisioning and site connections ===
 export async function createDatabase(input) { return request('POST', '/api/databases', input); }
