@@ -35,7 +35,7 @@ func ensureMySQLDatabase(ctx context.Context, appDSN string) error {
 		return fmt.Errorf("MariaDB client is required to bootstrap the Control Plane database: %w", err)
 	}
 
-	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS \`%s\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci", name)
+	query := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci", name)
 	cmd := exec.CommandContext(ctx, client, "-u", "root", "-e", query)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
