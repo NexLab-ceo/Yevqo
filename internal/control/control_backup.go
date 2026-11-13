@@ -42,15 +42,29 @@ func (s *Server) handleControlPlaneBackup(w http.ResponseWriter, r *http.Request
 		apiError(w, shared.ErrInternal("could not prepare backup directory"))
 		return
 	}
-	cnf := filepath.Join(dir, ".veltrix-mysqldump.cnf")
-	cnfContent := fmt.Sprintf("[client]\nuser=%s\npassword=%s\nhost=%s\nport=%s\nprotocol=tcp\n",
-		cnfEscape(cfg.User), cnfEscape(cfg.Passwd), cnfEscape(host), cnfEscape(port))
-	if err := os.WriteFile(cnf, []byte(cnfContent), 0600); err != nil {
+	cnfFile, err := os.CreateTemp("", "veltrix-mysqldump-*.cnf")
+	if err != nil {
 		apiError(w, shared.ErrInternal("could not prepare secure database credentials"))
 		return
 	}
+	cnf := cnfFile.Name()
 	defer os.Remove(cnf)
-
+	cnfContent := fmt.Sprintf("[client]\\nuser=%s\\npassword=%s\\nhost=%s\\nport=%s\\nprotocol=tcp\\n",
+		cnfEscape(cfg.User), cnfEscape(cfg.Passwd), cnfEscape(host), cnfEscape(port))
+	if err := cnfFile.Chmod(0600); err != nil {
+		_ = cnfFile.Close()
+		apiError(w, shared.ErrInternal("could not secure database credentials"))
+		return
+	}
+	if _, err := cnfFile.WriteString(cnfContent); err != nil {
+		_ = cnfFile.Close()
+		apiError(w, shared.ErrInternal("could not prepare secure database credentials"))
+		return
+	}
+	if err := cnfFile.Close(); err != nil {
+		apiError(w, shared.ErrInternal("could not close database credential file"))
+		return
+	}
 	dumpBin, err := exec.LookPath("mariadb-dump")
 	if err != nil {
 		dumpBin, err = exec.LookPath("mysqldump")
