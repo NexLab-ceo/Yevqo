@@ -25,15 +25,15 @@ func (s *Server) handleDatabaseServerRoleMutation(w http.ResponseWriter, r *http
 	}
 	in.Action = strings.TrimSpace(in.Action)
 	in.Name = strings.TrimSpace(in.Name)
-	if in.Action != "create" && in.Action != "drop" {
-		apiError(w, shared.ErrBadRequest("action must be create or drop"))
+	if in.Action != "create" && in.Action != "drop" && in.Action != "password" {
+		apiError(w, shared.ErrBadRequest("action must be create, drop or password"))
 		return
 	}
 	if len(in.Name) < 1 || len(in.Name) > 63 {
 		apiError(w, shared.ErrBadRequest("role name must be 1–63 characters"))
 		return
 	}
-	if in.Action == "create" && (len(in.Password) < 12 || len(in.Password) > 256) {
+	if (in.Action == "create" || in.Action == "password") && (len(in.Password) < 12 || len(in.Password) > 256) {
 		apiError(w, shared.ErrBadRequest("password must be 12–256 characters"))
 		return
 	}
