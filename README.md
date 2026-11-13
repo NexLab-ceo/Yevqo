@@ -65,3 +65,10 @@ PostgreSQL installation, database creation, application-role provisioning, encry
 - Restore is available only into a new database on the original ready PostgreSQL server; it never overwrites the source database. Backup download and cross-device transfer remain pending.
 
 - Storage and RAM budgets, process policy and auto-start preferences are persisted as configuration; enforcement is not claimed until runtime quota and boot integration are implemented.
+
+
+### Android Agent connection (Termux)
+- The Control Plane registers the Agent WebSocket endpoint at `/ws`. For an Agent running on the same Android device, set `server_url` to `ws://127.0.0.1:8080/ws`. For an Agent on another device, replace `127.0.0.1` with the Control Plane device's reachable LAN or Tailscale address.
+- Authentication is sent by the Agent as the first WebSocket binary message using the protocol `AuthRequest` envelope. Its `token` field is the user's referral/authentication token. The endpoint does not require an Authorization header or a `?token=` query parameter.
+- The WebSocket route is intentionally unauthenticated at HTTP upgrade time; authentication happens immediately after upgrade in the first protocol message.
+- The HTTP logging middleware must preserve the `http.Hijacker` interface used by Gorilla WebSocket. The Control Plane's `responseWriter` forwards hijacking so the WebSocket handshake can complete.
