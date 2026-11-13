@@ -55,9 +55,10 @@ jobs:
 
       - name: Package .deb
         run: |
-          VERSION="0.1.0-dev"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="0.1.0-dev.${GITHUB_RUN_NUMBER}"
           fi
           echo "Building version: $VERSION"
 
