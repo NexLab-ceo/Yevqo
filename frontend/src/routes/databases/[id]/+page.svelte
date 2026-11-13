@@ -182,7 +182,7 @@
                 {#if actionError}<div class="error">{actionError}</div>{/if}
             </section>
         {:else if active === 'Logs'}
-            <section class="panel"><h2>Database logs</h2><p class="muted">The control plane stores database lifecycle and backup events. PostgreSQL query logs are not collected by the agent.</p><div class="empty compact">Connection, error, backup and permission events will appear here.</div></section>
+            <section class="panel"><h2>Database activity</h2><p class="muted">Database lifecycle and backup events are recorded in the account activity log. PostgreSQL query logs are not collected by the agent.</p><a class="attach" href="/logs">Open account activity logs</a></section>
         {:else}
             <section class="panel"><h2>Database settings</h2><p class="muted">Server-wide parameters are managed on the Database Server. Changes there can affect every database on that server.</p><div class="rows"><div><span>Engine</span><strong>PostgreSQL</strong></div><div><span>Server</span><strong>{database.server_name}</strong></div><div><span>Database owner</span><strong>Server administrator</strong></div></div></section>
         {/if}
