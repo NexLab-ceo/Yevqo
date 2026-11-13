@@ -120,20 +120,49 @@
         }
     }
 
-    // Создание нового сайта.
+    // Создание сайта и его запуск — две отдельные Agent-команды.
     async function addSite() {
-        if (!newSite.site_id) {
-            notify('Введите site_id', 'error');
+        const siteId = newSite.site_id.trim();
+        const port = Number(newSite.port);
+        if (!/^[a-zA-Z0-9_-]{1,64}$/.test(siteId)) {
+            notify('Используйте 1–64 символа: латинские буквы, цифры, дефис или подчёркивание', 'error');
             return;
         }
-        await runCommand('start_site', {
-            site_id: newSite.site_id,
-            path: `sites/${newSite.site_id}`,
-            port: newSite.port,
+        if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+            notify('Порт должен быть от 1024 до 65535', 'error');
+            return;
+        }
+
+        busy = true;
+        const created = await sendCommand(device.id, 'create_site', {
+            site_id: siteId,
+            port,
             runtime: newSite.runtime,
         });
+        if (!created.ok || !created.data?.ok) {
+            busy = false;
+            notify(created.error || created.data?.message || 'Не удалось создать сайт', 'error');
+            return;
+        }
+
+        // Каталог и стартовый файл уже созданы. Если запуск не удастся,
+        // сайт всё равно останется в панели в состоянии «Остановлен».
+        const started = await sendCommand(device.id, 'start_site', {
+            site_id: siteId,
+            path: `sites/${siteId}`,
+            port,
+            runtime: newSite.runtime,
+        });
+        busy = false;
         showAddSiteModal = false;
         newSite = { site_id: '', port: 8000, runtime: 'php' };
+        await loadDevice();
+
+        if (!started.ok || !started.data?.ok) {
+            notify('Сайт создан, но не запущен: ' + (started.error || started.data?.message || 'ошибка запуска'), 'warning');
+            return;
+        }
+        notify('Сайт создан и запущен', 'success');
     }
 </script>
 
