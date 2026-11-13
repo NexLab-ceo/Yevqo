@@ -38,7 +38,7 @@ SQL
   "listen_addr": ":8080",
   "data_root": "$DATA_ROOT",
   "static_dir": "$DATA_ROOT/public",
-  "mysql_dsn": "veltrix:$DB_PASSWORD@tcp(127.0.0.1:3306)/veltrix?parseTime=true&charset=utf8mb4",
+  "mysql_dsn": "$DB_USER:$DB_PASSWORD@tcp(127.0.0.1:3306)/veltrix?parseTime=true&charset=utf8mb4",
   "admin_username": "$ADMIN_USER",
   "use_https": false
 }
