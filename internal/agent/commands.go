@@ -173,7 +173,8 @@ func (h *CommandHandler) handleSiteLifecycle(cmd *shared.Command, action string)
 		pid, output, err = h.processes.DeploySite(req.SiteId, req.Path, int(req.Port), req.Runtime, true)
 	}
 	if err != nil { return errorResult(cmd.Id, err.Error()) }
-	return &shared.Result{Id: cmd.Id, Ok: true, Message: fmt.Sprintf("%s completed (pid %d): %s", action, pid, output)}
+	payload, _ := shared.Marshal(&shared.StartSiteResult{Pid: uint32(pid), Port: req.Port})
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: fmt.Sprintf("%s completed (pid %d): %s", action, pid, output), Payload: payload}
 }
 
 func (h *CommandHandler) handleGitPull(cmd *shared.Command) *shared.Result {
