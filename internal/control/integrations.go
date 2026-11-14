@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -178,4 +177,3 @@ func integrationProviderLabel(provider string) string {
 	switch provider { case "github":return "GitHub";case "gitlab":return "GitLab";default:return provider }
 }
 
-var _ = url.QueryEscape
