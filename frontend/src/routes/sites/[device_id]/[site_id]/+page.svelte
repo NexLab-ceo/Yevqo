@@ -102,7 +102,7 @@
         } else {
             const res = await listLogs(100);
             const rows = res.data?.logs || [];
-            const matching = rows.filter(row => row.details?.site_id === siteId && String(row.device_id) === String(deviceId));
+            const matching = rows.filter(row => row.details?.site_id === siteId && (!device?.hostname || String(row.device || '') === String(device.hostname)));
             terminalText = matching.map(row => {
                 const details = typeof row.details === 'string' ? row.details : JSON.stringify(row.details || {});
                 return '[' + row.created_at + '] ' + row.action + ' ' + details;
