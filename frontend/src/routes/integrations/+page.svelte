@@ -21,7 +21,7 @@
  async function load(){loading=true;const r=await listIntegrations();if(r.ok)integrations=r.data.integrations||[];else notify(r.error||'Не удалось загрузить интеграции','error');loading=false}
  async function connect(){if(!token.trim()||connecting)return;connecting=true;const r=await connectIntegration(provider,token.trim());connecting=false;if(r.ok){token='';notify(ru?'Аккаунт подключён':'Account connected','success');await load()}else notify(r.error||(ru?'Не удалось подключить аккаунт':'Could not connect account'),'error')}
  async function disconnect(id){if(!confirm(ru?'Отключить этот аккаунт?':'Disconnect this account?'))return;const r=await disconnectIntegration(id);if(r.ok){if(selected?.id===id){selected=null;repos=[]}notify(ru?'Доступ отозван':'Access revoked','success');await load()}else notify(r.error||'Error','error')}
- async function openRepos(item){selected=item;repos=[];search='';reposLoading=true;const r=await listIntegrationRepositories(item.id);reposLoading=false;if(r.ok)repos=r.data.repositories||[];else notify(r.error||(ru?'Не удалось загрузить репозитории':'Could not load repositories'),'error')}
+ async function openRepos(item){selected=item;repos=[];search='';reposLoading=true;const r=await listIntegrationRepositories(item.id);reposLoading=false;if(r.ok)repos=r.data.repositories||[];else notify(r.error||(ru?'Не удалось загрузить репозитории':'Could not load repositories'),'error')}\n async function copyRepo(url){try{await navigator.clipboard.writeText(url);notify(ru?'URL скопирован':'URL copied','success')}catch{notify(ru?'Не удалось скопировать URL':'Could not copy URL','error')}}
 </script>
 <svelte:head><title>Интеграции · VELTRIX Dock</title></svelte:head>
 <div class="page-header"><div><div class="eyebrow">{ru?'ПОДКЛЮЧЕНИЯ':'CONNECTIVITY'}</div><h1 class="page-title">{ru?'Интеграции':'Integrations'}</h1><p class="page-desc">{ru?'Подключайте Git-провайдеры и выбирайте репозитории для развёртывания.':'Connect Git providers and select repositories for deployment.'}</p></div></div>
@@ -65,7 +65,7 @@
    <input class="repo-search" bind:value={search} placeholder={ru?'Поиск репозитория…':'Search repositories…'} />
    {#if visibleRepos.length===0}<div class="empty">{ru?'Репозитории не найдены':'No repositories found'}</div>{:else}
     <div class="repo-list">{#each visibleRepos as repo}
-     <div class="repo-row"><div class="repo-symbol">⑂</div><div class="repo-meta"><strong>{repo.full_name||repo.name}</strong><small>{repo.private?(ru?'Приватный':'Private'):(ru?'Публичный':'Public')} · {ru?'Ветка':'Branch'}: {repo.default_branch||'—'}</small></div><button class="outline" on:click={()=>GenUI.copy(repo.clone_url)}>{ru?'Копировать URL':'Copy URL'}</button><a href={repo.web_url} target="_blank" rel="noreferrer">↗</a></div>
+     <div class="repo-row"><div class="repo-symbol">⑂</div><div class="repo-meta"><strong>{repo.full_name||repo.name}</strong><small>{repo.private?(ru?'Приватный':'Private'):(ru?'Публичный':'Public')} · {ru?'Ветка':'Branch'}: {repo.default_branch||'—'}</small></div><button class="outline" on:click={()=>copyRepo(repo.clone_url)}>{ru?'Копировать URL':'Copy URL'}</button><a href={repo.web_url} target="_blank" rel="noreferrer">↗</a></div>
     {/each}</div>
    {/if}
   {/if}
