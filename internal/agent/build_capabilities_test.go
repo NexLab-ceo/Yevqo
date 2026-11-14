@@ -12,16 +12,16 @@ func TestExecutableAvailableUsesPath(t *testing.T) {
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	oldPath := os.Getenv("PATH")
+
 	t.Setenv("PATH", dir)
 	if !executableAvailable("fake-tool") {
 		t.Fatal("expected executable to be found in PATH")
 	}
+
 	t.Setenv("PATH", "")
 	if executableAvailable("fake-tool") {
 		t.Fatal("did not expect executable to be found with empty PATH")
 	}
-	t.Setenv("PATH", oldPath)
 }
 
 func TestBuildCapabilitiesNeverExecutesCustomCommands(t *testing.T) {
@@ -30,8 +30,8 @@ func TestBuildCapabilitiesNeverExecutesCustomCommands(t *testing.T) {
 	if got.CustomCommandsIsolated {
 		t.Fatal("custom commands must remain disabled without an isolation backend")
 	}
-	if got.CanBuildDockerfile || got.CanBuildNixpacks {
-		t.Fatal("container providers must be unavailable without a backend")
+	if got.DockerfileToolchainPresent || got.NixpacksToolchainPresent {
+		t.Fatal("container toolchains must be unavailable without a backend")
 	}
 	if len(got.Warnings) == 0 {
 		t.Fatal("expected actionable capability warnings")
