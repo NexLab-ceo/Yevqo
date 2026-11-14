@@ -9,7 +9,10 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"\n\t"runtime"\n\t"net/http"\n\t"io"
+	"path/filepath"
+	"runtime"
+	"net/http"
+	"io"
 	"strings"
 	"time"
 )
