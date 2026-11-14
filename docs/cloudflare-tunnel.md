@@ -25,4 +25,4 @@ Do not use the generic Linux release binary on Android/Termux. The Termux packag
 
 **Tunnel connected** means the connector registered a connection to Cloudflare Edge. It does not prove that the Public Hostname route or application origin is healthy. The hostname and origin route must exist in Cloudflare Zero Trust. HTTP-origin health checks are a separate capability and are not implied by the connector status.
 
-Tunnel logs and token files are stored under the Agent data directory with private file permissions. Removing a tunnel stops its process and removes its local token file.
+Stopping a website process does not stop its tunnel connector; the connector remains registered while the origin may be unavailable. Removing a domain or deleting the site sends an explicit stop command. Tunnel logs and token files are stored under the Agent data directory with private file permissions; stopping the tunnel removes its local token file.
