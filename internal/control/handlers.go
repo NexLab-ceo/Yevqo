@@ -595,7 +595,12 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			domain:=strings.ToLower(strings.TrimSpace(in.Domain))
 			if domain!="" && !domainPattern.MatchString(domain){apiError(w,shared.ErrBadRequest("enter a valid hostname, such as app.example.com"));return}
 			if domain=="" {
-				_,err:=s.db.conn.ExecContext(r.Context(),"UPDATE sites SET domain=NULL,tunnel_status='inactive',tunnel_error=NULL WHERE device_id=? AND site_id=?",deviceID,siteID)
+				conn,online:=s.hub.Get(deviceID)
+				if !online { apiError(w,shared.ErrBadRequest("device is offline; reconnect the Agent before removing the active tunnel")); return }
+				ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
+				stopped,stopErr:=conn.SendCommand(ctx,"stop_tunnel",&shared.StopTunnel{SiteId:siteID})
+				if stopErr!=nil || stopped==nil || !stopped.Ok { msg:="could not stop Cloudflare Tunnel";if stopped!=nil&&stopped.Message!=""{msg=stopped.Message};apiError(w,shared.ErrBadRequest(msg));return }
+				_,err:=s.db.conn.ExecContext(r.Context(),"UPDATE sites SET domain=NULL,tunnel_token_enc=NULL,tunnel_status='inactive',tunnel_error=NULL WHERE device_id=? AND site_id=?",deviceID,siteID)
 				if err!=nil{apiError(w,shared.ErrInternal("could not remove domain"));return}
 				writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"domain":"","tunnel_status":"inactive"});return
 			}
