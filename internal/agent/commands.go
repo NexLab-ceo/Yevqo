@@ -82,6 +82,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleGetLogs(cmd)
 	case "create_tunnel":
 		return h.handleCreateTunnel(cmd)
+	case "stop_tunnel":
+		return h.handleStopTunnel(cmd)
 	default:
 		return errorResult(cmd.Id, "unknown action: "+cmd.Action)
 	}
@@ -252,6 +254,14 @@ func (h *CommandHandler) handleGetLogs(cmd *shared.Command) *shared.Result {
 	resultPayload, _ := shared.Marshal(&shared.LogsResult{Content: content})
 
 	return &shared.Result{Id: cmd.Id, Ok: true, Payload: resultPayload}
+}
+
+func (h *CommandHandler) handleStopTunnel(cmd *shared.Command) *shared.Result {
+ var req shared.StopTunnel
+ if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid stop_tunnel payload")}
+ if !validSiteID(req.SiteId){return errorResult(cmd.Id,"invalid site id")}
+ if err:=h.tunnels.StopTunnel(req.SiteId);err!=nil{return errorResult(cmd.Id,err.Error())}
+ return &shared.Result{Id:cmd.Id,Ok:true,Message:"Cloudflare Tunnel stopped"}
 }
 
 func (h *CommandHandler) handleCreateTunnel(cmd *shared.Command) *shared.Result {
