@@ -496,6 +496,12 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 
 	rest := strings.TrimPrefix(r.URL.Path, "/api/sites/")
 	parts := strings.Split(rest, "/")
+	if len(parts) == 3 && parts[2] == "git" {
+		deviceID, err := parseSiteGitRouteID(parts[0])
+		if err != nil { apiError(w, err); return }
+		s.handleSiteGit(w, r, user, deviceID, parts[1])
+		return
+	}
 	if len(parts) != 2 && !(len(parts) == 3 && parts[2] == "cmd") {
 		apiError(w, shared.ErrBadRequest("expected /api/sites/{deviceID}/{siteID}[/cmd]"))
 		return
@@ -528,6 +534,14 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
 			agentAction := in.Action
 			payload := interface{}(&shared.SiteAction{SiteId: st.SiteID, Path: st.Path, Port: uint32(st.Port), Runtime: st.Runtime})
+			if in.Action == "deploy" || in.Action == "rebuild" {
+				gitCfg, cfgErr := s.siteGitSettings(r.Context(), deviceID, siteID)
+				if cfgErr != nil { apiError(w, shared.ErrInternal("could not load site Git settings")); return }
+				if strings.TrimSpace(gitCfg.GitURL) == "" { apiError(w, shared.ErrBadRequest("connect a Git repository before deploying")); return }
+				payload = &shared.SiteAction{SiteId: st.SiteID, Path: st.Path, Port: uint32(st.Port), Runtime: st.Runtime,
+					GitURL: gitCfg.GitURL, GitBranch: gitCfg.GitBranch, BuildCommand: gitCfg.BuildCommand,
+					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken}
+			}
 			if in.Action == "stop" {
 				agentAction = "stop_site"
 				payload = &shared.StopSite{SiteId: st.SiteID}
@@ -543,6 +557,9 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				var started shared.StartSiteResult
 				_ = shared.Unmarshal(result.Payload, &started)
 				_ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteRunning, int(started.Pid))
+				if (in.Action == "deploy" || in.Action == "rebuild") && started.CommitHash != "" {
+					_, _ = s.db.conn.ExecContext(r.Context(), "UPDATE sites SET deployed_commit=?,deployed_at=NOW() WHERE device_id=? AND site_id=?", started.CommitHash, deviceID, siteID)
+				}
 			}
 			_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(user.ID), DeviceID: shared.PtrInt64(deviceID), Action: "site_" + in.Action, Details: map[string]interface{}{"site_id": siteID, "ok": true}, IP: clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": result.Message})
