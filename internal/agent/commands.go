@@ -141,7 +141,8 @@ func (h *CommandHandler) handleBuildSite(cmd *shared.Command) *shared.Result {
 	timeout := time.Duration(req.TimeoutSeconds) * time.Second
 	result := h.processes.BuildSite(AndroidBuildRequest{
 		SiteID: req.SiteId, RootDir: req.RootDir, Stack: req.Stack,
-		PackageTool: req.PackageTool, AllowProjectCode: req.AllowProjectCode,
+		PackageTool: req.PackageTool, InstallCommand: req.InstallCommand, BuildCommand: req.BuildCommand,
+		AllowProjectCode: req.AllowProjectCode,
 		Timeout: timeout, MaxLogBytes: req.MaxLogBytes,
 	})
 	payload, err := shared.Marshal(result)
