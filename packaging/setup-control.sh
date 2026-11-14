@@ -42,7 +42,7 @@ SQL
   "listen_addr": ":8080",
   "data_root": "$DATA_ROOT",
   "static_dir": "$DATA_ROOT/public",
-  "mysql_dsn": "$DB_USER:$DB_PASSWORD@tcp(127.0.0.1:3306)/veltrix?parseTime=true&charset=utf8mb4",
+  "mysql_dsn": "veltrix:$DB_PASSWORD@tcp(127.0.0.1:3306)/veltrix?parseTime=true&charset=utf8mb4",
   "admin_username": "$ADMIN_USER",
   "use_https": false
 }
@@ -51,6 +51,21 @@ JSON
 else
   log "Existing Control Plane config preserved; database credentials were not changed."
   mysql -u root -e "CREATE DATABASE IF NOT EXISTS veltrix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" || true
+fi
+
+# Optional private GitHub token for veltrix-all self-updates.
+TOKEN_FILE="$DATA_ROOT/config/github-token"
+if [ ! -s "$TOKEN_FILE" ]; then
+  printf '\nPrivate updater setup (optional)\n'
+  read -r -p 'GitHub token with Contents: read on NexLab-ceo/veltrix (leave blank to skip): ' -s GITHUB_TOKEN
+  printf '\n'
+  if [ -n "$GITHUB_TOKEN" ]; then
+    printf '%s' "$GITHUB_TOKEN" > "$TOKEN_FILE"
+    chmod 600 "$TOKEN_FILE"
+    log "Private updater token saved to $TOKEN_FILE"
+  else
+    log "Private updater token skipped; configure it later in $TOKEN_FILE"
+  fi
 fi
 
 SHARE="$PREFIX/share/veltrix"
