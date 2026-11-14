@@ -565,11 +565,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 		return 0, output.String(), "", "", fmt.Errorf("root directory resolves outside the site")
 	}
 	if strings.TrimSpace(req.BuildCommand) != "" {
-		cmd := exec.Command("sh", "-lc", req.BuildCommand)
-		cmd.Dir, cmd.Env = resolvedBuild, os.Environ()
-		out, buildErr := cmd.CombinedOutput()
-		output.Write(out)
-		if buildErr != nil { return 0, output.String(), "", "", fmt.Errorf("build command failed: %w", buildErr) }
+		return 0, output.String(), "", "", fmt.Errorf("custom shell build commands are disabled on Android; use the Android local BuildSite provider with a supported stack")
 	}
 	commitCmd := exec.Command("git", "-C", siteRoot, "rev-parse", "HEAD")
 	commitBytes, err := commitCmd.Output()
