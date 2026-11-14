@@ -61,6 +61,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleGetMetrics(cmd)
 	case "create_site":
 		return h.handleCreateSite(cmd)
+	case "analyze_site_build":
+		return h.handleAnalyzeSiteBuild(cmd)
 	case "start_site":
 		return h.handleStartSite(cmd)
 	case "stop_site":
@@ -110,6 +112,22 @@ func (h *CommandHandler) handleGetMetrics(cmd *shared.Command) *shared.Result {
 	payload, err := shared.Marshal(metrics)
 	if err != nil { return errorResult(cmd.Id, "could not encode metrics") }
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: "metrics collected", Payload: payload}
+}
+
+func (h *CommandHandler) handleAnalyzeSiteBuild(cmd *shared.Command) *shared.Result {
+	var req shared.AnalyzeSiteBuild
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
+		return errorResult(cmd.Id, "invalid analyze_site_build payload")
+	}
+	plan, err := h.processes.AnalyzeSiteBuild(req.SiteId, req.RootDir)
+	if err != nil {
+		return errorResult(cmd.Id, err.Error())
+	}
+	payload, err := shared.Marshal(plan)
+	if err != nil {
+		return errorResult(cmd.Id, "could not encode build analysis")
+	}
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: "project analysis completed", Payload: payload}
 }
 
 func (h *CommandHandler) handleCreateSite(cmd *shared.Command) *shared.Result {
