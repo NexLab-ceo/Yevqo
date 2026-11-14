@@ -22,6 +22,7 @@ type BuildPlan struct {
 		NeedsConfig  bool     `json:"needs_configuration"`
 		Evidence     []string `json:"evidence"`
 		Warnings     []string `json:"warnings,omitempty"`
+	Capabilities BuildCapabilities `json:"capabilities"`
 }
 
 // AnalyzeProject inspects only the immediate project root. It does not execute
@@ -40,7 +41,7 @@ func AnalyzeProject(root string) (BuildPlan, error) {
 		if entry.Type().IsRegular() { files[strings.ToLower(entry.Name())] = true }
 	}
 	has := func(names ...string) bool { for _, name := range names { if files[strings.ToLower(name)] { return true } }; return false }
-	plan := BuildPlan{Provider:"auto", Stack:"unknown", Root:".", Confidence:"low", NeedsConfig:true, Evidence:[]string{}}
+	plan := BuildPlan{Provider:"auto", Stack:"unknown", Root:".", Confidence:"low", NeedsConfig:true, Evidence:[]string{}, Capabilities: DetectBuildCapabilities()}
 
 	// Explicit configuration always wins over heuristic detection.
 	if has("veltrix.yaml", "veltrix.yml") {
