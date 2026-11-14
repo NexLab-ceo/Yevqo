@@ -638,6 +638,14 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"domain":domain,"tunnel_status":"active","message":"Cloudflare Tunnel connected"});return
 		}
 		if r.Method == http.MethodDelete {
+			if st.Domain != "" {
+				conn, online := s.hub.Get(deviceID)
+				if !online { apiError(w, shared.ErrBadRequest("device is offline; reconnect the Agent before deleting a site with an active domain")); return }
+				ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+				defer cancel()
+				result, err := conn.SendCommand(ctx, "stop_tunnel", &shared.StopTunnel{SiteId: siteID})
+				if err != nil || result == nil || !result.Ok { apiError(w, shared.ErrBadRequest("could not stop Cloudflare Tunnel; site metadata was not removed")); return }
+			}
 			if st.Status == shared.SiteRunning {
 				conn, online := s.hub.Get(deviceID)
 				if !online { apiError(w, shared.ErrBadRequest("device is offline; stop the site before removing it")); return }
