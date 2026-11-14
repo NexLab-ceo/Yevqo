@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net"
 	"os"
@@ -109,17 +110,30 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return 0, fmt.Errorf("port must be between 1024 and 65535") }
 	if runtime != "php" && runtime != "go" && runtime != "static" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
-	if filepath.Clean(path) != filepath.Join("sites", siteID) || filepath.IsAbs(path) { return 0, fmt.Errorf("site path must be sites/<site_id>") }
+	cleanPath := filepath.Clean(path)
+	expectedPath := filepath.Join("sites", siteID)
+	if filepath.IsAbs(path) || (cleanPath != expectedPath && !strings.HasPrefix(cleanPath, expectedPath+string(filepath.Separator))) {
+		return 0, fmt.Errorf("site path must be inside sites/<site_id>")
+	}
 	// Проверяем, что процесс ещё не запущен.
 	if p, ok := m.procs[siteID]; ok && isAlive(p.PID) {
 		return p.PID, fmt.Errorf("site %s is already running (pid %d)", siteID, p.PID)
 	}
 
-	// Resolve the site strictly inside the agent's sites directory.
-	absPath, err := safeSiteDirectory(m.DataRoot, siteID)
+	// Resolve the requested root directory strictly inside this site's directory.
+	siteRoot, err := safeSiteDirectory(m.DataRoot, siteID)
 	if err != nil { return 0, err }
-	if _, err := os.Stat(absPath); err != nil {
-		return 0, fmt.Errorf("site directory not found: %s", absPath)
+	relativeRoot := strings.TrimPrefix(cleanPath, expectedPath)
+	relativeRoot = strings.TrimPrefix(relativeRoot, string(filepath.Separator))
+	absPath := siteRoot
+	if relativeRoot != "" { absPath = filepath.Join(siteRoot, relativeRoot) }
+	resolvedSite, err := filepath.EvalSymlinks(siteRoot)
+	if err != nil { return 0, fmt.Errorf("resolve site directory: %w", err) }
+	resolvedPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil { return 0, fmt.Errorf("site root directory not found: %w", err) }
+	rel, err := filepath.Rel(resolvedSite, resolvedPath)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return 0, fmt.Errorf("site root directory resolves outside the site")
 	}
 
 	// Refuse a port already occupied by another process.
@@ -436,4 +450,100 @@ func runGitPull(path string) (string, error) {
 	}
 
 	return string(out), nil
+}
+
+
+// DeployGitSite clones or fast-forwards the configured repository, runs the optional
+// build command in the configured root directory, and restarts the site there.
+func (m *ProcessManager) DeployGitSite(req struct {
+	SiteId string
+	Path string
+	Port uint32
+	Runtime string
+	GitURL string
+	GitBranch string
+	BuildCommand string
+	RootDir string
+	GitToken string
+}, rebuild bool) (int, string, string, string, error) {
+	if !validSiteID(req.SiteId) { return 0, "", "", "", fmt.Errorf("invalid site id") }
+	siteRoot, err := safeSiteDirectory(m.DataRoot, req.SiteId)
+	if err != nil { return 0, "", "", "", err }
+	if req.GitURL == "" { return 0, "", "", "", fmt.Errorf("Git repository is not configured") }
+	branch := req.GitBranch
+	if branch == "" { branch = "main" }
+	if strings.ContainsAny(branch, " \t\r\n") || strings.Contains(branch, "..") || strings.HasPrefix(branch, "-") {
+		return 0, "", "", "", fmt.Errorf("invalid Git branch")
+	}
+	gitEnv := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if req.GitToken != "" {
+		encoded := base64.StdEncoding.EncodeToString([]byte("x-access-token:"+req.GitToken))
+		gitEnv = append(gitEnv, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraheader",
+			"GIT_CONFIG_VALUE_0=AUTHORIZATION: basic "+encoded)
+	}
+	var output strings.Builder
+	if _, err := os.Stat(filepath.Join(siteRoot, ".git")); os.IsNotExist(err) {
+		entries, readErr := os.ReadDir(siteRoot)
+		if readErr != nil { return 0, "", "", "", readErr }
+		for _, entry := range entries {
+			name := entry.Name()
+			if name != "index.php" && name != "index.html" && name != "README.md" {
+				return 0, "", "", "", fmt.Errorf("site directory is not empty; refusing to overwrite existing files")
+			}
+		}
+		for _, entry := range entries {
+			if err := os.Remove(filepath.Join(siteRoot, entry.Name())); err != nil { return 0, "", "", "", err }
+		}
+		cmd := exec.Command("git", "clone", "--branch", branch, "--single-branch", req.GitURL, ".")
+		cmd.Dir, cmd.Env = siteRoot, gitEnv
+		out, cloneErr := cmd.CombinedOutput()
+		output.Write(out)
+		if cloneErr != nil { return 0, output.String(), "", "", fmt.Errorf("git clone: %w", cloneErr) }
+	} else if err != nil {
+		return 0, "", "", "", err
+	} else {
+		cmd := exec.Command("git", "-C", siteRoot, "pull", "--ff-only", "origin", branch)
+		cmd.Env = gitEnv
+		out, pullErr := cmd.CombinedOutput()
+		output.Write(out)
+		if pullErr != nil { return 0, output.String(), "", "", fmt.Errorf("git pull: %w", pullErr) }
+	}
+	rootDir := req.RootDir
+	if rootDir == "" { rootDir = "." }
+	if filepath.IsAbs(rootDir) || strings.Contains(rootDir, "\\") {
+		return 0, output.String(), "", "", fmt.Errorf("invalid root directory")
+	}
+	rootDir = filepath.Clean(rootDir)
+	if rootDir == ".." || strings.HasPrefix(rootDir, ".."+string(filepath.Separator)) {
+		return 0, output.String(), "", "", fmt.Errorf("root directory must stay inside the site")
+	}
+	buildDir := siteRoot
+	if rootDir != "." { buildDir = filepath.Join(siteRoot, rootDir) }
+	resolvedRoot, resolveErr := filepath.EvalSymlinks(siteRoot)
+	if resolveErr != nil { return 0, output.String(), "", "", resolveErr }
+	resolvedBuild, resolveErr := filepath.EvalSymlinks(buildDir)
+	if resolveErr != nil { return 0, output.String(), "", "", fmt.Errorf("root directory not found: %w", resolveErr) }
+	if rel, relErr := filepath.Rel(resolvedRoot, resolvedBuild); relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return 0, output.String(), "", "", fmt.Errorf("root directory resolves outside the site")
+	}
+	if strings.TrimSpace(req.BuildCommand) != "" {
+		cmd := exec.Command("sh", "-lc", req.BuildCommand)
+		cmd.Dir, cmd.Env = resolvedBuild, os.Environ()
+		out, buildErr := cmd.CombinedOutput()
+		output.Write(out)
+		if buildErr != nil { return 0, output.String(), "", "", fmt.Errorf("build command failed: %w", buildErr) }
+	}
+	commitCmd := exec.Command("git", "-C", siteRoot, "rev-parse", "HEAD")
+	commitBytes, err := commitCmd.Output()
+	if err != nil { return 0, output.String(), "", "", fmt.Errorf("read deployed commit: %w", err) }
+	commit := strings.TrimSpace(string(commitBytes))
+	dateCmd := exec.Command("git", "-C", siteRoot, "show", "-s", "--format=%cI", "HEAD")
+	dateBytes, err := dateCmd.Output()
+	if err != nil { return 0, output.String(), "", "", fmt.Errorf("read commit date: %w", err) }
+	commitDate := strings.TrimSpace(string(dateBytes))
+	runPath := filepath.Join("sites", req.SiteId)
+	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
+	pid, err := m.RestartSite(req.SiteId, runPath, int(req.Port), req.Runtime)
+	if err != nil { return 0, output.String(), commit, commitDate, err }
+	return pid, output.String(), commit, commitDate, nil
 }
