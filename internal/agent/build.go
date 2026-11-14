@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"bufio"
 	"fmt"
+	"strconv"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,7 +30,73 @@ type BuildPlan struct {
 
 // AnalyzeProject inspects only the immediate project root. It does not execute
 // scripts, parse arbitrary build plugins, or follow symlinks.
+type veltrixManifest struct { Root, Provider, Install, Build, Start string; Port int }
+
+// AnalyzeProject honors a small, explicit veltrix.yaml subset before auto-detection.
 func AnalyzeProject(root string) (BuildPlan, error) {
+ abs, err := filepath.Abs(root)
+ if err != nil { return BuildPlan{}, fmt.Errorf("resolve project root: %w", err) }
+ manifest, found, err := readVeltrixManifest(abs)
+ if err != nil { return BuildPlan{}, err }
+ if !found { return analyzeProjectMarkers(abs) }
+ manifestRoot := manifest.Root
+ if manifestRoot == "" { manifestRoot = "." }
+ if filepath.IsAbs(manifestRoot) || strings.Contains(manifestRoot, "\\\\") { return BuildPlan{}, fmt.Errorf("veltrix.yaml project.root must be relative") }
+ clean := filepath.Clean(manifestRoot)
+ if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) { return BuildPlan{}, fmt.Errorf("veltrix.yaml project.root escapes project directory") }
+ projectRoot, err := filepath.EvalSymlinks(filepath.Join(abs, clean))
+ if err != nil { return BuildPlan{}, fmt.Errorf("resolve veltrix.yaml project.root: %w", err) }
+ rel, err := filepath.Rel(abs, projectRoot)
+ if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return BuildPlan{}, fmt.Errorf("veltrix.yaml project.root resolves outside project directory") }
+ plan, err := analyzeProjectMarkers(projectRoot)
+ if err != nil { return BuildPlan{}, err }
+ plan.Root = clean
+ plan.Evidence = append(plan.Evidence, "veltrix.yaml")
+ if manifest.Provider != "" && manifest.Provider != "auto" {
+  plan.Provider = manifest.Provider
+  if (manifest.Provider == "dockerfile" || manifest.Provider == "nixpacks") && (plan.AndroidEnvironment.Android || plan.AndroidEnvironment.Termux) {
+   plan.NeedsConfig = true
+   plan.Warnings = append(plan.Warnings, manifest.Provider+" builds are disabled on the Android local provider")
+  }
+ }
+ if manifest.Install != "" { plan.Install = manifest.Install }
+ if manifest.Build != "" { plan.Build = manifest.Build }
+ if manifest.Start != "" { plan.Start = manifest.Start }
+ if manifest.Port > 0 { plan.Port = manifest.Port }
+ if plan.Stack == "unknown" && (manifest.Install != "" || manifest.Build != "") { plan.Stack = "custom"; plan.NeedsConfig = false }
+ if manifest.Install != "" || manifest.Build != "" { plan.NeedsConfig = false }
+ return plan, nil
+}
+
+func readVeltrixManifest(root string) (veltrixManifest, bool, error) {
+ var m veltrixManifest
+ path := filepath.Join(root, "veltrix.yaml")
+ if _, err := os.Stat(path); err != nil {
+  if os.IsNotExist(err) { path = filepath.Join(root, "veltrix.yml"); if _, e := os.Stat(path); os.IsNotExist(e) { return m, false, nil } else if e != nil { return m, false, e } } else { return m, false, err }
+ }
+ f, err := os.Open(path); if err != nil { return m, false, err }; defer f.Close()
+ scanner := bufio.NewScanner(f); scanner.Buffer(make([]byte, 4096), 64*1024)
+ section := ""
+ for scanner.Scan() {
+  line := strings.TrimSpace(scanner.Text())
+  if line == "" || strings.HasPrefix(line, "#") || line == "version: 1" { continue }
+  if !strings.Contains(line, ":") { continue }
+  parts := strings.SplitN(line, ":", 2)
+  key, value := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+  if value == "" && !strings.HasPrefix(scanner.Text(), " ") { section = key; continue }
+  value = strings.TrimSpace(strings.SplitN(value, " #", 2)[0])
+  value = strings.Trim(value, "\"'")
+  switch section {
+  case "project": if key == "root" { m.Root = value }
+  case "build": switch key { case "provider": m.Provider = value; case "install": m.Install = value; case "command": m.Build = value }
+  case "run": switch key { case "command": m.Start = value; case "port": n, e := strconv.Atoi(value); if e != nil || n < 1 || n > 65535 { return m, false, fmt.Errorf("veltrix.yaml run.port must be between 1 and 65535") }; m.Port = n }
+  }
+ }
+ if err := scanner.Err(); err != nil { return m, false, err }
+ return m, true, nil
+}
+
+func analyzeProjectMarkers(root string) (BuildPlan, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil { return BuildPlan{}, fmt.Errorf("resolve project root: %w", err) }
 	info, err := os.Stat(abs)
@@ -47,13 +115,6 @@ func AnalyzeProject(root string) (BuildPlan, error) {
 	if androidEnv.Android || androidEnv.Termux { provider = "android-local" }
 	plan := BuildPlan{Provider:provider, Stack:"unknown", Root:".", Confidence:"low", NeedsConfig:true, Evidence:[]string{}, Capabilities: DetectBuildCapabilities(), AndroidEnvironment: androidEnv}
 
-	// Explicit configuration always wins over heuristic detection.
-	if has("veltrix.yaml", "veltrix.yml") {
-		plan.Provider, plan.Confidence = "veltrix", "high"
-		plan.Evidence = append(plan.Evidence, "veltrix.yaml")
-		plan.Warnings = append(plan.Warnings, "Manifest parsing is handled by the VELTRIX configuration layer; detection does not execute commands.")
-		return plan, nil
-	}
 	if has("dockerfile") {
 		plan.Stack, plan.Confidence = "container", "high"
 		plan.Evidence = append(plan.Evidence, "Dockerfile")
