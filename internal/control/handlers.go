@@ -365,7 +365,9 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 35*time.Second)
+	commandTimeout := 35 * time.Second
+	if req.Action == "build_site" { commandTimeout = 2 * time.Hour }
+	ctx, cancel := context.WithTimeout(r.Context(), commandTimeout)
 	defer cancel()
 	if start, ok := payload.(*shared.StartSite); ok {
 		env, envErr := s.siteDatabaseEnvironment(ctx, dev.UserID, dev.ID, start.SiteId)
@@ -412,6 +414,10 @@ func parsePayload(action string, raw json.RawMessage) (interface{}, error) {
 	switch action {
 	case "analyze_site_build":
 		var p shared.AnalyzeSiteBuild
+		if err := json.Unmarshal(raw, &p); err != nil { return nil, err }
+		return &p, nil
+	case "build_site":
+		var p shared.AndroidBuildSite
 		if err := json.Unmarshal(raw, &p); err != nil { return nil, err }
 		return &p, nil
 	case "create_site":
