@@ -56,8 +56,12 @@ func NewTunnelManager(dataRoot string) *TunnelManager {
 //   - hostname:      публичный домен (например, "blog.user1.com")
 func (m *TunnelManager) StartTunnel(siteID string, port int, tunnelToken, hostname string) (int, error) {
 	// Проверяем, что cloudflared установлен.
-	if _, err := exec.LookPath("cloudflared"); err != nil {
-		return 0, errors.New("cloudflared not found (install it first)")
+	binary, err := exec.LookPath("cloudflared")
+	if err != nil {
+		binary = filepath.Join(m.DataRoot, "bin", "cloudflared")
+		if _, statErr := os.Stat(binary); statErr != nil {
+			return 0, errors.New("cloudflared not found (install it first)")
+		}
 	}
 
 	// Проверяем, что туннель ещё не запущен.
