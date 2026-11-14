@@ -350,3 +350,11 @@ func (h *CommandHandler) handleDatabaseServerAction(cmd *shared.Command, action 
 	}
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: "PostgreSQL server " + action + " completed"}
 }
+
+ 
+func (h *CommandHandler) handleInstallCloudflared(cmd *shared.Command) *shared.Result {
+ path,err:=h.tunnels.InstallCloudflared()
+ if err!=nil{return errorResult(cmd.Id,err.Error())}
+ payload,_:=shared.Marshal(map[string]string{"path":path})
+ return &shared.Result{Id:cmd.Id,Ok:true,Message:"cloudflared installed for Termux user",Payload:payload}
+}
