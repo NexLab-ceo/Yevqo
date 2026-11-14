@@ -166,6 +166,11 @@ type MetricsResult struct {
 	CapturedAt time.Time `json:"captured_at"`
 }
 
+type AnalyzeSiteBuild struct {
+	SiteId string `json:"site_id"`
+	RootDir string `json:"root_dir,omitempty"`
+}
+
 type CreateSite struct {
 	SiteId  string `json:"site_id"`
 	Port    uint32 `json:"port"`
