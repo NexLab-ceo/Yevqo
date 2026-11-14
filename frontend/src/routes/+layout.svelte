@@ -9,7 +9,7 @@
  let loading=true,mobileNavOpen=false,modeSaving=false;
  const groups=[
   {label:'WORKSPACE',items:[['Overview','/','◫'],['Projects','/projects','▦']]},
-  {label:'INFRASTRUCTURE',items:[['Devices','/devices','▣'],['Websites','/sites','◉'],['Databases','/databases','◈'],['Domains','/domains','◎']]},
+  {label:'INFRASTRUCTURE',items:[['Devices','/devices','▣'],['Applications','/sites','◉'],['Databases','/databases','◈'],['Domains','/domains','◎']]},
   {label:'DELIVERY',items:[['Build Engine','/builds','⚒'],['Deployments','/deployments','⇧']]},
   {label:'OPERATIONS',items:[['Monitoring','/monitoring','⌁'],['Logs','/logs','≡'],['Notifications','/notifications','♧'],['Reports & Export','/reports','▤']]},
   {label:'MANAGEMENT',items:[['Team & Permissions','/team','♙'],['Integrations','/integrations','⌘'],['Backup & Restore','/backups','⤓'],['Maintenance','/maintenance','⚙']]}
