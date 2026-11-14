@@ -410,6 +410,10 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 
 func parsePayload(action string, raw json.RawMessage) (interface{}, error) {
 	switch action {
+	case "analyze_site_build":
+		var p shared.AnalyzeSiteBuild
+		if err := json.Unmarshal(raw, &p); err != nil { return nil, err }
+		return &p, nil
 	case "create_site":
 		var p shared.CreateSite
 		if err := json.Unmarshal(raw, &p); err != nil { return nil, err }
