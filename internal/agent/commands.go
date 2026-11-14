@@ -265,7 +265,7 @@ func (h *CommandHandler) handleCreateTunnel(cmd *shared.Command) *shared.Result 
 		return errorResult(cmd.Id, "site must be running first")
 	}
 
-	pid, err := h.tunnels.StartTunnel(req.SiteId, proc.Port, req.TunnelToken, req.Hostname)
+	if req.Port != 0 && int(req.Port) != proc.Port { return errorResult(cmd.Id, "site port mismatch") }\n\tpid, err := h.tunnels.StartTunnel(req.SiteId, proc.Port, req.TunnelToken, req.Hostname)
 	if err != nil {
 		return errorResult(cmd.Id, err.Error())
 	}
