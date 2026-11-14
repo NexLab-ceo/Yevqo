@@ -171,6 +171,16 @@ type AnalyzeSiteBuild struct {
 	RootDir string `json:"root_dir,omitempty"`
 }
 
+type AndroidBuildSite struct {
+	SiteId string `json:"site_id"`
+	RootDir string `json:"root_dir,omitempty"`
+	Stack string `json:"stack"`
+	PackageTool string `json:"package_tool,omitempty"`
+	AllowProjectCode bool `json:"allow_project_code"`
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
+	MaxLogBytes int `json:"max_log_bytes,omitempty"`
+}
+
 type CreateSite struct {
 	SiteId  string `json:"site_id"`
 	Port    uint32 `json:"port"`
