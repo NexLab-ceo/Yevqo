@@ -9,7 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"path/filepath"\n\t"runtime"\n\t"net/http"\n\t"io"
 	"strings"
 	"time"
 )
@@ -260,4 +260,27 @@ func CheckCloudflared() (bool, string) {
 		return false, "cloudflared not found (install it first)"
 	}
 	return true, "ok"
+}
+
+ 
+// InstallCloudflared downloads the official Linux release into the user's VELTRIX directory.
+// Android/Termux runs without root; the binary is installed in DataRoot/bin.
+func (m *TunnelManager) InstallCloudflared() (string, error) {
+ arch := runtime.GOARCH
+ if arch != "arm64" && arch != "amd64" { return "", fmt.Errorf("unsupported architecture: %s", arch) }
+ binDir := filepath.Join(m.DataRoot, "bin")
+ if err := os.MkdirAll(binDir, 0o755); err != nil { return "", err }
+ target := filepath.Join(binDir, "cloudflared")
+ req, err := http.NewRequest(http.MethodGet, "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-"+arch, nil)
+ if err != nil { return "", err }
+ ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute); defer cancel(); req=req.WithContext(ctx)
+ resp, err := (&http.Client{Timeout:3*time.Minute}).Do(req); if err != nil { return "", fmt.Errorf("download cloudflared: %w",err) }; defer resp.Body.Close()
+ if resp.StatusCode != http.StatusOK { return "", fmt.Errorf("Cloudflare download returned HTTP %d",resp.StatusCode) }
+ tmp:=target+".tmp"; file,err:=os.OpenFile(tmp,os.O_CREATE|os.O_TRUNC|os.O_WRONLY,0o700);if err!=nil{return "",err}
+ n,copyErr:=io.Copy(file,io.LimitReader(resp.Body,100<<20));closeErr:=file.Close()
+ if copyErr!=nil{_ = os.Remove(tmp);return "",copyErr};if closeErr!=nil{_ = os.Remove(tmp);return "",closeErr}
+ if n<1<<20{_ = os.Remove(tmp);return "",errors.New("downloaded cloudflared binary is unexpectedly small")}
+ if err=os.Chmod(tmp,0o755);err!=nil{_ = os.Remove(tmp);return "",err}
+ if err=os.Rename(tmp,target);err!=nil{_ = os.Remove(tmp);return "",err}
+ return target,nil
 }
