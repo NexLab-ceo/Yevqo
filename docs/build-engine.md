@@ -19,7 +19,7 @@ Node.js (npm/pnpm/yarn/Bun), Python, Rust, Go, Java/Maven, JVM/Gradle, Ruby, PHP
 
 Every BuildPlan now includes a `capabilities` object. The Agent checks PATH for Docker, Podman, Nixpacks and Git. This is deliberately only an executable-presence check: it does not prove that a container daemon is running, that permissions are sufficient, or that storage/network access is available. Those checks belong immediately before a build starts.
 
-Dockerfile builds are marked available when Docker or Podman CLI is present. Nixpacks additionally requires the Nixpacks executable. The result includes warnings when a provider cannot run.
+The result reports whether the Dockerfile toolchain (Docker or Podman CLI) and the Nixpacks toolchain are present. These flags do not claim that a daemon is running or that a build will succeed. Warnings explain missing prerequisites.
 
 ## Execution and security boundary
 
