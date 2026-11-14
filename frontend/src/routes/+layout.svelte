@@ -16,7 +16,7 @@
  onMount(async()=>{const [a,b]=await Promise.all([me(),getSettings()]);if(a.ok&&a.data?.user)user.set(a.data.user);if(b.ok){uiMode.set(b.data.settings?.mode||'simple');locale.set(b.data.settings?.locale||'ru')}loading=false});
  $: if(!loading&&!$isAuthenticated&&!$page.url.pathname.startsWith('/login')&&!$page.url.pathname.startsWith('/register'))goto('/login');
  $: currentTitle=groups.flatMap(g=>g.items).find(i=>$page.url.pathname===i[1]||($page.url.pathname.startsWith(i[1]+'/')&&i[1]!=='/'))?.[0]||'Overview';
- function active(href){return href==='/'?$page.url.pathname==='/':$page.url.pathname===href||$page.url.pathname.startsWith(href+'/')}
+ function active(href,pathname){return href==='/'?pathname==='/':pathname===href||pathname.startsWith(href+'/')}
  async function toggleMode(){if(modeSaving)return;modeSaving=true;const next=$uiMode==='simple'?'advanced':'simple';const r=await saveSettings({mode:next});if(r.ok)uiMode.set(next);modeSaving=false}
  async function handleLogout(){await logout();user.set(null);goto('/login')}
 </script>
@@ -33,14 +33,14 @@
    {#each groups as group}
     <section class="nav-group"><div class="nav-label">{group.label}</div>
      {#each group.items as item}
-      <a href={item[1]} class:active={active(item[1])} class="nav-item" aria-current={active(item[1]) ? 'page' : undefined} on:click={()=>mobileNavOpen=false}><span class="nav-icon">{item[2]}</span><span>{item[0]}</span>{#if item[0]==='Databases'}<span class="nav-tag">DB</span>{/if}</a>
+      <a href={item[1]} class:active={active(item[1],$page.url.pathname)} class="nav-item" aria-current={active(item[1],$page.url.pathname) ? 'page' : undefined} on:click={()=>mobileNavOpen=false}><span class="nav-icon">{item[2]}</span><span>{item[0]}</span>{#if item[0]==='Databases'}<span class="nav-tag">DB</span>{/if}</a>
      {/each}
     </section>
    {/each}
-   {#if $user?.is_admin===true}<section class="nav-group"><div class="nav-label">ADMINISTRATION</div><a href="/admin" class:active={active('/admin')} class="nav-item"><span class="nav-icon">♜</span><span>Admin panel</span></a></section>{/if}
+   {#if $user?.is_admin===true}<section class="nav-group"><div class="nav-label">ADMINISTRATION</div><a href="/admin" class:active={active('/admin',$page.url.pathname)} class="nav-item"><span class="nav-icon">♜</span><span>Admin panel</span></a></section>{/if}
   </nav>
   <div class="sidebar-bottom">
-   <a href="/settings" class:active={active('/settings')} class="nav-item"><span class="nav-icon">⚙</span><span>Settings</span></a>
+   <a href="/settings" class:active={active('/settings',$page.url.pathname)} class="nav-item"><span class="nav-icon">⚙</span><span>Settings</span></a>
    <div class="account-row"><span class="account-avatar">{($user?.username||'U').slice(0,1).toUpperCase()}</span><span class="account-copy"><strong>{$user?.username||'User'}</strong><small>{$user?.email||'Personal account'}</small></span><button class="account-menu" title="Выйти" aria-label="Выйти" on:click={handleLogout}>↗</button></div>
   </div>
  </aside>
