@@ -190,8 +190,6 @@ func (h *CommandHandler) handleStopSite(cmd *shared.Command) *shared.Result {
 		return errorResult(cmd.Id, "invalid stop_site payload")
 	}
 
-	_ = h.tunnels.StopTunnel(req.SiteId)
-
 	if err := h.processes.StopSite(req.SiteId); err != nil {
 		return errorResult(cmd.Id, err.Error())
 	}
