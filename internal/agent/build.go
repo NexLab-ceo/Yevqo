@@ -62,6 +62,7 @@ func AnalyzeProject(root string) (BuildPlan, error) {
    plan.Warnings = append(plan.Warnings, manifest.Provider+" builds are disabled on the Android local provider")
   }
  }
+ if manifest.Provider == "static" { plan.Stack = "static"; plan.NeedsConfig = false }
  if manifest.Install != "" { plan.Install = manifest.Install }
  if manifest.Build != "" { plan.Build = manifest.Build }
  if manifest.Start != "" { plan.Start = manifest.Start }
