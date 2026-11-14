@@ -26,7 +26,7 @@
    const r=await sendCommand(selectedSite.device_id,'analyze_site_build',{site_id:selectedSite.site.site_id,root_dir:rootDirectory||'.'});
    analyzing=false;
    if(!r.ok||!r.data?.ok){notify(r.error||r.data?.message||'Анализ проекта не выполнен','error');return}
-   try{plan=JSON.parse(decode(r.data.payload));notify('Анализ проекта завершён','success')}
+   try{plan=JSON.parse(decode(r.data.payload));if(plan.root_directory)rootDirectory=plan.root_directory;notify('Анализ проекта завершён','success')}
    catch{notify('Агент вернул некорректный результат анализа','error')}
  }
  async function build(){
@@ -34,7 +34,7 @@
    building=true;result=null;
    const r=await sendCommand(selectedSite.device_id,'build_site',{
      site_id:selectedSite.site.site_id,root_dir:rootDirectory||'.',stack:plan.stack,
-     package_tool:plan.package_tool||'',allow_project_code:true,timeout_seconds:1200,max_log_bytes:10485760
+     package_tool:plan.package_tool||'',install_command:plan.install_command||'',build_command:plan.build_command||'',allow_project_code:true,timeout_seconds:1200,max_log_bytes:10485760
    });
    building=false;
    if(!r.ok||!r.data){notify(r.error||'Не удалось запустить сборку','error');return}
