@@ -512,6 +512,16 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 		s.handleSiteGit(w, r, user, deviceID, parts[1])
 		return
 	}
+	if len(parts)==3 && parts[2]=="install-cloudflared" {
+		if r.Method!=http.MethodPost { http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return }
+		deviceID,err:=parseSiteGitRouteID(parts[0]);if err!=nil{apiError(w,err);return}
+		dev,err:=s.db.GetDeviceByID(r.Context(),deviceID);if err!=nil||dev.UserID!=user.ID{apiError(w,shared.ErrForbidden("not your device"));return}
+		conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("устройство не в сети"));return}
+		ctx,cancel:=context.WithTimeout(r.Context(),3*time.Minute);defer cancel()
+		result,err:=conn.SendCommand(ctx,"install_cloudflared",map[string]interface{}{})
+		if err!=nil||!result.Ok{msg:="Не удалось установить cloudflared";if result!=nil&&result.Message!=""{msg=result.Message};apiError(w,shared.ErrBadRequest(msg));return}
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"message":"cloudflared installed"});return
+	}
 	if len(parts) != 2 && !(len(parts) == 3 && parts[2] == "cmd") {
 		apiError(w, shared.ErrBadRequest("expected /api/sites/{deviceID}/{siteID}[/cmd]"))
 		return
