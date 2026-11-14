@@ -69,6 +69,8 @@ jobs:
           bash -n packaging/setup-agent.sh
           bash -n packaging/setup-control.sh
           bash -n packaging/setup-all.sh
+          bash -n scripts/update-agent.sh
+          bash -n scripts/update-all.sh
           sh -n packaging/postinst-all
           sh -n packaging/postinst-agent
 
