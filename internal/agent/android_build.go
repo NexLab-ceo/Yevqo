@@ -123,7 +123,17 @@ func androidBuildSteps(root string,req AndroidBuildRequest)([]androidBuildStep,e
  case "go":return []androidBuildStep{{"build","go",[]string{"build","-o","veltrix-app","."}}},nil
  case "rust":return []androidBuildStep{{"build","cargo",[]string{"build","--release"}}},nil
  case "php":if _,e:=os.Stat(filepath.Join(root,"composer.json"));e==nil{return []androidBuildStep{{"install","composer",[]string{"install","--no-interaction","--prefer-dist"}}},nil};return nil,errors.New("PHP project requires composer.json")
- case "java","jvm","dotnet","ruby":return nil,fmt.Errorf("%s is detected but not yet supported by the Android local provider",req.Stack)
+ case "java":
+  if _,e:=os.Stat(filepath.Join(root,"mvnw"));e==nil{return []androidBuildStep{{"build","bash",[]string{"./mvnw","-DskipTests","package"}}},nil}
+  return []androidBuildStep{{"build","mvn",[]string{"-DskipTests","package"}}},nil
+ case "jvm":
+  if _,e:=os.Stat(filepath.Join(root,"gradlew"));e==nil{return []androidBuildStep{{"build","bash",[]string{"./gradlew","build"}}},nil}
+  return []androidBuildStep{{"build","gradle",[]string{"build"}}},nil
+ case "dotnet":
+  return []androidBuildStep{{"publish","dotnet",[]string{"publish","-c","Release","-o","./publish"}}},nil
+ case "ruby":
+  if _,e:=os.Stat(filepath.Join(root,"Gemfile"));e!=nil{return nil,errors.New("Ruby project requires Gemfile")}
+  return []androidBuildStep{{"install","bundle",[]string{"install"}}},nil
  default:return nil,fmt.Errorf("unsupported Android build stack %q",req.Stack)
  }
 }
