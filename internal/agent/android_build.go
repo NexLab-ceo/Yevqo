@@ -147,7 +147,7 @@ func androidBuildSteps(root string,req AndroidBuildRequest)([]androidBuildStep,e
 }
 
 func parseManifestBuildCommand(name, raw string) (androidBuildStep,error) {
- if strings.ContainsAny(raw,";|&`$><\\r\\n") { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command contains unsupported shell syntax",name) }
+ if strings.ContainsAny(raw,";|&`$><\r\n") { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command contains unsupported shell syntax",name) }
  fields:=strings.Fields(raw)
  if len(fields)==0 { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command is empty",name) }
  exe:=filepath.Base(fields[0])
