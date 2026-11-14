@@ -174,7 +174,9 @@ func (m *TunnelManager) StopTunnel(siteID string) error {
 		if pid == 0 {
 			return fmt.Errorf("tunnel for %s is not running", siteID)
 		}
-		return killProcess(pid)
+		if err := killProcess(pid); err != nil { return err }
+		_ = os.Remove(filepath.Join(m.DataRoot, tunnelsDir, siteID+".token"))
+		return nil
 	}
 
 	if err := killProcess(t.PID); err != nil {
