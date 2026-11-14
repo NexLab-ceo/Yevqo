@@ -193,6 +193,11 @@ type SiteAction struct {
 	Path string `json:"path"`
 	Port uint32 `json:"port"`
 	Runtime string `json:"runtime"`
+	GitURL string `json:"git_url,omitempty"`
+	GitBranch string `json:"git_branch,omitempty"`
+	BuildCommand string `json:"build_command,omitempty"`
+	RootDir string `json:"root_dir,omitempty"`
+	GitToken string `json:"git_token,omitempty"`
 }
 
 type GetLogs struct {
@@ -218,8 +223,10 @@ type Result struct {
 }
 
 type StartSiteResult struct {
-	Pid  uint32
-	Port uint32
+	Pid  uint32 `json:"pid"`
+	Port uint32 `json:"port"`
+	CommitHash string `json:"commit_hash,omitempty"`
+	CommitDate string `json:"commit_date,omitempty"`
 }
 
 type LogsResult struct {
