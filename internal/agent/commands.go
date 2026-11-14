@@ -5,6 +5,7 @@ package agent
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"veltrix/internal/shared"
 )
@@ -63,6 +64,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleCreateSite(cmd)
 	case "analyze_site_build":
 		return h.handleAnalyzeSiteBuild(cmd)
+	case "build_site":
+		return h.handleBuildSite(cmd)
 	case "start_site":
 		return h.handleStartSite(cmd)
 	case "stop_site":
@@ -128,6 +131,23 @@ func (h *CommandHandler) handleAnalyzeSiteBuild(cmd *shared.Command) *shared.Res
 		return errorResult(cmd.Id, "could not encode build analysis")
 	}
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: "project analysis completed", Payload: payload}
+}
+
+func (h *CommandHandler) handleBuildSite(cmd *shared.Command) *shared.Result {
+	var req shared.AndroidBuildSite
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
+		return errorResult(cmd.Id, "invalid build_site payload")
+	}
+	timeout := time.Duration(req.TimeoutSeconds) * time.Second
+	result := h.processes.BuildSite(AndroidBuildRequest{
+		SiteID: req.SiteId, RootDir: req.RootDir, Stack: req.Stack,
+		PackageTool: req.PackageTool, AllowProjectCode: req.AllowProjectCode,
+		Timeout: timeout, MaxLogBytes: req.MaxLogBytes,
+	})
+	payload, err := shared.Marshal(result)
+	if err != nil { return errorResult(cmd.Id, "could not encode build result") }
+	if !result.Success { return &shared.Result{Id: cmd.Id, Ok: false, Message: result.Error, Payload: payload} }
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: "Android local build completed", Payload: payload}
 }
 
 func (h *CommandHandler) handleCreateSite(cmd *shared.Command) *shared.Result {
