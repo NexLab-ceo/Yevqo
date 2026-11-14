@@ -3,7 +3,8 @@
 package agent
 
 import (
-	"context"\n\t"encoding/base64"
+	"context"
+	"encoding/base64"
 	"fmt"
 	"net"
 	"os"
