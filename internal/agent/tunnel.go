@@ -167,6 +167,7 @@ func waitForTunnelReady(pid int, logPath string, timeout time.Duration) error {
 
 // StopTunnel останавливает туннель сайта.
 func (m *TunnelManager) StopTunnel(siteID string) error {
+	if !validTunnelSiteID(siteID) { return errors.New("invalid site id") }
 	t, ok := m.tunnels[siteID]
 	if !ok {
 		// Попробуем найти процесс по siteID через pgrep.
@@ -180,8 +181,8 @@ func (m *TunnelManager) StopTunnel(siteID string) error {
 		return nil
 	}
 
-	if err := killProcess(t.PID); err != nil {
-		return err
+	if isAlive(t.PID) {
+		if err := killProcess(t.PID); err != nil { return err }
 	}
 	_ = os.Remove(filepath.Join(m.DataRoot, tunnelsDir, siteID+".token"))
 	delete(m.tunnels, siteID)
