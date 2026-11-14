@@ -550,7 +550,11 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			defer cancel()
 			result, err := conn.SendCommand(ctx, agentAction, payload)
 			if err != nil { apiError(w, shared.ErrInternal("site command failed: " + err.Error())); return }
-			if !result.Ok { writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "message": result.Message}); return }
+			if !result.Ok {
+				if in.Action != "stop" { _ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteError, 0) }
+				writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "message": result.Message})
+				return
+			}
 			if in.Action == "stop" {
 				_ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteStopped, 0)
 			} else {
