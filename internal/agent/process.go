@@ -83,6 +83,49 @@ func safeSiteDirectory(dataRoot, siteID string) (string, error) {
 	return absTarget, nil
 }
 
+// AnalyzeSiteBuild inspects a configured site root without executing project code.
+func (m *ProcessManager) AnalyzeSiteBuild(siteID, rootDir string) (BuildPlan, error) {
+	if !validSiteID(siteID) {
+		return BuildPlan{}, fmt.Errorf("invalid site id")
+	}
+	siteRoot, err := safeSiteDirectory(m.DataRoot, siteID)
+	if err != nil {
+		return BuildPlan{}, err
+	}
+	if rootDir == "" {
+		rootDir = "."
+	}
+	if filepath.IsAbs(rootDir) || strings.Contains(rootDir, "\\") {
+		return BuildPlan{}, fmt.Errorf("root directory must stay inside the site")
+	}
+	clean := filepath.Clean(rootDir)
+	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return BuildPlan{}, fmt.Errorf("root directory must stay inside the site")
+	}
+	target := siteRoot
+	if clean != "." {
+		target = filepath.Join(siteRoot, clean)
+	}
+	resolvedSite, err := filepath.EvalSymlinks(siteRoot)
+	if err != nil {
+		return BuildPlan{}, fmt.Errorf("site directory not found: %w", err)
+	}
+	resolvedTarget, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		return BuildPlan{}, fmt.Errorf("project root not found: %w", err)
+	}
+	rel, err := filepath.Rel(resolvedSite, resolvedTarget)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return BuildPlan{}, fmt.Errorf("project root resolves outside the site")
+	}
+	plan, err := AnalyzeProject(resolvedTarget)
+	if err != nil {
+		return BuildPlan{}, err
+	}
+	plan.Root = clean
+	return plan, nil
+}
+
 func (m *ProcessManager) CreateSite(siteID string, port int, runtime string) error {
 	if !validSiteID(siteID) { return fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return fmt.Errorf("port must be between 1024 and 65535") }
