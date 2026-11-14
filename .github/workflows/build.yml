@@ -3,7 +3,7 @@ name: Build VELTRIX Dock
 on:
   push:
     branches:
-      - feature/database-server-wizard
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
