@@ -22,6 +22,7 @@ type BuildPlan struct {
 		NeedsConfig  bool     `json:"needs_configuration"`
 		Evidence     []string `json:"evidence"`
 		Warnings     []string `json:"warnings,omitempty"`
+	Capabilities BuildCapabilities `json:"capabilities"`
 }
 
 // AnalyzeProject inspects only the immediate project root. It does not execute
