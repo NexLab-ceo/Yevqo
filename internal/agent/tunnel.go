@@ -299,6 +299,18 @@ func CheckCloudflared() (bool, string) {
 // InstallCloudflared downloads the official Linux release into the user's VELTRIX directory.
 // Android/Termux runs without root; the binary is installed in DataRoot/bin.
 func (m *TunnelManager) InstallCloudflared() (string, error) {
+ // Termux maintains a native Android package; do not download a glibc Linux binary onto Android.
+ if strings.Contains(os.Getenv("PREFIX"), "com.termux") {
+  pkg, err := exec.LookPath("pkg")
+  if err != nil { return "", errors.New("Termux pkg command not found") }
+  ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute); defer cancel()
+  cmd := exec.CommandContext(ctx, pkg, "install", "cloudflared", "-y")
+  output, err := cmd.CombinedOutput()
+  if err != nil { return "", fmt.Errorf("install cloudflared from Termux repository: %w: %s", err, strings.TrimSpace(string(output))) }
+  binary, err := exec.LookPath("cloudflared")
+  if err != nil { return "", errors.New("Termux package installed but cloudflared is not available in PATH") }
+  return binary, nil
+ }
  arch := runtime.GOARCH
  if arch != "arm64" && arch != "amd64" { return "", fmt.Errorf("unsupported architecture: %s", arch) }
  binDir := filepath.Join(m.DataRoot, "bin")
