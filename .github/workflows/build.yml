@@ -104,10 +104,13 @@ jobs:
           install -m 0755 packaging/setup-all.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-setup"
           install -m 0755 packaging/setup-control.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-setup-control"
           install -m 0755 packaging/setup-agent.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-setup-agent"
+          install -m 0755 scripts/update-agent.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-update-agent"
+          install -m 0755 scripts/update-all.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-update-all"
           install -m 0755 packaging/postinst-all "build-deb-all/DEBIAN/postinst"
 
           # Agent-only package: only the Agent executable and its setup script.
           install -m 0755 packaging/setup-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/veltrix-setup-agent"
+          install -m 0755 scripts/update-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/veltrix-update-agent"
           install -m 0755 packaging/postinst-agent "build-deb-agent/DEBIAN/postinst"
 
           cat > build-deb-all/DEBIAN/control <<EOF
@@ -115,7 +118,7 @@ jobs:
           Version: $VERSION
           Architecture: aarch64
           Maintainer: VELTRIX
-          Depends: mariadb, php, git, termux-services
+          Depends: mariadb, php, git, curl, jq, termux-services
           Section: utils
           Priority: optional
           Homepage: https://github.com/NexLab-ceo/veltrix
@@ -129,7 +132,7 @@ jobs:
           Version: $VERSION
           Architecture: aarch64
           Maintainer: VELTRIX
-          Depends: php, git, termux-services
+          Depends: php, git, curl, jq, termux-services
           Section: utils
           Priority: optional
           Homepage: https://github.com/NexLab-ceo/veltrix
@@ -162,7 +165,126 @@ jobs:
           grep -q '/bin/veltrix-agent' /tmp/veltrix-all.contents
           grep -q '/share/veltrix/public/index.html' /tmp/veltrix-all.contents
           grep -q '/bin/veltrix-agent$' /tmp/veltrix-agent.contents
-          grep -q '/bin/veltrix-setup-agent$' /tmp/veltrix-agent.contents
+          grep -q '/bin/veltrix-setup-agent
+          if grep -Eq 'veltrix-control|share/veltrix/public|migrations' /tmp/veltrix-agent.contents; then
+            echo "Agent-only package contains server payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: veltrix-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            veltrix-all_${{ env.VERSION }}_aarch64.deb
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
+
+      - name: Publish full package to private repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            veltrix-all_${{ env.VERSION }}_aarch64.deb
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Agent-only release to public repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix-dock
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+ /tmp/veltrix-agent.contents
+          grep -q '/bin/veltrix-update-agent
+          if grep -Eq 'veltrix-control|share/veltrix/public|migrations' /tmp/veltrix-agent.contents; then
+            echo "Agent-only package contains server payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: veltrix-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            veltrix-all_${{ env.VERSION }}_aarch64.deb
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
+
+      - name: Publish full package to private repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            veltrix-all_${{ env.VERSION }}_aarch64.deb
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Agent-only release to public repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix-dock
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+ /tmp/veltrix-agent.contents
+          grep -q '/bin/veltrix-update-all
+          if grep -Eq 'veltrix-control|share/veltrix/public|migrations' /tmp/veltrix-agent.contents; then
+            echo "Agent-only package contains server payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: veltrix-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            veltrix-all_${{ env.VERSION }}_aarch64.deb
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
+
+      - name: Publish full package to private repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            veltrix-all_${{ env.VERSION }}_aarch64.deb
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Agent-only release to public repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix-dock
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+ /tmp/veltrix-all.contents
           if grep -Eq 'veltrix-control|share/veltrix/public|migrations' /tmp/veltrix-agent.contents; then
             echo "Agent-only package contains server payload" >&2
             exit 1
