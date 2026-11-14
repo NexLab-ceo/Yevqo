@@ -172,7 +172,8 @@ func (m *TunnelManager) StopTunnel(siteID string) error {
 		// Попробуем найти процесс по siteID через pgrep.
 		pid := findTunnelPID(siteID)
 		if pid == 0 {
-			return fmt.Errorf("tunnel for %s is not running", siteID)
+			_ = os.Remove(filepath.Join(m.DataRoot, tunnelsDir, siteID+".token"))
+			return nil
 		}
 		if err := killProcess(pid); err != nil { return err }
 		_ = os.Remove(filepath.Join(m.DataRoot, tunnelsDir, siteID+".token"))
