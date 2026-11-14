@@ -1,30 +1,40 @@
-# VELTRIX Build Engine — implementation foundation
+# VELTRIX Build Engine — Android / Termux
 
-The Agent provides deterministic project analysis and reports which build tools are present on the Agent host.
+The Agent Build Engine is Android-only. It does not require root, Docker, Podman,
+Nixpacks, a remote build server, or a Linux server. Container markers may be
+detected for explanation but are not executable providers.
 
-## Detection contract
+## Components
+- Analyzer: read-only project detection and veltrix.yaml configuration.
+- Android Environment Detector: Termux/Android, architecture, CPU count, installed
+  tools, memory estimate and free disk estimate.
+- Local Provider: invokes allowlisted Termux tools with argv; never a shell string.
+- Process Supervisor: one build at a time, timeout/cancellation, bounded logs,
+  sanitized environment.
+- Artifact result: local project directory and build status.
 
-1. Detection is read-only. It never executes repository scripts or follows symlinks.
-2. Explicit `veltrix.yaml` / `veltrix.yml` configuration takes precedence.
-3. A Dockerfile takes precedence over language heuristics.
-4. Nixpacks configuration is recognized before language heuristics.
-5. Known language markers produce a BuildPlan with suggested commands and evidence.
-6. Unknown projects return a valid plan with `needs_configuration=true`; they are not treated as errors.
+## Local stacks
+- Node.js: npm/pnpm/yarn/Bun install and build script.
+- Python: pip install from requirements.txt or pyproject.toml.
+- Go: go build -o veltrix-app .
+- Rust: cargo build --release.
+- PHP: Composer dependency installation.
+- Static: no compilation step.
+- Java/Gradle, Ruby and .NET are detected but execution is not enabled yet.
+Actual compatibility depends on device architecture and installed Termux packages.
 
-## Supported initial markers
+## Security and Android limits
+Project package scripts and compiler plugins execute with the Agent user's
+permissions. The runner requires explicit allow_project_code=true; only build
+trusted repositories. Path checks reject traversal and symlink escapes. Child
+processes receive a small allowlisted environment, a timeout, and bounded logs.
+Builds are serialized. These controls are not a sandbox.
 
-Node.js (npm/pnpm/yarn/Bun), Python, Rust, Go, Java/Maven, JVM/Gradle, Ruby, PHP/Composer, .NET, Dockerfile, Nixpacks and static HTML.
+Without root/kernel support, this implementation cannot enforce cgroup CPU/RAM
+limits, isolate networking, provide a separate UID, or guarantee termination of
+grandchild processes. Memory/disk checks are preflight estimates, not hard limits.
 
-## Host capability preflight
-
-Every BuildPlan now includes a `capabilities` object. The Agent checks PATH for Docker, Podman, Nixpacks and Git. This is deliberately only an executable-presence check: it does not prove that a container daemon is running, that permissions are sufficient, or that storage/network access is available. Those checks belong immediately before a build starts.
-
-The result reports whether the Dockerfile toolchain (Docker or Podman CLI) and the Nixpacks toolchain are present. These flags do not claim that a daemon is running or that a build will succeed. Warnings explain missing prerequisites.
-
-## Execution and security boundary
-
-No project build command is executed by this feature. Custom commands are explicitly marked as not isolated and must remain disabled until a resource-limited sandbox exists. Dockerfile and Nixpacks builds must run through a container backend; they must never fall back to executing project scripts directly on the Agent host. The next implementation stage is a build-job runner with timeouts, bounded logs, cancellation, resource limits, and secret redaction.
-
-## Future compatibility
-
-BuildPlan is provider-neutral so internal providers and future third-party plugins can implement the same contract without changing detection callers.
+## Disabled by design
+Dockerfile execution, Docker/Podman, Nixpacks, arbitrary custom shell commands,
+remote builds, and claims of container-grade isolation are disabled.
+Unsupported stacks return explicit errors rather than falling back to host shell.
