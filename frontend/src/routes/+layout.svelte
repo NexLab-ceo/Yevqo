@@ -61,4 +61,45 @@
 .sidebar-nav{overflow-x:hidden;overflow-y:auto;flex:1;min-height:0;scrollbar-width:thin;overscroll-behavior:contain}.nav-group{margin-bottom:21px}.nav-label{padding:0 11px;margin:0 0 8px;color:#71717A;font-size:9px;font-weight:750;letter-spacing:.15em}.nav-item{min-height:36px;padding:8px 11px;border-radius:8px;display:flex;align-items:center;gap:11px;color:#A1A1AA;font-size:11px;font-weight:500;margin:2px 0;transition:background .16s,color .16s,border-color .16s;border:1px solid transparent}.nav-item:hover{background:#27272A;color:#FAFAFA}.nav-item.active{background:linear-gradient(90deg,#1e3a5f,#18181B);color:#FAFAFA;border-color:#3B82F6;box-shadow:inset 2px 0 #3B82F6}.nav-icon{width:16px;text-align:center;font-size:14px;color:#A1A1AA}.nav-item.active .nav-icon{color:#60A5FA}.nav-tag{margin-left:auto;font-size:8px;color:#22C55E;background:#14532D;border:1px solid #166534;border-radius:4px;padding:2px 5px}
 .sidebar-bottom{border-top:1px solid #27272A;padding-top:10px}.account-row{display:flex;align-items:center;gap:9px;padding:12px 5px 2px;margin-top:8px;border-top:1px solid #27272A}.account-menu{background:transparent;border:0;color:#A1A1AA;font-size:15px;padding:5px}.main-area{min-width:0;flex:1;display:flex;flex-direction:column;min-height:100vh;min-height:100dvh}.topbar{height:58px;flex:0 0 58px;border-bottom:1px solid #27272A;background:#09090Be8;display:flex;align-items:center;justify-content:space-between;padding:0 30px;backdrop-filter:blur(16px)}.topbar-left,.topbar-actions,.breadcrumbs{display:flex;align-items:center;gap:13px}.breadcrumbs{font-size:11px}.breadcrumbs span{color:#A1A1AA}.breadcrumbs b{color:#27272A;font-weight:400}.breadcrumbs strong{color:#FAFAFA;font-weight:600}.connection-state{font-size:10px;color:#A1A1AA;display:flex;align-items:center;gap:7px}.connection-state i{width:6px;height:6px;border-radius:50%;background:#22C55E;box-shadow:0 0 9px #22C55E99}.theme-switch{display:flex;align-items:center;gap:6px;border:1px solid #27272A;background:#18181B;color:#FAFAFA;border-radius:7px;padding:6px 9px;font-size:9px;font-weight:650}.theme-switch span{font-size:13px}.mode-switch{display:flex;align-items:center;gap:7px;border:1px solid #27272A;background:#18181B;color:#FAFAFA;border-radius:7px;padding:6px 9px;font-size:9px;font-weight:650}.mode-dot{width:6px;height:6px;border-radius:50%;background:#3B82F6}.mode-dot-advanced{background:#22C55E;box-shadow:0 0 8px #22C55E99}.switch-arrows{color:#A1A1AA;font-size:12px}.icon-action,.profile-action{width:29px;height:29px;border:1px solid #27272A;background:#18181B;color:#A1A1AA;border-radius:8px;display:grid;place-items:center;font-size:12px}.profile-action{background:#27272A;color:#FAFAFA;border-color:#3B82F6;font-size:10px;font-weight:700}.page-scroll{flex:1;overflow:auto;padding:30px}.page-container{max-width:1460px;margin:0 auto;width:100%}.mobile-menu,.mobile-scrim{display:none}
 @media(max-width:900px){.sidebar{width:226px;flex-basis:226px}.page-scroll{padding:22px}}@media(max-width:700px){.sidebar{position:fixed;z-index:50;inset:0 auto 0 0;width:276px;height:100vh;height:100dvh;transform:translateX(-100%);transition:transform .22s;box-shadow:20px 0 60px #00000088}.sidebar.mobile-open{transform:translateX(0)}.mobile-scrim{display:block;position:fixed;inset:0;background:#000000bb;border:0;z-index:40}.mobile-menu{display:grid;place-items:center;width:30px;height:30px;border:1px solid #27272A;background:#18181B;color:#FAFAFA;border-radius:7px}.topbar{padding:0 14px}.page-scroll{padding:19px 14px}.connection-state{display:none}.topbar-actions{gap:7px}}
+
+/* Dokploy-style shell: compact neutral sidebar, restrained active states */
+.sidebar{width:256px;flex-basis:256px;padding:12px 10px 10px;background:#09090b;border-right:1px solid #27272a}
+.brand-lockup{height:36px;margin-bottom:16px;padding:0 8px;gap:9px}
+.brand-mark{width:28px;height:28px;border-radius:7px;background:#fafafa;color:#09090b;box-shadow:none;font-size:14px}
+.brand-copy{letter-spacing:.015em;gap:4px}
+.brand-copy strong{font-size:14px;letter-spacing:-.025em}
+.brand-copy small{font-size:9px;color:#a1a1aa;letter-spacing:.12em}
+.brand-version{font-size:9px;border-color:#3f3f46;color:#a1a1aa;border-radius:4px}
+.workspace-switcher{padding:9px 8px;margin-bottom:14px;background:transparent;border:1px solid #27272a;border-radius:7px}
+.workspace-avatar{border-radius:6px;background:#27272a}
+.workspace-copy strong{font-size:12px;font-weight:500}
+.workspace-copy small{font-size:10px}
+.nav-group{margin-bottom:17px}
+.nav-label{font-size:10px;letter-spacing:.06em;font-weight:500;color:#71717a;padding:0 9px;margin-bottom:5px}
+.nav-item{min-height:34px;padding:7px 9px;gap:9px;border-radius:6px;font-size:12px;color:#a1a1aa;margin:1px 0}
+.nav-item:hover{background:#18181b;color:#fafafa}
+.nav-item.active{background:#27272a;color:#fafafa;border-color:transparent;box-shadow:none}
+.nav-item.active .nav-icon{color:#fafafa}
+.nav-icon{font-size:14px;color:#a1a1aa}
+.nav-tag{background:#27272a;border-color:#3f3f46;color:#d4d4d8}
+.sidebar-bottom{border-color:#27272a;padding-top:8px}
+.account-row{border-color:#27272a;padding-top:10px}
+.account-avatar{border-radius:6px;background:#27272a}
+.account-copy strong{font-size:11px;font-weight:500}
+.account-copy small{font-size:10px}
+.account-menu{border-radius:5px}
+.topbar{height:56px;flex-basis:56px;padding:0 24px;background:#09090b;border-color:#27272a}
+.breadcrumbs{font-size:12px;gap:10px}
+.breadcrumbs span{color:#a1a1aa}
+.breadcrumbs strong{font-weight:500}
+.connection-state{font-size:11px}
+.theme-switch,.mode-switch,.icon-action,.profile-action{border-radius:6px;background:transparent;border-color:#27272a}
+.mode-switch,.theme-switch{font-size:11px;padding:6px 8px}
+.icon-action,.profile-action{width:30px;height:30px}
+.page-scroll{padding:24px}
+.page-container{max-width:1400px}
+.loading-mark{border-radius:7px;background:#fafafa;color:#09090b;box-shadow:none}
+@media(max-width:900px){.sidebar{width:240px;flex-basis:240px}.page-scroll{padding:20px}}
+@media(max-width:700px){.sidebar{width:276px}.topbar{padding:0 14px}.page-scroll{padding:18px 14px}}
+
 </style>
