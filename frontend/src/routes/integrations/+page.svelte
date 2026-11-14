@@ -147,6 +147,25 @@
 .webhook-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.webhook-card{padding:14px;min-width:0}.mini-icon{display:grid;place-items:center;width:27px;height:27px;margin-bottom:10px;border-radius:8px;background:#18181B;color:#93C5FD;font-size:14px}.webhook-card p{min-height:30px;margin:0 0 11px;color:#A1A1AA;font-size:9px;line-height:1.5}
 .disabled-field{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border:1px dashed #334155;border-radius:7px;background:#0C0C10;color:#64748B;font-size:9px;overflow:hidden}.event-list{display:grid;gap:7px}.event-list>div{display:flex;align-items:center;justify-content:space-between;gap:8px}.event-list code{font-size:9px;color:#93C5FD}.event-list span{font-size:9px;color:#A1A1AA;text-align:right}.empty-deliveries{padding:12px;border:1px dashed #334155;border-radius:7px;text-align:center;color:#64748B;font-size:9px}
 .empty-state{padding:25px;text-align:center;color:#A1A1AA;font-size:11px;border:1px dashed #334155;border-radius:10px}
+
+:global(.app-shell[data-theme="light"]) .integration-tabs{border-color:#E2E6EE}
+:global(.app-shell[data-theme="light"]) .integration-tabs button{color:#667085}
+:global(.app-shell[data-theme="light"]) .integration-tabs button.active{color:#1D4ED8;border-color:#2563EB}
+:global(.app-shell[data-theme="light"]) .integration-tabs button span{background:#EEF2F6;color:#667085}
+:global(.app-shell[data-theme="light"]) .search-box,:global(.app-shell[data-theme="light"]) .provider-card,:global(.app-shell[data-theme="light"]) .detail-panel,:global(.app-shell[data-theme="light"]) .webhook-card,:global(.app-shell[data-theme="light"]) .webhook-intro{background:#FFFFFF;border-color:#E2E6EE;color:#172033}
+:global(.app-shell[data-theme="light"]) .search-box input{color:#172033}
+:global(.app-shell[data-theme="light"]) .provider-card p,:global(.app-shell[data-theme="light"]) .detail-heading p,:global(.app-shell[data-theme="light"]) .webhook-intro p,:global(.app-shell[data-theme="light"]) .webhook-card p,:global(.app-shell[data-theme="light"]) .detail-content li{color:#667085}
+:global(.app-shell[data-theme="light"]) .provider-icon,:global(.app-shell[data-theme="light"]) .mini-icon{background:#F1F5F9;border-color:#E2E8F0;color:#2563EB}
+:global(.app-shell[data-theme="light"]) .detail-heading,:global(.app-shell[data-theme="light"]) .detail-footer{border-color:#E2E6EE}
+:global(.app-shell[data-theme="light"]) .detail-footer{background:#F8FAFC}
+:global(.app-shell[data-theme="light"]) .detail-heading h2,:global(.app-shell[data-theme="light"]) .detail-content h3,:global(.app-shell[data-theme="light"]) .webhook-intro h2,:global(.app-shell[data-theme="light"]) .webhook-card h3{color:#172033}
+:global(.app-shell[data-theme="light"]) .disabled-field,:global(.app-shell[data-theme="light"]) .empty-deliveries{background:#F8FAFC;border-color:#D0D5DD;color:#667085}
+:global(.app-shell[data-theme="light"]) .event-list code{color:#2563EB}
+:global(.app-shell[data-theme="light"]) .event-list span{color:#667085}
+:global(.app-shell[data-theme="light"]) .security-note{background:#EFF6FF;border-color:#BFDBFE}
+:global(.app-shell[data-theme="light"]) .security-note strong{color:#1E3A8A}
+:global(.app-shell[data-theme="light"]) .security-note p{color:#475569}
+
 @media(max-width:850px){.provider-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.provider-grid,.webhook-grid{grid-template-columns:1fr}.webhook-intro{align-items:flex-start;flex-wrap:wrap}.webhook-intro .status{width:100%;max-width:none;text-align:left;margin-left:48px}.detail-heading{flex-wrap:wrap}.detail-heading .status{width:100%;margin-left:56px}.detail-footer{flex-wrap:wrap}.detail-footer button{margin-left:0}}
 </style>
