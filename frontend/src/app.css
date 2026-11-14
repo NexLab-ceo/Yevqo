@@ -43,3 +43,67 @@
 .app-shell[data-theme="light"] .page-container .btn-primary:hover{background:#1D4ED8}
 .app-shell[data-theme="light"] .page-container .btn{border-color:#D0D5DD;color:#344054}
 .app-shell[data-theme="light"] .page-container .btn:hover{background:#F1F5F9}
+
+/* Dokploy-inspired VELTRIX control panel baseline */
+:root{
+ --bg-base:#09090b;--bg-sidebar:#09090b;--bg-card:#18181b;--bg-elevated:#18181b;
+ --bg-hover:#27272a;--bg-input:#09090b;--border:#27272a;--border-hover:#3f3f46;
+ --text-main:#fafafa;--text-muted:#a1a1aa;--text-dim:#71717a;
+ --accent:#fafafa;--accent-hover:#e4e4e7;--accent-soft:#27272a;--accent-fg:#09090b;
+ --radius:8px
+}
+html,body{font-size:14px}
+.btn{border-radius:6px;font-size:12px;font-weight:500;padding:7px 12px;box-shadow:none}
+.btn-primary{background:#fafafa;border-color:#fafafa;color:#09090b}
+.btn-primary:hover{background:#e4e4e7;border-color:#e4e4e7}
+.input{border-radius:6px;padding:8px 10px;font-size:13px}
+.card,.device-card{border-radius:8px;background:#18181b;box-shadow:none}
+.card:hover,.device-card:hover{border-color:#52525b;transform:none}
+.page-title{font-size:22px;font-weight:600;letter-spacing:-.035em}
+.page-desc{font-size:13px;color:#a1a1aa}
+.section-title{font-size:14px;font-weight:600}
+.table th{font-size:11px;letter-spacing:.04em;text-transform:none;color:#a1a1aa}
+.table td{font-size:13px}
+.empty{border-style:solid;border-color:#27272a;border-radius:8px;background:#18181b}
+.auth-card{border-radius:10px;background:#18181b;border-color:#27272a;box-shadow:0 20px 60px #0008}
+.auth-link{color:#fafafa;text-decoration:underline;text-underline-offset:3px}
+
+/* Consistent neutral surfaces across all VELTRIX pages */
+.page-container .panel,.page-container .metric-card,.page-container .quick-panel,
+.page-container .sites-table-wrap,.page-container .device-card{
+ background:#18181b!important;border-color:#27272a!important;border-radius:8px!important;
+ box-shadow:none!important
+}
+.page-container .metric-card{padding:16px}
+.page-container .metric-value{font-size:24px;font-weight:600}
+.page-container .section-header{margin-top:26px}
+.page-container .sites-table{font-size:12px}
+.page-container .sites-table th{font-size:11px;letter-spacing:.04em}
+.page-container .sites-table td{font-size:12px}
+.page-container .quick-link{border-color:#27272a}
+.page-container .quick-icon{background:#27272a!important;color:#d4d4d8!important;border-radius:7px}
+.page-container .hero-panel{
+ background:#18181b!important;border:1px solid #27272a!important;border-radius:8px!important;
+ box-shadow:none!important
+}
+.page-container .hero-panel .hero-orb,.page-container .hero-panel .hero-graphic{display:none!important}
+.page-container .hero-kicker,.page-container .eyebrow{color:#a1a1aa!important}
+.page-container .hero-content{max-width:620px}
+.page-container .hero-content h2{font-size:22px;font-weight:600;letter-spacing:-.035em}
+.page-container .hero-content p{font-size:12px;color:#a1a1aa}
+.page-container .hero-status{color:#a1a1aa}
+.page-container .quick-panel{padding:14px}
+.page-container .quick-link{padding:9px 3px}
+.page-container .quick-link strong{font-size:12px;color:#fafafa}
+.page-container .quick-link small{font-size:11px;color:#a1a1aa}
+.page-container .device-card{padding:14px}
+.page-container .device-card:hover{border-color:#52525b!important;transform:none}
+.page-container .device-symbol{background:#27272a;color:#d4d4d8}
+.page-container .device-title{font-size:13px;font-weight:600}
+.page-container .device-id,.page-container .device-stats{font-size:11px}
+.page-container .device-divider{background:#27272a}
+.page-container .empty-symbol{background:#27272a;color:#d4d4d8}
+@media(max-width:700px){
+ .page-container .hero-content{padding:20px}
+ .page-container .hero-panel{min-height:180px}
+}
