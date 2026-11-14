@@ -179,14 +179,24 @@ jobs:
             veltrix-all_${{ env.VERSION }}_aarch64.deb
             veltrix-agent_${{ env.VERSION }}_aarch64.deb
 
-      - name: Publish Release to public repository
+      - name: Publish full package to private repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            veltrix-all_${{ env.VERSION }}_aarch64.deb
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Agent-only release to public repository
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           repository: NexLab-ceo/veltrix-dock
           token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
           files: |
-            veltrix-all_${{ env.VERSION }}_aarch64.deb
             veltrix-agent_${{ env.VERSION }}_aarch64.deb
           generate_release_notes: true
         env:
