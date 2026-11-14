@@ -52,11 +52,14 @@ func validateSiteRootDir(raw string) (string, bool) {
 
 func (s *Server) siteGitSettings(ctx context.Context, deviceID int64, siteID string) (*siteGitSettings, error) {
 	var out siteGitSettings
+	var gitURL, commit sql.NullString
 	var encrypted []byte
 	err := s.db.conn.QueryRowContext(ctx, `SELECT git_url,git_branch,build_command,root_dir,git_token_enc,deployed_commit,deployed_at
 		FROM sites WHERE device_id=? AND site_id=?`, deviceID, siteID).Scan(
-		&out.GitURL, &out.GitBranch, &out.BuildCommand, &out.RootDir, &encrypted, &out.Commit, &out.DeployedAt)
+		&gitURL, &out.GitBranch, &out.BuildCommand, &out.RootDir, &encrypted, &commit, &out.DeployedAt)
 	if err != nil { return nil, err }
+	if gitURL.Valid { out.GitURL = gitURL.String }
+	if commit.Valid { out.Commit = commit.String }
 	if len(encrypted) > 0 {
 		if len(encrypted) < 13 { return nil, shared.ErrInternal("stored Git credential is invalid") }
 		plain, err := decryptCredential(s.credentialKey, encrypted[:12], encrypted[12:])
