@@ -3,7 +3,7 @@
  import {onMount} from 'svelte';
  import {page} from '$app/stores';
  import {goto} from '$app/navigation';
- import {user,isAuthenticated,uiMode,theme} from '$lib/stores.js';
+ import {user,isAuthenticated,uiMode,theme,notify} from '$lib/stores.js';
  import {logout,me,getSettings,saveSettings} from '$lib/api.js';
  import {locale} from '$lib/i18n.js';
  let loading=true,mobileNavOpen=false,modeSaving=false;
