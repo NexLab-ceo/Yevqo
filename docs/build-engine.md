@@ -5,7 +5,7 @@ Nixpacks, a remote build server, or a Linux server. Container markers may be
 detected for explanation but are not executable providers.
 
 ## Components
-- Analyzer: read-only project detection and veltrix.yaml configuration.
+- Analyzer: read-only project detection plus the supported `veltrix.yaml` subset (`project.root`, `build.provider`, `build.install`, `build.command`, `run.command`, `run.port`).
 - Android Environment Detector: Termux/Android, architecture, CPU count, installed
   tools, memory estimate and free disk estimate.
 - Local Provider: invokes allowlisted Termux tools with argv; never a shell string.
@@ -21,7 +21,7 @@ detected for explanation but are not executable providers.
 - PHP: Composer dependency installation.
 - Static: no compilation step.
 - Java/Maven (including `mvnw`), Gradle (including `gradlew`), Ruby/Bundler and .NET (`dotnet publish`) are executable when their toolchains are installed. The runner invokes fixed argv vectors and does not evaluate shell command strings.
-Actual compatibility depends on device architecture and installed Termux packages.
+A manifest install/build command is tokenized into argv (no shell expansion) and limited to an executable allowlist. Shell operators, substitutions and shell executables are rejected. Actual compatibility depends on device architecture and installed Termux packages.
 
 ## Security and Android limits
 Project package scripts and compiler plugins execute with the Agent user's
