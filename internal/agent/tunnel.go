@@ -88,7 +88,7 @@ func (m *TunnelManager) StartTunnel(siteID string, port int, tunnelToken, hostna
 	//
 	// Ограничение: один токен = один туннель = один домен.
 	// Если нужно несколько сайтов через один туннель — нужен config.yml.
-	cmd := exec.Command("cloudflared", "tunnel", "run", "--token", tunnelToken)
+	cmd := exec.Command("cloudflared", "tunnel", "run", "--no-autoupdate", "--token", tunnelToken)
 	cmd.Dir = m.DataRoot
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
