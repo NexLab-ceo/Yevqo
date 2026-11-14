@@ -35,7 +35,9 @@ type AndroidBuildEnvironment struct {
 func DetectAndroidBuildEnvironment(dataDir string) AndroidBuildEnvironment {
  e:=AndroidBuildEnvironment{Android:runtime.GOOS=="android"||fileContains("/proc/version","Android"),Termux:strings.Contains(os.Getenv("PREFIX"),"com.termux"),Architecture:runtime.GOARCH,CPUs:runtime.NumCPU(),RootAvailable:os.Geteuid()==0,AvailableTools:[]string{}}
  for _,n:=range []string{"git","node","npm","pnpm","yarn","bun","python","python3","pip","go","cargo","php","composer","java","gradle"} {if _,err:=exec.LookPath(n);err==nil{e.AvailableTools=append(e.AvailableTools,n)}}
- _,e.DockerAvailable=exec.LookPath("docker"); _,e.PodmanAvailable=exec.LookPath("podman"); _,e.NixpacksAvailable=exec.LookPath("nixpacks")
+ _,dockerErr:=exec.LookPath("docker"); e.DockerAvailable=dockerErr==nil
+ _,podmanErr:=exec.LookPath("podman"); e.PodmanAvailable=podmanErr==nil
+ _,nixpacksErr:=exec.LookPath("nixpacks"); e.NixpacksAvailable=nixpacksErr==nil
  e.TotalMemoryBytes,e.AvailableMemoryBytes=readMemoryInfo()
  if dataDir!="" {var st syscall.Statfs_t;if syscall.Statfs(dataDir,&st)==nil{e.FreeDiskBytes=st.Bavail*uint64(st.Bsize)}}
  if e.Android&&!e.RootAvailable {e.Warnings=append(e.Warnings,"Non-root Android: cgroups and kernel-enforced per-build CPU/RAM limits are unavailable.")}
