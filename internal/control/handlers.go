@@ -512,6 +512,16 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 		s.handleSiteGit(w, r, user, deviceID, parts[1])
 		return
 	}
+	if len(parts)==3 && parts[2]=="install-cloudflared" {
+		if r.Method!=http.MethodPost { http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return }
+		deviceID,err:=parseSiteGitRouteID(parts[0]);if err!=nil{apiError(w,err);return}
+		dev,err:=s.db.GetDeviceByID(r.Context(),deviceID);if err!=nil||dev.UserID!=user.ID{apiError(w,shared.ErrForbidden("not your device"));return}
+		conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("устройство не в сети"));return}
+		ctx,cancel:=context.WithTimeout(r.Context(),3*time.Minute);defer cancel()
+		result,err:=conn.SendCommand(ctx,"install_cloudflared",map[string]interface{}{})
+		if err!=nil||!result.Ok{msg:="Не удалось установить cloudflared";if result!=nil&&result.Message!=""{msg=result.Message};apiError(w,shared.ErrBadRequest(msg));return}
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"message":"cloudflared installed"});return
+	}
 	if len(parts) != 2 && !(len(parts) == 3 && parts[2] == "cmd") {
 		apiError(w, shared.ErrBadRequest("expected /api/sites/{deviceID}/{siteID}[/cmd]"))
 		return
@@ -580,13 +590,47 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodPatch {
-			var in struct { Domain string }
+			var in struct { Domain string `json:"domain"`; TunnelToken string `json:"tunnel_token"` }
 			if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 			domain:=strings.ToLower(strings.TrimSpace(in.Domain))
 			if domain!="" && !domainPattern.MatchString(domain){apiError(w,shared.ErrBadRequest("enter a valid hostname, such as app.example.com"));return}
-			_,err:=s.db.conn.ExecContext(r.Context(),"UPDATE sites SET domain=? WHERE device_id=? AND site_id=?",nullableString(domain),deviceID,siteID)
-			if err!=nil{apiError(w,shared.ErrInternal("could not update domain"));return}
-			writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"domain":domain});return
+			if domain=="" {
+				_,err:=s.db.conn.ExecContext(r.Context(),"UPDATE sites SET domain=NULL,tunnel_status='inactive',tunnel_error=NULL WHERE device_id=? AND site_id=?",deviceID,siteID)
+				if err!=nil{apiError(w,shared.ErrInternal("could not remove domain"));return}
+				writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"domain":"","tunnel_status":"inactive"});return
+			}
+			// Keep token encrypted at rest. If omitted, reuse a previously saved token.
+			var encrypted interface{}
+			if strings.TrimSpace(in.TunnelToken)!="" {
+				if len(in.TunnelToken)>4096 || strings.ContainsAny(in.TunnelToken,"\\r\\n\\x00"){apiError(w,shared.ErrBadRequest("invalid Cloudflare tunnel token"));return}
+				nonce,ciphertext,e:=encryptCredential(s.credentialKey,[]byte(strings.TrimSpace(in.TunnelToken)))
+				if e!=nil{apiError(w,shared.ErrInternal("could not encrypt tunnel token"));return}
+				encrypted=append(nonce,ciphertext...)
+				_,e=s.db.conn.ExecContext(r.Context(),"UPDATE sites SET domain=?,tunnel_token_enc=?,tunnel_status='pending',tunnel_error=NULL,tunnel_updated_at=NOW() WHERE device_id=? AND site_id=?",domain,encrypted,deviceID,siteID)
+				if e!=nil{apiError(w,shared.ErrInternal("could not save domain"));return}
+			}else{
+				_,e:=s.db.conn.ExecContext(r.Context(),"UPDATE sites SET domain=?,tunnel_status='pending',tunnel_error=NULL,tunnel_updated_at=NOW() WHERE device_id=? AND site_id=?",domain,deviceID,siteID)
+				if e!=nil{apiError(w,shared.ErrInternal("could not save domain"));return}
+			}
+			var tokenEnc []byte
+			if e:=s.db.conn.QueryRowContext(r.Context(),"SELECT tunnel_token_enc FROM sites WHERE device_id=? AND site_id=?",deviceID,siteID).Scan(&tokenEnc);e!=nil||len(tokenEnc)<13{
+				_,_=s.db.conn.ExecContext(r.Context(),"UPDATE sites SET tunnel_status='error',tunnel_error=? WHERE device_id=? AND site_id=?","Укажите Cloudflare Tunnel token",deviceID,siteID)
+				writeJSON(w,http.StatusOK,map[string]interface{}{"ok":false,"domain":domain,"tunnel_status":"error","message":"Укажите Cloudflare Tunnel token"});return
+			}
+			token,e:=decryptCredential(s.credentialKey,tokenEnc[:12],tokenEnc[12:])
+			if e!=nil{apiError(w,shared.ErrInternal("could not decrypt Cloudflare token"));return}
+			conn,online:=s.hub.Get(deviceID)
+			if !online{_,_=s.db.conn.ExecContext(r.Context(),"UPDATE sites SET tunnel_status='error',tunnel_error=? WHERE device_id=? AND site_id=?","Устройство не в сети",deviceID,siteID);writeJSON(w,http.StatusOK,map[string]interface{}{"ok":false,"domain":domain,"tunnel_status":"error","message":"Устройство не в сети"});return}
+			ctx,cancel:=context.WithTimeout(r.Context(),45*time.Second);defer cancel()
+			result,e:=conn.SendCommand(ctx,"create_tunnel",&shared.CreateTunnel{SiteId:siteID,Hostname:domain,TunnelToken:string(token),Port:uint32(st.Port)})
+			if e!=nil||!result.Ok{
+				msg:="cloudflared не запущен"
+				if result!=nil&&result.Message!=""{msg=result.Message}
+				_,_=s.db.conn.ExecContext(r.Context(),"UPDATE sites SET tunnel_status='error',tunnel_error=?,tunnel_updated_at=NOW() WHERE device_id=? AND site_id=?",msg,deviceID,siteID)
+				writeJSON(w,http.StatusOK,map[string]interface{}{"ok":false,"domain":domain,"tunnel_status":"error","message":msg});return
+			}
+			_,_=s.db.conn.ExecContext(r.Context(),"UPDATE sites SET tunnel_status='active',tunnel_error=NULL,tunnel_updated_at=NOW() WHERE device_id=? AND site_id=?",deviceID,siteID)
+			writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"domain":domain,"tunnel_status":"active","message":"Cloudflare Tunnel connected"});return
 		}
 		if r.Method == http.MethodDelete {
 			if st.Status == shared.SiteRunning {

@@ -265,6 +265,7 @@ func (h *CommandHandler) handleCreateTunnel(cmd *shared.Command) *shared.Result 
 		return errorResult(cmd.Id, "site must be running first")
 	}
 
+	if req.Port != 0 && int(req.Port) != proc.Port { return errorResult(cmd.Id, "site port mismatch") }
 	pid, err := h.tunnels.StartTunnel(req.SiteId, proc.Port, req.TunnelToken, req.Hostname)
 	if err != nil {
 		return errorResult(cmd.Id, err.Error())
@@ -349,4 +350,12 @@ func (h *CommandHandler) handleDatabaseServerAction(cmd *shared.Command, action 
 		return errorResult(cmd.Id, err.Error())
 	}
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: "PostgreSQL server " + action + " completed"}
+}
+
+ 
+func (h *CommandHandler) handleInstallCloudflared(cmd *shared.Command) *shared.Result {
+ path,err:=h.tunnels.InstallCloudflared()
+ if err!=nil{return errorResult(cmd.Id,err.Error())}
+ payload,_:=shared.Marshal(map[string]string{"path":path})
+ return &shared.Result{Id:cmd.Id,Ok:true,Message:"cloudflared installed for Termux user",Payload:payload}
 }

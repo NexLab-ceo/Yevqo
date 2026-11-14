@@ -172,7 +172,7 @@ export async function getDatabaseBackupChunk(id, offset, length = 262144) { retu
 export async function deleteSite(deviceId, siteId) { return request('DELETE', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}`); }
 
 export async function listDomains() { return request('GET', '/api/domains'); }
-export async function updateSiteDomain(deviceId, siteId, domain) { return request('PATCH', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId), { domain }); }
+export async function updateSiteDomain(deviceId, siteId, domain, tunnelToken = '') { return request('PATCH', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId), { domain, tunnel_token: tunnelToken }); }
 export async function listDeployments() { return request('GET', '/api/deployments'); }
 export async function getMonitoring() { return request('GET', '/api/monitoring'); }
 
@@ -203,3 +203,12 @@ export async function attachDatabaseToSite(databaseId, deviceId, siteId) { retur
 export async function restoreDatabaseBackup(backupId, input) { return request('POST', '/api/backups/restore', { backup_id: backupId, ...input }); }
 
 export async function testDatabaseConnection(id) { return request('POST', `/api/databases/${id}/test`, {}); }
+
+
+// === External Git provider integrations ===
+export async function listIntegrations() { return request('GET', '/api/integrations'); }
+export async function connectIntegration(provider, token) { return request('POST', '/api/integrations', { provider, token }); }
+export async function disconnectIntegration(id) { return request('DELETE', `/api/integrations/${id}`); }
+export async function listIntegrationRepositories(id) { return request('GET', `/api/integrations/${id}/repositories`); }
+
+export async function installCloudflared(deviceId, siteId) { return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/install-cloudflared`, {}); }
