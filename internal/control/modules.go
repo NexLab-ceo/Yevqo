@@ -320,7 +320,7 @@ func (s *Server) handleSettings(w http.ResponseWriter,r *http.Request) {
 		for key,raw:=range in{if !allowed[key]{apiError(w,shared.ErrBadRequest("unsupported setting: "+key));return}
 			if key=="mode"{var v string;if json.Unmarshal(raw,&v)!=nil||(v!="simple"&&v!="advanced"){apiError(w,shared.ErrBadRequest("mode must be simple or advanced"));return}}
 			if key=="locale"{var v string;if json.Unmarshal(raw,&v)!=nil||(v!="ru"&&v!="en"){apiError(w,shared.ErrBadRequest("locale must be ru or en"));return}}
-			if key=="theme"{var v string;if json.Unmarshal(raw,&v)!=nil||v!="dark"{apiError(w,shared.ErrBadRequest("unsupported theme"));return}}
+			if key=="theme"{var v string;if json.Unmarshal(raw,&v)!=nil||(v!="dark"&&v!="light"){apiError(w,shared.ErrBadRequest("theme must be dark or light"));return}}
 			_,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO user_settings(user_id,setting_key,setting_value) VALUES(?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)`,u.ID,key,[]byte(raw));if err!=nil{apiError(w,shared.ErrInternal("could not save settings"));return}
 		}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
