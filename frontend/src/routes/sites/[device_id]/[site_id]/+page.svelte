@@ -23,6 +23,8 @@
     let git = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', has_token: false, commit: '', deployed_at: null };
     let gitForm = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', github_token: '' };
     let connections = [];
+    let buildPlan = null;
+    let analyzingBuild = false;
 
     onMount(async () => {
         deviceId = $page.params.device_id;
@@ -111,6 +113,23 @@
         terminalLoading = false;
     }
     
+    async function analyzeBuild() {
+        if (!online || analyzingBuild) return;
+        analyzingBuild = true;
+        buildPlan = null;
+        const res = await sendCommand(deviceId, 'analyze_site_build', { site_id: siteId, root_dir: gitForm.root_directory || '.' });
+        analyzingBuild = false;
+        if (!res.ok || !res.data?.ok) {
+            notify(res.error || res.data?.message || 'Не удалось проанализировать проект', 'error');
+            return;
+        }
+        try {
+            buildPlan = JSON.parse(decodeLogs(res.data.payload));
+            activeTab = 'build';
+        } catch {
+            notify('Получен некорректный ответ анализа', 'error');
+        }
+    }
     async function saveGit() {
         if (busyAction) return;
         busyAction = 'git';
@@ -176,6 +195,7 @@
         <button class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
         <button class:active={activeTab === 'logs'} on:click={openTerminal}>Logs</button>
         <button class:active={activeTab === 'environment'} on:click={() => activeTab = 'environment'}>Environment</button>
+        <button class:active={activeTab === 'build'} on:click={() => activeTab = 'build'}>Build</button>
         <button class:active={activeTab === 'git'} on:click={() => activeTab = 'git'}>Git</button>
     </nav>
 
@@ -222,6 +242,36 @@
                 {/each}
             {:else}<p class="muted">Управляемые базы данных не подключены.</p>{/if}
         </Card>
+    {:else if activeTab === 'build'}
+        <Card>
+            <div class="logs-head">
+                <div><h2 class="details-title">Build Engine</h2><p class="muted">Анализ проекта без выполнения его кода. Root Directory берётся из Git settings.</p></div>
+                <Button variant="primary" disabled={!online || analyzingBuild} loading={analyzingBuild} on:click={analyzeBuild}>Analyze project</Button>
+            </div>
+            {#if !online}
+                <p class="offline-note">Устройство должно быть онлайн для анализа файлов проекта.</p>
+            {:else if buildPlan}
+                <div class="build-summary">
+                    <div><span>Detected stack</span><strong>{buildPlan.stack || 'unknown'}</strong></div>
+                    <div><span>Provider</span><strong>{buildPlan.provider || 'auto'}</strong></div>
+                    <div><span>Confidence</span><strong>{buildPlan.confidence || 'low'}</strong></div>
+                    <div><span>Project root</span><strong>{buildPlan.root || '.'}</strong></div>
+                </div>
+                {#if buildPlan.needs_configuration}<p class="build-warning">Не удалось определить способ сборки автоматически. Выберите Dockerfile, Nixpacks, Static Hosting или задайте пользовательские команды.</p>{/if}
+                {#if buildPlan.evidence?.length}<p class="muted">Найдено: {buildPlan.evidence.join(', ')}</p>{/if}
+                {#if buildPlan.install_command || buildPlan.build_command || buildPlan.start_command}
+                    <div class="build-commands">
+                        {#if buildPlan.install_command}<div><span>Install</span><code>{buildPlan.install_command}</code></div>{/if}
+                        {#if buildPlan.build_command}<div><span>Build</span><code>{buildPlan.build_command}</code></div>{/if}
+                        {#if buildPlan.start_command}<div><span>Start</span><code>{buildPlan.start_command}</code></div>{/if}
+                    </div>
+                {/if}
+                {#if buildPlan.warnings?.length}{#each buildPlan.warnings as warning}<p class="muted">{warning}</p>{/each}{/if}
+                <p class="security-note">Пока это только план анализа. Команды не запускались и сайт не изменялся.</p>
+            {:else}
+                <p class="muted">Запусти анализ, чтобы определить стек, сборщик, команды и наличие конфигурации. Неизвестные проекты не считаются ошибкой.</p>
+            {/if}
+        </Card>
     {:else if activeTab === 'git'}
         <Card>
             <h2 class="details-title">Git Repository</h2>
@@ -264,6 +314,13 @@
     .env-group{border:1px solid #27272A;border-radius:8px;padding:14px;margin-top:12px}
     .env-group strong{display:block;color:#FAFAFA;font-size:13px;margin-bottom:10px}
     .env-row{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid #27272A;font-size:12px;color:#D4D4D8}
+    .build-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:16px 0}
+    .build-summary div,.build-commands div{display:flex;flex-direction:column;gap:6px;background:#09090B;border:1px solid #27272A;border-radius:8px;padding:12px;min-width:0}
+    .build-summary span,.build-commands span{font-size:11px;color:#A1A1AA}
+    .build-summary strong{font-size:13px;color:#FAFAFA;overflow-wrap:anywhere}
+    .build-commands{display:grid;gap:8px;margin-top:14px}
+    .build-commands code{font-size:12px;color:#D4D4D8;overflow-wrap:anywhere}
+    .build-warning{padding:12px;border:1px solid #854D0E;border-radius:8px;color:#FBBF24;font-size:12px;line-height:1.5}
     .git-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
     .git-form label{display:grid;gap:7px;color:#D4D4D8;font-size:12px}.git-form .wide{grid-column:1/-1}
     .input{width:100%;box-sizing:border-box;background:#09090B;border:1px solid #3F3F46;border-radius:7px;padding:10px 12px;color:#FAFAFA;font-size:13px}
