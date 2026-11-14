@@ -3,6 +3,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net"
@@ -30,6 +31,7 @@ type Process struct {
 // ProcessManager — менеджер запущенных процессов.
 type ProcessManager struct {
 	DataRoot string
+	BuildRunner *AndroidBuildRunner
 	procs    map[string]*Process // key = siteID
 }
 
@@ -37,6 +39,7 @@ type ProcessManager struct {
 func NewProcessManager(dataRoot string) *ProcessManager {
 	return &ProcessManager{
 		DataRoot: dataRoot,
+		BuildRunner: NewAndroidBuildRunner(dataRoot),
 		procs:    make(map[string]*Process),
 	}
 }
@@ -562,11 +565,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 		return 0, output.String(), "", "", fmt.Errorf("root directory resolves outside the site")
 	}
 	if strings.TrimSpace(req.BuildCommand) != "" {
-		cmd := exec.Command("sh", "-lc", req.BuildCommand)
-		cmd.Dir, cmd.Env = resolvedBuild, os.Environ()
-		out, buildErr := cmd.CombinedOutput()
-		output.Write(out)
-		if buildErr != nil { return 0, output.String(), "", "", fmt.Errorf("build command failed: %w", buildErr) }
+		return 0, output.String(), "", "", fmt.Errorf("custom shell build commands are disabled on Android; use the Android local BuildSite provider with a supported stack")
 	}
 	commitCmd := exec.Command("git", "-C", siteRoot, "rev-parse", "HEAD")
 	commitBytes, err := commitCmd.Output()
@@ -581,4 +580,22 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 	pid, err := m.RestartSite(req.SiteId, runPath, int(req.Port), req.Runtime)
 	if err != nil { return 0, output.String(), commit, commitDate, err }
 	return pid, output.String(), commit, commitDate, nil
+}
+
+
+// BuildSite runs the Android-native local provider for a site. Project code is
+// executed only when the caller explicitly sets AllowProjectCode.
+func (m *ProcessManager) BuildSite(req AndroidBuildRequest) AndroidBuildResult {
+	if !validSiteID(req.SiteID) {
+		return AndroidBuildResult{Provider: "android-local", Stack: req.Stack, Error: "invalid site id"}
+	}
+	siteRoot, err := safeSiteDirectory(m.DataRoot, req.SiteID)
+	if err != nil {
+		return AndroidBuildResult{Provider: "android-local", Stack: req.Stack, Error: err.Error()}
+	}
+	req.SiteRoot = siteRoot
+	if m.BuildRunner == nil {
+		m.BuildRunner = NewAndroidBuildRunner(m.DataRoot)
+	}
+	return m.BuildRunner.Run(context.Background(), req)
 }

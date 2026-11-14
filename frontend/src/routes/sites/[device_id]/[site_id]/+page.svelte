@@ -25,6 +25,9 @@
     let connections = [];
     let buildPlan = null;
     let analyzingBuild = false;
+    let buildRunning = false;
+    let allowProjectCode = false;
+    let buildResult = null;
 
     onMount(async () => {
         deviceId = $page.params.device_id;
@@ -130,6 +133,39 @@
             notify('Получен некорректный ответ анализа', 'error');
         }
     }
+    async function runAndroidBuild() {
+        if (!online || !buildPlan || buildRunning) return;
+        if (!allowProjectCode) {
+            notify('Подтвердите запуск кода проекта перед сборкой', 'warning');
+            return;
+        }
+        buildRunning = true;
+        buildResult = null;
+        const res = await sendCommand(deviceId, 'build_site', {
+            site_id: siteId,
+            root_dir: gitForm.root_directory || '.',
+            stack: buildPlan.stack,
+            package_tool: buildPlan.package_tool || '',
+            allow_project_code: true,
+            timeout_seconds: 1200,
+            max_log_bytes: 10485760
+        });
+        buildRunning = false;
+        if (!res.ok || !res.data) {
+            notify(res.error || 'Не удалось выполнить сборку', 'error');
+            return;
+        }
+        try {
+            buildResult = res.data.payload ? JSON.parse(decodeLogs(res.data.payload)) : {
+                success: !!res.data.ok, error: res.data.message || ''
+            };
+        } catch {
+            buildResult = { success: !!res.data.ok, output: '', error: res.data.message || 'Некорректный ответ сборки' };
+        }
+        if (buildResult.success) notify('Локальная сборка завершена', 'success');
+        else notify(buildResult.error || res.data.message || 'Сборка завершилась ошибкой', 'error');
+    }
+
     async function saveGit() {
         if (busyAction) return;
         busyAction = 'git';
@@ -267,6 +303,40 @@
                     </div>
                 {/if}
                 {#if buildPlan.warnings?.length}{#each buildPlan.warnings as warning}<p class="muted">{warning}</p>{/each}{/if}
+                <div class="android-build-panel">
+                    <h3>Android Local Build</h3>
+                    <p class="muted">Сборка выполняется непосредственно на Android/Termux. Docker, Podman и Nixpacks не используются.</p>
+                    {#if buildPlan.android_environment}
+                        <div class="build-summary">
+                            <div><span>Environment</span><strong>{buildPlan.android_environment.termux ? 'Termux' : buildPlan.android_environment.android ? 'Android' : 'Host'}</strong></div>
+                            <div><span>Architecture</span><strong>{buildPlan.android_environment.architecture}</strong></div>
+                            <div><span>CPU cores</span><strong>{buildPlan.android_environment.cpus}</strong></div>
+                            <div><span>Available RAM</span><strong>{buildPlan.android_environment.available_memory_bytes ? Math.round(buildPlan.android_environment.available_memory_bytes / 1048576) + ' MB' : 'Unknown'}</strong></div>
+                        </div>
+                        {#if buildPlan.android_environment.available_tools?.length}
+                            <p class="muted">Available tools: {buildPlan.android_environment.available_tools.join(', ')}</p>
+                        {/if}
+                    {/if}
+                    {#if ['nodejs','python','go','rust','php','static'].includes(buildPlan.stack) && !buildPlan.needs_configuration}
+                        <label class="consent-row">
+                            <input type="checkbox" bind:checked={allowProjectCode} />
+                            Я доверяю этому репозиторию и разрешаю запуск его build-скриптов с правами пользователя Termux.
+                        </label>
+                        <Button variant="primary" disabled={!online || buildRunning || !allowProjectCode} loading={buildRunning} on:click={runAndroidBuild}>Build on this Android device</Button>
+                    {:else}
+                        <p class="build-warning">Этот тип проекта пока не поддерживается локальным Android provider. Сборка не будет запускаться.</p>
+                    {/if}
+                    {#if buildResult}
+                        <div class:build-success={buildResult.success} class:build-failure={!buildResult.success} class="build-result">
+                            <strong>{buildResult.success ? 'Build completed' : 'Build failed'}</strong>
+                            {#if buildResult.error}<p>{buildResult.error}</p>{/if}
+                            {#if buildResult.duration_ms}<p class="muted">Duration: {(buildResult.duration_ms / 1000).toFixed(1)} s</p>{/if}
+                            <pre class="terminal">{buildResult.output || '(no output)'}</pre>
+                            {#if buildResult.output_truncated}<p class="muted">Логи обрезаны по установленному лимиту.</p>{/if}
+                        </div>
+                    {/if}
+                    <p class="security-note">Ограничения памяти и диска проверяются предварительно, но без root это не жёсткие лимиты. Сборка не изолирована от Android-пользователя.</p>
+                </div>
                 <p class="security-note">Пока это только план анализа. Команды не запускались и сайт не изменялся.</p>
             {:else}
                 <p class="muted">Запусти анализ, чтобы определить стек, сборщик, команды и наличие конфигурации. Неизвестные проекты не считаются ошибкой.</p>
@@ -314,6 +384,12 @@
     .env-group{border:1px solid #27272A;border-radius:8px;padding:14px;margin-top:12px}
     .env-group strong{display:block;color:#FAFAFA;font-size:13px;margin-bottom:10px}
     .env-row{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid #27272A;font-size:12px;color:#D4D4D8}
+    .android-build-panel{display:grid;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid #27272A}
+    .android-build-panel h3{font-size:14px;color:#FAFAFA;margin:0}
+    .consent-row{display:flex;align-items:flex-start;gap:9px;color:#D4D4D8;font-size:12px;line-height:1.5}
+    .consent-row input{margin-top:2px;accent-color:#A3E635}
+    .build-result{border:1px solid #3F3F46;border-radius:8px;padding:12px}
+    .build-success{border-color:#3F6212}.build-failure{border-color:#854D0E}
     .build-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:16px 0}
     .build-summary div,.build-commands div{display:flex;flex-direction:column;gap:6px;background:#09090B;border:1px solid #27272A;border-radius:8px;padding:12px;min-width:0}
     .build-summary span,.build-commands span{font-size:11px;color:#A1A1AA}
