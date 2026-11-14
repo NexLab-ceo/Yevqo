@@ -211,7 +211,7 @@
                 <Card>
                     <div class="site-header">
                         <div class="site-info">
-                            <div class="site-name">{site.site_id}</div>
+                            <button class="site-name site-link" on:click={() => goto(`/sites/${device.id}/${encodeURIComponent(site.site_id)}`)}>{site.site_id}</button>
                             <div class="site-meta">
                                 :{site.port} · {site.path} · {site.runtime}
                             </div>
@@ -351,6 +351,16 @@
         font-size: 14px;
         color: #F1F5F9;
     }
+    .site-link {
+        display: inline-block;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+    }
+    .site-link:hover { color: #A3E635; }
 
     .site-meta {
         font-family: ui-monospace, monospace;
