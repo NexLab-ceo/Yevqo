@@ -1,6 +1,6 @@
-## VELTRIX Aurora migration track
+# VELTRIX Dock
 
-The `feature/database-server-wizard` branch contains the in-progress VELTRIX Dock UI and Control Plane migration. It does not change `main` or production data.
+The `main` branch is the active VELTRIX Dock implementation. It contains the SvelteKit Control Plane, Go Agent, Android/Termux packages, website lifecycle, database operations, Build Engine and Cloudflare Tunnel integration.
 
 ## Что скачать
 
@@ -9,7 +9,7 @@ The `feature/database-server-wizard` branch contains the in-progress VELTRIX Doc
 - **Если вы хотите запустить панель и тестировать её на том же телефоне — скачайте `veltrix-all_<version>_aarch64.deb`.** Внутри Control Plane, Agent, веб-интерфейс, миграции и сценарии настройки. После установки выберите: сервер, агент или оба компонента.
 - **Если вам нужно только подключить телефон к чужой панели — скачайте `veltrix-agent_<version>_aarch64.deb`.** Пакет содержит только Agent и сценарий настройки. При установке (или при запуске `veltrix-setup-agent`) укажите WebSocket URL панели и токен устройства.
 
-Пакет `veltrix-all` требует MariaDB, PHP, Git и `termux-services`. Пакет `veltrix-agent` требует PHP, Git и `termux-services`. `cloudflared` не является обязательной зависимостью: устанавливайте его отдельно, только если используете Cloudflare Tunnel.
+Пакет `veltrix-all` требует MariaDB, PHP, Git и `termux-services`. Пакет `veltrix-agent` требует PHP, Git и `termux-services`. `cloudflared` не является обязательной зависимостью: экран Domains может установить нативный пакет Termux при настройке Cloudflare Tunnel. См. [инструкцию по Cloudflare Tunnel](docs/cloudflare-tunnel.md).
 
 Перед настройкой Control Plane или Agent выполните `termux-setup-storage` в Termux и разрешите доступ к общему хранилищу: конфигурация и данные по умолчанию размещаются в `/sdcard/veltrix-control` и `/sdcard/veltrix-agent`.
 
