@@ -203,3 +203,10 @@ export async function attachDatabaseToSite(databaseId, deviceId, siteId) { retur
 export async function restoreDatabaseBackup(backupId, input) { return request('POST', '/api/backups/restore', { backup_id: backupId, ...input }); }
 
 export async function testDatabaseConnection(id) { return request('POST', `/api/databases/${id}/test`, {}); }
+
+
+// === External Git provider integrations ===
+export async function listIntegrations() { return request('GET', '/api/integrations'); }
+export async function connectIntegration(provider, token) { return request('POST', '/api/integrations', { provider, token }); }
+export async function disconnectIntegration(id) { return request('DELETE', `/api/integrations/${id}`); }
+export async function listIntegrationRepositories(id) { return request('GET', `/api/integrations/${id}/repositories`); }
