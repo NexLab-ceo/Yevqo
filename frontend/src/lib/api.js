@@ -210,3 +210,5 @@ export async function listIntegrations() { return request('GET', '/api/integrati
 export async function connectIntegration(provider, token) { return request('POST', '/api/integrations', { provider, token }); }
 export async function disconnectIntegration(id) { return request('DELETE', `/api/integrations/${id}`); }
 export async function listIntegrationRepositories(id) { return request('GET', `/api/integrations/${id}/repositories`); }
+
+export async function installCloudflared(deviceId, siteId) { return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/install-cloudflared`, {}); }
