@@ -112,6 +112,13 @@ export async function runSiteCommand(deviceId, siteId, action) {
     return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/cmd`, { action });
 }
 
+export async function getSiteGit(deviceId, siteId) {
+    return request('GET', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/git`);
+}
+export async function saveSiteGit(deviceId, siteId, settings) {
+    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/git`, settings);
+}
+
 // === Admin ===
 
 export async function adminListUsers(page = 1) {
