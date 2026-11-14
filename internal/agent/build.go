@@ -39,6 +39,9 @@ func AnalyzeProject(root string) (BuildPlan, error) {
  manifest, found, err := readVeltrixManifest(abs)
  if err != nil { return BuildPlan{}, err }
  if !found { return analyzeProjectMarkers(abs) }
+ if manifest.Provider != "" {
+  switch manifest.Provider { case "auto","veltrix","custom","static","android-local","dockerfile","nixpacks": default: return BuildPlan{}, fmt.Errorf("unsupported veltrix.yaml build.provider %q", manifest.Provider) }
+ }
  manifestRoot := manifest.Root
  if manifestRoot == "" { manifestRoot = "." }
  if filepath.IsAbs(manifestRoot) || strings.Contains(manifestRoot, "\\\\") { return BuildPlan{}, fmt.Errorf("veltrix.yaml project.root must be relative") }
