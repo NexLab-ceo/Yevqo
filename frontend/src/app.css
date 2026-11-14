@@ -12,3 +12,34 @@
 .auth-page{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg-base);padding:24px}.auth-card{width:100%;max-width:410px;background:#18181B;border:1px solid #27272A;border-radius:18px;padding:32px;box-shadow:0 28px 90px #00000077}.auth-header{text-align:center;margin-bottom:25px}.auth-title{font-size:21px;font-weight:800;letter-spacing:.04em}.auth-subtitle{font-size:11px;color:var(--text-muted);margin-top:6px}.auth-footer{margin-top:20px;text-align:center;font-size:11px;color:var(--text-muted)}.auth-link{color:#60A5FA;margin-left:4px}.optional{font-weight:400;color:var(--text-dim);font-size:10px}
 [data-mode=simple] .advanced-only{display:none!important}
 @media(max-width:640px){.page-header{flex-direction:column;align-items:stretch}.grid{grid-template-columns:1fr}.card{padding:15px}.page-title{font-size:20px}}
+
+
+/* VELTRIX light appearance — selected per user and persisted by Control. */
+.app-shell[data-theme="light"]{
+ --bg-base:#F4F6FA;--bg-sidebar:#FFFFFF;--bg-card:#FFFFFF;--bg-elevated:#FFFFFF;--bg-hover:#EEF1F6;--bg-input:#FFFFFF;
+ --border:#E2E6EE;--border-hover:#CBD3DF;--text-main:#172033;--text-muted:#667085;--text-dim:#98A2B3;
+ --accent:#2563EB;--accent-hover:#1D4ED8;--accent-soft:#DBEAFE;--accent-fg:#FFFFFF;
+ color:var(--text-main);background:var(--bg-base)
+}
+.app-shell[data-theme="light"] .sidebar{background:#FFFFFF;border-color:#E2E6EE}
+.app-shell[data-theme="light"] .main-area,.app-shell[data-theme="light"] .page-scroll{background:#F4F6FA}
+.app-shell[data-theme="light"] .topbar{background:#FFFFFFE8;border-color:#E2E6EE}
+.app-shell[data-theme="light"] .brand-copy strong,.app-shell[data-theme="light"] .breadcrumbs strong,.app-shell[data-theme="light"] .workspace-copy strong,.app-shell[data-theme="light"] .account-copy strong{color:#172033}
+.app-shell[data-theme="light"] .workspace-switcher,.app-shell[data-theme="light"] .mode-switch,.app-shell[data-theme="light"] .theme-switch,.app-shell[data-theme="light"] .icon-action{background:#F8FAFC;border-color:#E2E6EE;color:#344054}
+.app-shell[data-theme="light"] .nav-item{color:#667085}
+.app-shell[data-theme="light"] .nav-item:hover{background:#F1F5F9;color:#172033}
+.app-shell[data-theme="light"] .nav-item.active{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE;box-shadow:inset 2px 0 #2563EB}
+.app-shell[data-theme="light"] .nav-item.active .nav-icon{color:#2563EB}
+.app-shell[data-theme="light"] .page-container .card,.app-shell[data-theme="light"] .page-container .device-card,.app-shell[data-theme="light"] .page-container .panel,.app-shell[data-theme="light"] .page-container .auth-card{background:#FFFFFF!important;border-color:#E2E6EE!important;color:#172033}
+.app-shell[data-theme="light"] .page-container h1,.app-shell[data-theme="light"] .page-container h2,.app-shell[data-theme="light"] .page-container h3,.app-shell[data-theme="light"] .page-container strong{color:#172033}
+.app-shell[data-theme="light"] .page-container p,.app-shell[data-theme="light"] .page-container label,.app-shell[data-theme="light"] .page-container .muted{color:#667085}
+.app-shell[data-theme="light"] .page-container input,.app-shell[data-theme="light"] .page-container select,.app-shell[data-theme="light"] .page-container textarea{background:#FFFFFF!important;color:#172033!important;border-color:#D0D5DD!important}
+.app-shell[data-theme="light"] .page-container .empty{background:#FFFFFF;border-color:#D0D5DD;color:#667085}
+.app-shell[data-theme="light"] .page-container table th{color:#667085;border-color:#E2E6EE}
+.app-shell[data-theme="light"] .page-container table td{border-color:#E2E6EE}
+.app-shell[data-theme="light"] .page-container pre,.app-shell[data-theme="light"] .page-container code{background:#F1F5F9;color:#334155}
+.app-shell[data-theme="light"] .page-container .terminal{background:#F8FAFC!important;color:#334155!important;border-color:#E2E6EE!important}
+.app-shell[data-theme="light"] .page-container .btn-primary{background:#2563EB;border-color:#2563EB;color:#FFFFFF}
+.app-shell[data-theme="light"] .page-container .btn-primary:hover{background:#1D4ED8}
+.app-shell[data-theme="light"] .page-container .btn{border-color:#D0D5DD;color:#344054}
+.app-shell[data-theme="light"] .page-container .btn:hover{background:#F1F5F9}
