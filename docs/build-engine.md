@@ -1,6 +1,6 @@
 # VELTRIX Build Engine — implementation foundation
 
-The first implementation slice adds a deterministic project analyzer to the Agent.
+The Agent provides deterministic project analysis and reports which build tools are present on the Agent host.
 
 ## Detection contract
 
@@ -15,10 +15,16 @@ The first implementation slice adds a deterministic project analyzer to the Agen
 
 Node.js (npm/pnpm/yarn/Bun), Python, Rust, Go, Java/Maven, JVM/Gradle, Ruby, PHP/Composer, .NET, Dockerfile, Nixpacks and static HTML.
 
-## Execution boundary
+## Host capability preflight
 
-This analyzer only proposes a plan. It does not execute install/build/start commands. Command execution must be added through a separate, resource-limited build runner with explicit provider selection and safe secret/log handling. Dockerfile and Nixpacks execution require an available container/build backend; they must not silently fall back to executing Dockerfile contents on the host.
+Every BuildPlan now includes a `capabilities` object. The Agent checks PATH for Docker, Podman, Nixpacks and Git. This is deliberately only an executable-presence check: it does not prove that a container daemon is running, that permissions are sufficient, or that storage/network access is available. Those checks belong immediately before a build starts.
+
+Dockerfile builds are marked available when Docker or Podman CLI is present. Nixpacks additionally requires the Nixpacks executable. The result includes warnings when a provider cannot run.
+
+## Execution and security boundary
+
+No project build command is executed by this feature. Custom commands are explicitly marked as not isolated and must remain disabled until a resource-limited sandbox exists. Dockerfile and Nixpacks builds must run through a container backend; they must never fall back to executing project scripts directly on the Agent host. The next implementation stage is a build-job runner with timeouts, bounded logs, cancellation, resource limits, and secret redaction.
 
 ## Future compatibility
 
-BuildPlan is intentionally provider-neutral so internal providers and future third-party plugins can implement the same contract without changing detection callers.
+BuildPlan is provider-neutral so internal providers and future third-party plugins can implement the same contract without changing detection callers.
