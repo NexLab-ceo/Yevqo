@@ -16,19 +16,19 @@ import (
 )
 
 type AndroidBuildEnvironment struct {
- Android bool \`json:"android"\`
- Termux bool \`json:"termux"\`
- Architecture string \`json:"architecture"\`
- CPUs int \`json:"cpus"\`
- TotalMemoryBytes uint64 \`json:"total_memory_bytes,omitempty"\`
- AvailableMemoryBytes uint64 \`json:"available_memory_bytes,omitempty"\`
- FreeDiskBytes uint64 \`json:"free_disk_bytes,omitempty"\`
- RootAvailable bool \`json:"root_available"\`
- DockerAvailable bool \`json:"docker_available"\`
- PodmanAvailable bool \`json:"podman_available"\`
- NixpacksAvailable bool \`json:"nixpacks_available"\`
- AvailableTools []string \`json:"available_tools"\`
- Warnings []string \`json:"warnings,omitempty"\`
+ Android bool `json:"android"`
+ Termux bool `json:"termux"`
+ Architecture string `json:"architecture"`
+ CPUs int `json:"cpus"`
+ TotalMemoryBytes uint64 `json:"total_memory_bytes,omitempty"`
+ AvailableMemoryBytes uint64 `json:"available_memory_bytes,omitempty"`
+ FreeDiskBytes uint64 `json:"free_disk_bytes,omitempty"`
+ RootAvailable bool `json:"root_available"`
+ DockerAvailable bool `json:"docker_available"`
+ PodmanAvailable bool `json:"podman_available"`
+ NixpacksAvailable bool `json:"nixpacks_available"`
+ AvailableTools []string `json:"available_tools"`
+ Warnings []string `json:"warnings,omitempty"`
 }
 
 // DetectAndroidBuildEnvironment performs read-only host inspection.
@@ -48,28 +48,28 @@ func fileContains(path,needle string)bool{b,e:=os.ReadFile(path);return e==nil&&
 func readMemoryInfo()(total,available uint64){b,e:=os.ReadFile("/proc/meminfo");if e!=nil{return};for _,line:=range strings.Split(string(b),"\n"){f:=strings.Fields(line);if len(f)<2{continue};n,er:=strconv.ParseUint(f[1],10,64);if er!=nil{continue};n*=1024;switch strings.TrimSuffix(f[0],":"){case "MemTotal":total=n;case "MemAvailable":available=n}};return}
 
 type AndroidBuildRequest struct {
- SiteID string \`json:"site_id"\`
- SiteRoot string \`json:"site_root"\`
- RootDir string \`json:"root_directory,omitempty"\`
- Stack string \`json:"stack"\`
- PackageTool string \`json:"package_tool,omitempty"\`
- Timeout time.Duration \`json:"-"\`
- MaxLogBytes int \`json:"max_log_bytes,omitempty"\`
- MinAvailableMemoryBytes uint64 \`json:"min_available_memory_bytes,omitempty"\`
- MinFreeDiskBytes uint64 \`json:"min_free_disk_bytes,omitempty"\`
- AllowProjectCode bool \`json:"allow_project_code"\`
+ SiteID string `json:"site_id"`
+ SiteRoot string `json:"site_root"`
+ RootDir string `json:"root_directory,omitempty"`
+ Stack string `json:"stack"`
+ PackageTool string `json:"package_tool,omitempty"`
+ Timeout time.Duration `json:"-"`
+ MaxLogBytes int `json:"max_log_bytes,omitempty"`
+ MinAvailableMemoryBytes uint64 `json:"min_available_memory_bytes,omitempty"`
+ MinFreeDiskBytes uint64 `json:"min_free_disk_bytes,omitempty"`
+ AllowProjectCode bool `json:"allow_project_code"`
 }
 type AndroidBuildResult struct {
- Success bool \`json:"success"\`
- Provider string \`json:"provider"\`
- Stack string \`json:"stack"\`
- StartedAt time.Time \`json:"started_at"\`
- FinishedAt time.Time \`json:"finished_at"\`
- DurationMillis int64 \`json:"duration_ms"\`
- Output string \`json:"output"\`
- OutputTruncated bool \`json:"output_truncated"\`
- ArtifactDir string \`json:"artifact_dir,omitempty"\`
- Error string \`json:"error,omitempty"\`
+ Success bool `json:"success"`
+ Provider string `json:"provider"`
+ Stack string `json:"stack"`
+ StartedAt time.Time `json:"started_at"`
+ FinishedAt time.Time `json:"finished_at"`
+ DurationMillis int64 `json:"duration_ms"`
+ Output string `json:"output"`
+ OutputTruncated bool `json:"output_truncated"`
+ ArtifactDir string `json:"artifact_dir,omitempty"`
+ Error string `json:"error,omitempty"`
 }
 type androidBuildStep struct{name,exe string;args []string}
 type AndroidBuildRunner struct{mu sync.Mutex;busy bool;DataDir string}
