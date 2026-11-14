@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, deleteDevice, sendCommand } from '$lib/api.js';
+    import { getDevice, deleteDevice, deleteSite, sendCommand } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -77,6 +77,13 @@
         await runCommand('stop_site', { site_id: site.site_id });
     }
 
+    async function removeSite(site) {
+        if (!confirm('Удалить запись сайта? Файлы на Android-устройстве останутся на месте.')) return;
+        const res = await deleteSite(device.id, site.site_id);
+        if (res.ok) { notify('Запись сайта удалена. Файлы сохранены.', 'success'); await loadDevice(); }
+        else notify(res.error || 'Не удалось удалить сайт', 'error');
+    }
+
     // Git pull.
     async function gitPull(site) {
         await runCommand('git_pull', { site_id: site.site_id });
@@ -113,20 +120,49 @@
         }
     }
 
-    // Создание нового сайта.
+    // Создание сайта и его запуск — две отдельные Agent-команды.
     async function addSite() {
-        if (!newSite.site_id) {
-            notify('Введите site_id', 'error');
+        const siteId = newSite.site_id.trim();
+        const port = Number(newSite.port);
+        if (!/^[a-zA-Z0-9_-]{1,64}$/.test(siteId)) {
+            notify('Используйте 1–64 символа: латинские буквы, цифры, дефис или подчёркивание', 'error');
             return;
         }
-        await runCommand('start_site', {
-            site_id: newSite.site_id,
-            path: `sites/${newSite.site_id}`,
-            port: newSite.port,
+        if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+            notify('Порт должен быть от 1024 до 65535', 'error');
+            return;
+        }
+
+        busy = true;
+        const created = await sendCommand(device.id, 'create_site', {
+            site_id: siteId,
+            port,
             runtime: newSite.runtime,
         });
+        if (!created.ok || !created.data?.ok) {
+            busy = false;
+            notify(created.error || created.data?.message || 'Не удалось создать сайт', 'error');
+            return;
+        }
+
+        // Каталог и стартовый файл уже созданы. Если запуск не удастся,
+        // сайт всё равно останется в панели в состоянии «Остановлен».
+        const started = await sendCommand(device.id, 'start_site', {
+            site_id: siteId,
+            path: `sites/${siteId}`,
+            port,
+            runtime: newSite.runtime,
+        });
+        busy = false;
         showAddSiteModal = false;
         newSite = { site_id: '', port: 8000, runtime: 'php' };
+        await loadDevice();
+
+        if (!started.ok || !started.data?.ok) {
+            notify('Сайт создан, но не запущен: ' + (started.error || started.data?.message || 'ошибка запуска'), 'warning');
+            return;
+        }
+        notify('Сайт создан и запущен', 'success');
     }
 </script>
 
@@ -175,7 +211,7 @@
                 <Card>
                     <div class="site-header">
                         <div class="site-info">
-                            <div class="site-name">{site.site_id}</div>
+                            <button class="site-name site-link" on:click={() => goto(`/sites/${device.id}/${encodeURIComponent(site.site_id)}`)}>{site.site_id}</button>
                             <div class="site-meta">
                                 :{site.port} · {site.path} · {site.runtime}
                             </div>
@@ -201,6 +237,9 @@
                         </Button>
                         <Button variant="ghost" size="sm" on:click={() => showLogs(site)}>
                             Логи
+                        </Button>
+                        <Button variant="danger" size="sm" on:click={() => removeSite(site)} disabled={busy}>
+                            Удалить запись
                         </Button>
                     </div>
                 </Card>
@@ -278,7 +317,7 @@
         align-items: center;
         gap: 6px;
         font-size: 12px;
-        color: #a1a1aa;
+        color: #94A3B8;
     }
 
     .section-header {
@@ -291,7 +330,7 @@
     .section-title {
         font-size: 14px;
         font-weight: 600;
-        color: #fafafa;
+        color: #F1F5F9;
     }
 
     .sites-list {
@@ -310,13 +349,23 @@
     .site-name {
         font-weight: 500;
         font-size: 14px;
-        color: #fafafa;
+        color: #F1F5F9;
     }
+    .site-link {
+        display: inline-block;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+    }
+    .site-link:hover { color: #A3E635; }
 
     .site-meta {
         font-family: ui-monospace, monospace;
         font-size: 11px;
-        color: #71717a;
+        color: #64748B;
         margin-top: 4px;
     }
 
@@ -328,18 +377,18 @@
 
     .modal-text {
         font-size: 13px;
-        color: #a1a1aa;
+        color: #94A3B8;
         line-height: 1.6;
     }
 
     .logs {
-        background: #000;
-        border: 1px solid #27272a;
+        background: #080B14;
+        border: 1px solid #253149;
         border-radius: 6px;
         padding: 12px;
         font-family: ui-monospace, monospace;
         font-size: 11px;
-        color: #a1a1aa;
+        color: #94A3B8;
         max-height: 400px;
         overflow: auto;
         white-space: pre-wrap;

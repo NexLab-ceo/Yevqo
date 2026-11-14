@@ -21,7 +21,7 @@ if [ ! -f "go.mod" ]; then
     exit 1
 fi
 
-DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-/sdcard/veltrix-agent}"
+DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-$PREFIX/var/lib/veltrix-agent}"
 
 log "VELTRIX Agent installer"
 log "data root: $DATA_ROOT"
@@ -41,6 +41,11 @@ fi
 if ! command -v php >/dev/null 2>&1; then
     log "  → installing PHP"
     pkg install -y php
+fi
+
+if ! command -v openssl >/dev/null 2>&1; then
+    log "  → installing OpenSSL (PostgreSQL TLS certificates)"
+    pkg install -y openssl
 fi
 
 if ! command -v git >/dev/null 2>&1; then
@@ -72,7 +77,8 @@ fi
 # 2. СТРУКТУРА ПАПОК
 # ============================================================
 log "creating directory structure..."
-mkdir -p "$DATA_ROOT"/{config,sites,databases,logs,cloudflared}
+mkdir -p "$DATA_ROOT"/{config,sites,databases,logs,cloudflared,backups}
+chmod 700 "$DATA_ROOT" "$DATA_ROOT/backups"
 
 # ============================================================
 # 3. КОНФИГ
@@ -145,9 +151,23 @@ log "setting up service..."
 SERVICE_DIR="$PREFIX/var/service/veltrix-agent"
 mkdir -p "$SERVICE_DIR"
 cp systemd/veltrix-agent.sh "$SERVICE_DIR/run"
+# Bind the service to the exact config path selected by this installer.
+sed -i "s|^CONFIG=.*|CONFIG=\"$CONFIG_FILE\"|" "$SERVICE_DIR/run"
 chmod +x "$SERVICE_DIR/run"
 
 sv-enable veltrix-agent 2>/dev/null || true
+
+# Termux:Boot hook. The Termux:Boot Android add-on must also be installed by the user.
+BOOT_DIR="$HOME/.termux/boot"
+mkdir -p "$BOOT_DIR"
+if [ -f "scripts/termux-boot.sh" ]; then
+    cp scripts/termux-boot.sh "$BOOT_DIR/00-veltrix"
+    chmod 700 "$BOOT_DIR/00-veltrix"
+    log "Termux:Boot hook installed at $BOOT_DIR/00-veltrix"
+    warn "Install and open the Termux:Boot Android add-on once; then reboot to verify autostart."
+else
+    warn "scripts/termux-boot.sh not found; install the boot hook manually."
+fi
 
 # ============================================================
 # 7. TAILSCALE

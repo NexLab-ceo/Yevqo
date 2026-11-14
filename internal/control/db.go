@@ -185,6 +185,11 @@ func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Devic
 	}
 
 	if existing != nil {
+		// A device UUID is globally unique. Never let a token owned by another
+		// account rebind or take over an already paired device.
+		if existing.UserID != d.UserID {
+			return nil, shared.ErrForbidden("device is already paired to another account")
+		}
 		query := `
 			UPDATE devices
 			SET tailscale_ip = ?, hostname = ?, agent_version = ?,
@@ -291,6 +296,11 @@ func (db *DB) ListDevicesByUser(ctx context.Context, userID int64) ([]shared.Dev
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+func (db *DB) UpdateDeviceHeartbeat(ctx context.Context, deviceID int64) error {
+	_, err := db.conn.ExecContext(ctx, "UPDATE devices SET status = ?, last_seen = ? WHERE id = ?", shared.DeviceOnline, shared.Now(), deviceID)
+	return err
 }
 
 func (db *DB) MarkDeviceOffline(ctx context.Context, deviceID int64) error {

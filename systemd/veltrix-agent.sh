@@ -14,7 +14,7 @@ if [ ! -x "$BIN" ]; then
     exit 1
 fi
 
-CONFIG="${VELTRIX_AGENT_CONFIG:-/sdcard/veltrix-agent/config/agent.json}"
+CONFIG="${VELTRIX_AGENT_CONFIG:-${PREFIX}/var/lib/veltrix-agent/config/agent.json}"
 
 echo "starting veltrix-agent (config=$CONFIG)"
 

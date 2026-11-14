@@ -1,0 +1,16 @@
+<script>
+ import {onMount} from 'svelte';import {getSettings,saveSettings} from '$lib/api.js';import {notify,uiMode} from '$lib/stores.js';import {locale} from '$lib/i18n.js';import Button from '$lib/components/Button.svelte';
+ let settings={mode:'simple',locale:'ru',theme:'dark'},loading=true,saving=false;
+ onMount(async()=>{const r=await getSettings();if(r.ok){settings={...settings,...r.data.settings};locale.set(settings.locale);uiMode.set(settings.mode)}else notify(r.error||'Не удалось загрузить настройки','error');loading=false});
+ async function save(){saving=true;const r=await saveSettings(settings);saving=false;if(r.ok){locale.set(settings.locale);uiMode.set(settings.mode);notify('Настройки сохранены','success')}else notify(r.error||'Не удалось сохранить','error')}
+</script>
+<div class="page-header"><div><div class="eyebrow">PREFERENCES</div><h1 class="page-title">Settings</h1><p class="page-desc">Режим интерфейса и предпочтения аккаунта.</p></div><Button variant="primary" loading={saving} on:click={save}>Сохранить</Button></div>
+{#if loading}<div class="empty">Загрузка настроек…</div>{:else}
+<section class="panel"><h2>Interface mode</h2><p>Simple Mode упрощает представление. Advanced Mode показывает технические настройки и диагностику. Функциональность аккаунта не меняется.</p><div class="mode-grid"><button class:chosen={settings.mode==='simple'} on:click={()=>settings.mode='simple'}><strong>Simple Mode</strong><small>Основные действия и понятные параметры</small></button><button class:chosen={settings.mode==='advanced'} on:click={()=>settings.mode='advanced'}><strong>Advanced Mode</strong><small>Порты, процессы, подробные логи и диагностика</small></button></div></section>
+<section class="panel"><h2>Language</h2><select class="input" bind:value={settings.locale}><option value="ru">Русский</option><option value="en">English</option></select></section>
+<section class="panel"><h2>Appearance</h2><div class="appearance"><span><strong>Dark theme</strong><small>VELTRIX Aurora · тёмная тема</small></span><span class="fixed">Включена</span></div></section>
+{/if}
+<style>
+.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}.panel{padding:17px;background:#101727;border:1px solid #253149;border-radius:12px;margin-bottom:12px}.panel h2{font-size:12px;margin-bottom:6px}.panel p,.appearance small{font-size:10px;color:#64748b}.mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}.mode-grid button{display:grid;gap:5px;text-align:left;padding:13px;border:1px solid #253149;border-radius:9px;background:#0b1220;color:#f1f5f9}.mode-grid button.chosen{border-color:#6366f1;background:#171d39}.mode-grid strong,.appearance strong{font-size:11px}.mode-grid small{font-size:9px;color:#64748b}.panel>.input{max-width:280px;margin-top:8px}.appearance{display:flex;justify-content:space-between;align-items:center}.appearance span:first-child{display:grid;gap:3px}.fixed{font-size:9px;color:#34d399}
+@media(max-width:600px){.mode-grid{grid-template-columns:1fr}}
+</style>

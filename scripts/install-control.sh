@@ -27,6 +27,14 @@ if [ "$(uname -o)" != "Android" ]; then
 fi
 
 DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
+CONFIG_FILE="$DATA_ROOT/config/config.json"
+# Generate a strong database password only when creating a fresh config.
+# Existing configs and their database credentials are never overwritten.
+if [ ! -f "$CONFIG_FILE" ]; then
+    DB_PASSWORD="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \\n')"
+else
+    DB_PASSWORD="veltrix"
+fi
 
 log "VELTRIX Dock — Control Plane installer"
 log "data root: $DATA_ROOT"
@@ -112,23 +120,23 @@ mysql -u root <<SQL 2>/dev/null || warn "MySQL setup warning (may be already con
 CREATE DATABASE IF NOT EXISTS veltrix
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'veltrix'@'localhost' IDENTIFIED BY 'veltrix';
+CREATE USER IF NOT EXISTS 'veltrix'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
+SQL
+if [ ! -f "$CONFIG_FILE" ]; then
+    mysql -u root -e "ALTER USER 'veltrix'@'localhost' IDENTIFIED BY '$DB_PASSWORD';" 2>/dev/null || warn "Could not rotate fresh-install database credential"
+fi
+mysql -u root <<SQL 2>/dev/null || warn "MySQL grants warning"
 GRANT ALL PRIVILEGES ON veltrix.* TO 'veltrix'@'localhost';
 FLUSH PRIVILEGES;
 SQL
 
-# Применяем схему.
-log "  → applying schema"
-if [ -f "scripts/mysql-setup.sql" ]; then
-    mysql -u root veltrix < scripts/mysql-setup.sql 2>/dev/null || warn "schema already applied"
-else
-    warn "scripts/mysql-setup.sql not found"
-fi
+# Таблицы создаёт сам Control Plane при первом запуске.
+# Установщик только подготавливает серверную БД и учётную запись.
+log "  → core tables will be created by Control Plane migrations on first start"
 
 # ============================================================
 # 4. КОНФИГ
 # ============================================================
-CONFIG_FILE="$DATA_ROOT/config/config.json"
 if [ ! -f "$CONFIG_FILE" ]; then
     log "creating config.json"
     
@@ -141,15 +149,17 @@ if [ ! -f "$CONFIG_FILE" ]; then
   "listen_addr": ":8080",
   "data_root": "$DATA_ROOT",
   "static_dir": "$DATA_ROOT/public",
-  "mysql_dsn": "veltrix:veltrix@tcp(127.0.0.1:3306)/veltrix?parseTime=true&charset=utf8mb4",
+  "mysql_dsn": "veltrix:$DB_PASSWORD@tcp(127.0.0.1:3306)/veltrix?parseTime=true&charset=utf8mb4",
   "admin_username": "$ADMIN_USER",
   "use_https": false
 }
 JSON
     log "  config written to $CONFIG_FILE"
+    chmod 600 "$CONFIG_FILE" 2>/dev/null || true
 else
     log "  config already exists: $CONFIG_FILE"
 fi
+chmod 600 "$CONFIG_FILE" 2>/dev/null || warn "Could not restrict config file permissions"
 
 # ============================================================
 # 5. МИГРАЦИИ
@@ -198,6 +208,18 @@ chmod +x "$SERVICE_DIR/run"
 
 # Автозапуск.
 sv-enable veltrix-control 2>/dev/null || true
+
+# Termux:Boot hook. The Termux:Boot Android add-on must also be installed by the user.
+BOOT_DIR="$HOME/.termux/boot"
+mkdir -p "$BOOT_DIR"
+if [ -f "scripts/termux-boot.sh" ]; then
+    cp scripts/termux-boot.sh "$BOOT_DIR/00-veltrix"
+    chmod 700 "$BOOT_DIR/00-veltrix"
+    log "Termux:Boot hook installed at $BOOT_DIR/00-veltrix"
+    warn "Install and open the Termux:Boot Android add-on once; then reboot to verify autostart."
+else
+    warn "scripts/termux-boot.sh not found; install the boot hook manually."
+fi
 
 # ============================================================
 # 10. TAILSCALE

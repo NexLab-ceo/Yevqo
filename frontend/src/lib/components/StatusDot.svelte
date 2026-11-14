@@ -1,33 +1,4 @@
-<script>
-    /**
-     * StatusDot — маленькая точка статуса.
-     * Используется для устройств (online/offline) и сайтов (running/stopped).
-     */
-    export let status = 'offline'; // 'online' | 'offline' | 'running' | 'stopped' | 'error'
-</script>
-
-<span class="dot dot-{status}" aria-label={status}></span>
-
+<script>export let status='offline';</script><span class="dot dot-{status}" aria-label={status}></span>
 <style>
-    .dot {
-        display: inline-block;
-        width: 6px;
-        height: 6px;
-        border-radius: 50%;
-        flex-shrink: 0;
-    }
-
-    .dot-online,
-    .dot-running {
-        background: #22c55e;
-    }
-
-    .dot-offline,
-    .dot-stopped {
-        background: #52525b;
-    }
-
-    .dot-error {
-        background: #ef4444;
-    }
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0;background:#EF4444}.dot-online,.dot-running{background:#22C55E;box-shadow:0 0 8px #22C55E66}.dot-offline,.dot-stopped{background:#EF4444;box-shadow:0 0 8px #EF444466}.dot-error{background:#EF4444;box-shadow:0 0 8px #EF444466}
 </style>

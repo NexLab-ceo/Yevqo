@@ -2,6 +2,8 @@ name: Build VELTRIX Dock
 
 on:
   push:
+    branches:
+      - feature/database-server-wizard
     tags:
       - 'v*'
   workflow_dispatch:
@@ -11,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -28,10 +29,8 @@ jobs:
       - name: Build Go binaries (android/arm64)
         run: |
           mkdir -p bin
-          GOOS=android GOARCH=arm64 CGO_ENABLED=0 \
-            go build -trimpath -ldflags="-s -w" -o bin/veltrix-control ./cmd/control
-          GOOS=android GOARCH=arm64 CGO_ENABLED=0 \
-            go build -trimpath -ldflags="-s -w" -o bin/veltrix-agent ./cmd/agent
+          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/veltrix-control ./cmd/control
+          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/veltrix-agent ./cmd/agent
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -39,65 +38,166 @@ jobs:
           node-version: '20'
 
       - name: Build frontend
+        working-directory: frontend
         run: |
-          cd frontend
-          npm install
+          npm ci || npm install
           npm run build
-          cd ..
 
-      - name: Package .deb
+      - name: Verify frontend output
         run: |
-          VERSION="0.1.0-dev"
+          test -s public/index.html
+          test -d public/_app
+          find public -type f | sort
+
+      - name: Determine shared package version
+        shell: bash
+        run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="0.1.0-dev.${GITHUB_RUN_NUMBER}"
           fi
-          echo "Building version: $VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Both packages will use version $VERSION"
 
-          DEB_DIR="build-deb"
-          rm -rf "$DEB_DIR"
-          mkdir -p "$DEB_DIR/DEBIAN"
-          mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/bin"
-          mkdir -p "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix"
+      - name: Validate setup and updater scripts
+        run: |
+          bash -n packaging/setup-agent.sh
+          bash -n packaging/setup-control.sh
+          bash -n packaging/setup-all.sh
+          bash -n scripts/update-agent.sh
+          bash -n scripts/update-all.sh
+          sh -n packaging/postinst-all
+          sh -n packaging/postinst-agent
 
-          cp bin/veltrix-control "$DEB_DIR/data/data/com.termux/files/usr/bin/"
-          cp bin/veltrix-agent   "$DEB_DIR/data/data/com.termux/files/usr/bin/"
-          chmod +x "$DEB_DIR/data/data/com.termux/files/usr/bin/"*
+      - name: Package veltrix-all and veltrix-agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          PREFIX_ROOT="data/data/com.termux/files/usr"
+          rm -rf build-deb-all build-deb-agent
+          mkdir -p \
+            "build-deb-all/DEBIAN" \
+            "build-deb-all/$PREFIX_ROOT/bin" \
+            "build-deb-all/$PREFIX_ROOT/share/veltrix/public" \
+            "build-deb-all/$PREFIX_ROOT/share/veltrix/migrations" \
+            "build-deb-all/$PREFIX_ROOT/share/veltrix/scripts" \
+            "build-deb-all/$PREFIX_ROOT/share/veltrix/systemd" \
+            "build-deb-agent/DEBIAN" \
+            "build-deb-agent/$PREFIX_ROOT/bin"
 
-          if [ -d "public" ]; then
-            cp -r public/* "$DEB_DIR/data/data/com.termux/files/usr/share/veltrix/"
-          fi
+          install -m 0755 bin/veltrix-control "build-deb-all/$PREFIX_ROOT/bin/veltrix-control"
+          install -m 0755 bin/veltrix-agent "build-deb-all/$PREFIX_ROOT/bin/veltrix-agent"
+          install -m 0755 bin/veltrix-agent "build-deb-agent/$PREFIX_ROOT/bin/veltrix-agent"
 
-          cat > "$DEB_DIR/DEBIAN/control" <<EOF
-          Package: veltrix
+          cp -a public/. "build-deb-all/$PREFIX_ROOT/share/veltrix/public/"
+          cp -a migrations/. "build-deb-all/$PREFIX_ROOT/share/veltrix/migrations/"
+          install -m 0755 scripts/install-control.sh "build-deb-all/$PREFIX_ROOT/share/veltrix/scripts/install-control.sh"
+          install -m 0755 scripts/install-agent.sh "build-deb-all/$PREFIX_ROOT/share/veltrix/scripts/install-agent.sh"
+          install -m 0755 scripts/termux-boot.sh "build-deb-all/$PREFIX_ROOT/share/veltrix/termux-boot.sh"
+          install -m 0755 systemd/veltrix-control.sh "build-deb-all/$PREFIX_ROOT/share/veltrix/systemd/veltrix-control.sh"
+          install -m 0755 systemd/veltrix-agent.sh "build-deb-all/$PREFIX_ROOT/share/veltrix/systemd/veltrix-agent.sh"
+          install -m 0755 packaging/setup-all.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-setup"
+          install -m 0755 packaging/setup-control.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-setup-control"
+          install -m 0755 packaging/setup-agent.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-setup-agent"
+          install -m 0755 scripts/update-agent.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-update-agent"
+          install -m 0755 scripts/update-all.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-update-all"
+          install -m 0755 packaging/postinst-all "build-deb-all/DEBIAN/postinst"
+
+          install -m 0755 packaging/setup-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/veltrix-setup-agent"
+          install -m 0755 scripts/update-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/veltrix-update-agent"
+          install -m 0755 packaging/postinst-agent "build-deb-agent/DEBIAN/postinst"
+
+          cat > build-deb-all/DEBIAN/control <<EOF
+          Package: veltrix-all
           Version: $VERSION
           Architecture: aarch64
-          Maintainer: Your Name <you@example.com>
-          Depends: php, git
+          Maintainer: VELTRIX
+          Depends: mariadb, php, git, curl, jq, termux-services
           Section: utils
           Priority: optional
-          Homepage: https://github.com/your-username/veltrix-dock
-          Description: Lightweight server manager for Termux
-           VELTRIX Dock manages PHP sites, monitors resources, and handles git deployments.
+          Homepage: https://github.com/NexLab-ceo/veltrix
+          Description: Complete VELTRIX Dock Control Plane and Agent for Termux
+           Includes server, Agent, web UI, migrations and setup scripts.
+           cloudflared can be installed separately when Cloudflare Tunnel is needed.
           EOF
 
-          dpkg-deb --build "$DEB_DIR" "veltrix_${VERSION}_aarch64.deb"
+          cat > build-deb-agent/DEBIAN/control <<EOF
+          Package: veltrix-agent
+          Version: $VERSION
+          Architecture: aarch64
+          Maintainer: VELTRIX
+          Depends: php, git, curl, jq, termux-services
+          Section: utils
+          Priority: optional
+          Homepage: https://github.com/NexLab-ceo/veltrix
+          Description: VELTRIX Dock remote Android Agent for Termux
+           Includes only the Agent executable and its interactive setup script.
+           cloudflared is optional and can be installed separately.
+          EOF
+
+          chmod 0755 build-deb-all/DEBIAN/postinst build-deb-agent/DEBIAN/postinst
+          dpkg-deb --build --root-owner-group build-deb-all "veltrix-all_${VERSION}_aarch64.deb"
+          dpkg-deb --build --root-owner-group build-deb-agent "veltrix-agent_${VERSION}_aarch64.deb"
+
+      - name: Verify both Debian packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          ALL="veltrix-all_${VERSION}_aarch64.deb"
+          AGENT="veltrix-agent_${VERSION}_aarch64.deb"
+          test -s "$ALL"
+          test -s "$AGENT"
+          test "$(dpkg-deb --field "$ALL" Version)" = "$VERSION"
+          test "$(dpkg-deb --field "$AGENT" Version)" = "$VERSION"
+          test "$(dpkg-deb --field "$ALL" Package)" = "veltrix-all"
+          test "$(dpkg-deb --field "$AGENT" Package)" = "veltrix-agent"
+          dpkg-deb --field "$ALL" Architecture | grep -x aarch64
+          dpkg-deb --field "$AGENT" Architecture | grep -x aarch64
+          dpkg-deb --contents "$ALL" > /tmp/veltrix-all.contents
+          dpkg-deb --contents "$AGENT" > /tmp/veltrix-agent.contents
+          grep -q '/bin/veltrix-control$' /tmp/veltrix-all.contents
+          grep -q '/bin/veltrix-agent$' /tmp/veltrix-all.contents
+          grep -q '/share/veltrix/public/index.html$' /tmp/veltrix-all.contents
+          grep -q '/bin/veltrix-update-all$' /tmp/veltrix-all.contents
+          grep -q '/bin/veltrix-agent$' /tmp/veltrix-agent.contents
+          grep -q '/bin/veltrix-setup-agent$' /tmp/veltrix-agent.contents
+          grep -q '/bin/veltrix-update-agent$' /tmp/veltrix-agent.contents
+          if grep -Eq 'veltrix-control|share/veltrix/public|migrations|veltrix-update-all' /tmp/veltrix-agent.contents; then
+            echo "Agent-only package contains server payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: veltrix-binaries
+          name: veltrix-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
           path: |
-            bin/veltrix-control
-            bin/veltrix-agent
-            veltrix_*_aarch64.deb
+            veltrix-all_${{ env.VERSION }}_aarch64.deb
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
 
-      - name: Create Release
+      - name: Publish full package to private repository
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            bin/veltrix-control
-            bin/veltrix-agent
-            veltrix_*_aarch64.deb
+            veltrix-all_${{ env.VERSION }}_aarch64.deb
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Agent-only release to public repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix-dock
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            veltrix-agent_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}

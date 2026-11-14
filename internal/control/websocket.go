@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,13 +21,18 @@ const (
 	wsPongWait       = 60 * time.Second
 	wsPingPeriod     = 30 * time.Second
 	wsMaxMessageSize = 1 << 20
-	wsCommandTimeout = 30 * time.Second
+	wsCommandTimeout = 10 * time.Minute
 )
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" { return true } // native Termux Agent has no browser Origin
+		u, err := url.Parse(origin)
+		return err == nil && (u.Scheme == "http" || u.Scheme == "https") && strings.EqualFold(u.Host, r.Host)
+	},
 }
 
 // Hub — реестр подключённых агентов.
@@ -128,6 +135,7 @@ func (c *AgentConn) readPump(srv *Server) {
 			continue
 		}
 
+		if c.Device == nil && env.AuthReq == nil { continue }
 		switch {
 		case env.AuthReq != nil:
 			c.handleAuth(srv, env.AuthReq)
@@ -240,11 +248,25 @@ func (c *AgentConn) handleResult(res *shared.Result) {
 func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 	switch ev.Event {
 	case "ping":
-		_ = srv.db.UpdateUserLastSeen(context.Background(), c.Device.UserID)
+		if c.Device != nil {
+			_ = srv.db.UpdateUserLastSeen(context.Background(), c.Device.UserID)
+			_ = srv.db.UpdateDeviceHeartbeat(context.Background(), c.Device.ID)
+		}
 	case "log":
 		var le shared.LogEvent
 		if err := shared.Unmarshal(ev.Payload, &le); err == nil {
 			log.Printf("[%s/%s] %s", c.Device.Hostname, le.SiteId, le.Line)
+		}
+	case "metrics":
+		var metrics shared.MetricsResult
+		if err := shared.Unmarshal(ev.Payload, &metrics); err == nil && c.Device != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			_, dbErr := srv.db.conn.ExecContext(ctx,
+				"INSERT INTO device_metrics(device_id,cpu_percent,load_1m,memory_total_bytes,memory_available_bytes,storage_total_bytes,storage_available_bytes,temperature_celsius,captured_at) VALUES(?,?,?,?,?,?,?,?,?)",
+				c.Device.ID, metrics.CPUPercent, metrics.Load1m, metrics.MemoryTotalBytes, metrics.MemoryAvailableBytes,
+				metrics.StorageTotalBytes, metrics.StorageAvailableBytes, metrics.TemperatureCelsius, metrics.CapturedAt)
+			cancel()
+			if dbErr != nil { log.Printf("store pushed metrics: %v", dbErr) }
 		}
 	case "status":
 		var se shared.StatusEvent

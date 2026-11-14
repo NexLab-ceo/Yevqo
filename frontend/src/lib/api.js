@@ -76,6 +76,10 @@ export async function me() {
     return request('GET', '/api/me');
 }
 
+export async function changePassword(currentPassword, newPassword) {
+    return request('POST', '/api/password', { current_password: currentPassword, new_password: newPassword });
+}
+
 // === Devices ===
 
 export async function listDevices() {
@@ -104,6 +108,17 @@ export async function getSite(deviceId, siteId) {
     return request('GET', `/api/sites/${deviceId}/${siteId}`);
 }
 
+export async function runSiteCommand(deviceId, siteId, action) {
+    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/cmd`, { action });
+}
+
+export async function getSiteGit(deviceId, siteId) {
+    return request('GET', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/git`);
+}
+export async function saveSiteGit(deviceId, siteId, settings) {
+    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/git`, settings);
+}
+
 // === Admin ===
 
 export async function adminListUsers(page = 1) {
@@ -125,3 +140,66 @@ export async function adminUnblockUser(id) {
 export async function adminStats() {
     return request('GET', '/admin/api/stats');
 }
+
+
+// === Workspace ===
+export async function listProjects() { return request('GET', '/api/projects'); }
+export async function createProject(name, description = '') { return request('POST', '/api/projects', { name, description }); }
+export async function getProject(id) { return request('GET', `/api/projects/${id}`); }
+export async function updateProject(id, name, description = '') { return request('PATCH', `/api/projects/${id}`, { name, description }); }
+export async function deleteProject(id) { return request('DELETE', `/api/projects/${id}`); }
+export async function attachProjectDevice(projectId, deviceId) { return request('POST', `/api/projects/${projectId}/devices`, { device_id: deviceId }); }
+export async function attachProjectSite(projectId, deviceId, siteId) { return request('POST', `/api/projects/${projectId}/sites`, { device_id: deviceId, site_id: siteId }); }
+
+// === Database inventory ===
+export async function listDatabaseServers() { return request('GET', '/api/databases/servers'); }
+export async function createDatabaseServer(input) { return request('POST', '/api/databases/servers', input); }
+export async function getDatabaseServer(id) { return request('GET', `/api/databases/servers/${id}`); }
+export async function deleteDatabaseServer(id) { return request('DELETE', `/api/databases/servers/${id}`); }
+export async function listDatabases() { return request('GET', '/api/databases'); }
+
+// === Operations ===
+export async function listLogs(limit = 100) { return request('GET', `/api/logs?limit=${limit}`); }
+export async function listNotifications() { return request('GET', '/api/notifications'); }
+export async function markNotificationRead(id) { return request('POST', '/api/notifications', { id }); }
+export async function getSettings() { return request('GET', '/api/settings'); }
+export async function saveSettings(settings) { return request('PUT', '/api/settings', settings); }
+export async function getReports() { return request('GET', '/api/reports'); }
+export async function listBackups() { return request('GET', '/api/backups'); }
+export async function createControlPlaneBackup() { return request('POST', '/admin/api/backups/control-plane', {}); }
+export async function getDatabaseBackupChunk(id, offset, length = 262144) { return request('GET', `/api/backups/${id}/chunk?offset=${offset}&length=${length}`); }
+
+export async function deleteSite(deviceId, siteId) { return request('DELETE', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}`); }
+
+export async function listDomains() { return request('GET', '/api/domains'); }
+export async function updateSiteDomain(deviceId, siteId, domain) { return request('PATCH', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId), { domain }); }
+export async function listDeployments() { return request('GET', '/api/deployments'); }
+export async function getMonitoring() { return request('GET', '/api/monitoring'); }
+
+export async function refreshDeviceMetrics(deviceId) { return request('POST', `/api/devices/${deviceId}/metrics`); }
+
+export async function createSiteBackup(deviceId, siteId) { return request('POST', '/api/backups', { device_id: deviceId, site_id: siteId }); }
+
+export async function installDatabaseServer(id) { return request('POST', `/api/databases/servers/${id}/install`); }
+export async function startDatabaseServer(id) { return request('POST', `/api/databases/servers/${id}/start`, {}); }
+export async function stopDatabaseServer(id) { return request('POST', `/api/databases/servers/${id}/stop`, {}); }
+export async function listDatabaseServerRoles(id) { return request('GET', `/api/databases/servers/${id}/roles`); }
+export async function mutateDatabaseServerRole(id, action, name, password = '') { return request('POST', `/api/databases/servers/${id}/roles`, { action, name, password }); }
+export async function mutateDatabasePrivilege(serverId, action, database, role, privilege, scope = 'database', schema = '') { return request('POST', `/api/databases/servers/${serverId}/privileges`, { action, database, role, privilege, scope, schema }); }
+
+// === Database provisioning and site connections ===
+export async function createDatabase(input) { return request('POST', '/api/databases', input); }
+export async function listSiteDatabaseConnections(deviceId, siteId) { return request('GET', `/api/database-connections?device_id=${deviceId}&site_id=${encodeURIComponent(siteId)}`); }
+export async function removeSiteDatabaseConnection(id) { return request('DELETE', '/api/database-connections', { id }); }
+
+export async function getDatabase(id) { return request('GET', `/api/databases/${id}`); }
+export async function getDatabaseStats(id) { return request('GET', `/api/databases/${id}/stats`); }
+
+export async function createDatabaseBackup(databaseId) { return request('POST', '/api/backups', { database_id: databaseId }); }
+
+export async function listDatabaseConnections(databaseId) { return request('GET', `/api/database-connections?database_id=${databaseId}`); }
+export async function attachDatabaseToSite(databaseId, deviceId, siteId) { return request('POST', '/api/database-connections', { database_id: databaseId, device_id: deviceId, site_id: siteId }); }
+
+export async function restoreDatabaseBackup(backupId, input) { return request('POST', '/api/backups/restore', { backup_id: backupId, ...input }); }
+
+export async function testDatabaseConnection(id) { return request('POST', `/api/databases/${id}/test`, {}); }

@@ -2,7 +2,7 @@
 // Этот файл — вручную написанная замена сгенерированному protoc-коду.
 package shared
 
-import "encoding/json"
+import ("encoding/json"; "time")
 
 // ============================================================
 // ENVELOPE — обёртка для всех сообщений
@@ -44,24 +44,170 @@ type Command struct {
 	Payload []byte
 }
 
+type InstallDatabaseServer struct {
+	ServerID int64
+	Engine string
+	Port uint32
+	DataDirectory string
+	MaxConnections uint32
+	SSLMode string `json:"ssl_mode"`
+}
+
+type DatabaseServerAction struct {
+	ServerID int64 `json:"server_id"`
+	Port uint32 `json:"port"`
+	DataDirectory string `json:"data_directory"`
+}
+
+type DatabaseServerInstallResult struct {
+	Version string `json:"version"`
+	DataDirectory string `json:"data_directory"`
+	Port uint32 `json:"port"`
+}
+
+type CreateDatabase struct {
+	DatabaseID int64 `json:"database_id"`
+	ServerID int64 `json:"server_id"`
+	Database string `json:"database"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Port uint32 `json:"port"`
+}
+
+type ListDatabaseRoles struct {
+	ServerID int64 `json:"server_id"`
+	Port uint32 `json:"port"`
+}
+
+type DatabaseRole struct {
+	Name string `json:"name"`
+	CanLogin bool `json:"can_login"`
+	IsSuperuser bool `json:"is_superuser"`
+	IsReplication bool `json:"is_replication"`
+	BypassRLS bool `json:"bypass_rls"`
+	Inherit bool `json:"inherit"`
+	ConnectionLimit int `json:"connection_limit"`
+}
+
+type DatabaseRolesResult struct {
+	Roles []DatabaseRole `json:"roles"`
+}
+
+type GetDatabaseStats struct { ServerID int64 `json:"server_id"`; Port uint32 `json:"port"`; Database string `json:"database"` }
+type DatabaseStats struct { SizeBytes int64 `json:"size_bytes"`; ActiveConnections int `json:"active_connections"`; MaxConnections int `json:"max_connections"`; TransactionsCommitted int64 `json:"transactions_committed"`; TransactionsRolledBack int64 `json:"transactions_rolled_back"`; Deadlocks int64 `json:"deadlocks"`; CapturedAt time.Time `json:"captured_at"` }
+
+type ManageDatabasePrivilege struct {
+ ServerID int64 `json:"server_id"`
+ Port uint32 `json:"port"`
+ Database string `json:"database"`
+ Role string `json:"role"`
+ Privilege string `json:"privilege"`
+ Scope string `json:"scope"`
+ Schema string `json:"schema,omitempty"`
+ Action string `json:"action"`
+}
+
+type ManageDatabaseRole struct {
+	ServerID int64 `json:"server_id"`
+	Port uint32 `json:"port"`
+	Name string `json:"name"`
+	Password string `json:"password,omitempty"`
+}
+
+type CreateSiteBackup struct { SiteId string }
+
+type CreateDatabaseBackup struct {
+	DatabaseID int64 `json:"database_id"`
+	ServerID int64 `json:"server_id"`
+	Database string `json:"database"`
+	Port uint32 `json:"port"`
+}
+
+type TestDatabaseConnection struct {
+	DatabaseID int64 `json:"database_id"`
+	Database string `json:"database"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Port uint32 `json:"port"`
+	SSLMode string `json:"ssl_mode"`
+}
+
+type RestoreDatabaseBackup struct {
+	BackupServerID int64 `json:"backup_server_id"`
+	BackupFileName string `json:"backup_file_name"`
+	Database CreateDatabase `json:"database"`
+}
+
+type ReadDatabaseBackupChunk struct { ServerID int64 `json:"server_id"`; FileName string `json:"file_name"`; Offset int64 `json:"offset"`; Length int `json:"length"` }
+type DatabaseBackupChunk struct { Data []byte `json:"data"`; TotalSize int64 `json:"total_size"`; Offset int64 `json:"offset"`; EOF bool `json:"eof"` }
+
+type DatabaseBackupResult struct {
+	FileName string `json:"file_name"`
+	SizeBytes int64 `json:"size_bytes"`
+	Format string `json:"format"`
+	Verified bool `json:"verified"`
+}
+
+type SiteBackupResult struct {
+	FileName string `json:"file_name"`
+	SizeBytes int64 `json:"size_bytes"`
+}
+
+type GetMetrics struct{}
+
+type MetricsResult struct {
+	CPUPercent float64 `json:"cpu_percent"`
+	Load1m float64 `json:"load_1m"`
+	MemoryTotalBytes uint64 `json:"memory_total_bytes"`
+	MemoryAvailableBytes uint64 `json:"memory_available_bytes"`
+	StorageTotalBytes uint64 `json:"storage_total_bytes"`
+	StorageAvailableBytes uint64 `json:"storage_available_bytes"`
+	TemperatureCelsius *float64 `json:"temperature_celsius,omitempty"`
+	CapturedAt time.Time `json:"captured_at"`
+}
+
+type AnalyzeSiteBuild struct {
+	SiteId string `json:"site_id"`
+	RootDir string `json:"root_dir,omitempty"`
+}
+
+type CreateSite struct {
+	SiteId  string `json:"site_id"`
+	Port    uint32 `json:"port"`
+	Runtime string `json:"runtime"`
+}
+
 type StartSite struct {
-	SiteId  string
-	Path    string
-	Port    uint32
-	Runtime string
+	SiteId  string            `json:"site_id"`
+	Path    string            `json:"path"`
+	Port    uint32            `json:"port"`
+	Runtime string            `json:"runtime"`
+	Env     map[string]string `json:"env,omitempty"`
 }
 
 type StopSite struct {
-	SiteId string
+	SiteId string `json:"site_id"`
 }
 
 type GitPull struct {
-	SiteId string
+	SiteId string `json:"site_id"`
+}
+
+type SiteAction struct {
+	SiteId string `json:"site_id"`
+	Path string `json:"path"`
+	Port uint32 `json:"port"`
+	Runtime string `json:"runtime"`
+	GitURL string `json:"git_url,omitempty"`
+	GitBranch string `json:"git_branch,omitempty"`
+	BuildCommand string `json:"build_command,omitempty"`
+	RootDir string `json:"root_dir,omitempty"`
+	GitToken string `json:"git_token,omitempty"`
 }
 
 type GetLogs struct {
-	SiteId string
-	Lines  uint32
+	SiteId string `json:"site_id"`
+	Lines  uint32 `json:"lines"`
 }
 
 type CreateTunnel struct {
@@ -82,8 +228,10 @@ type Result struct {
 }
 
 type StartSiteResult struct {
-	Pid  uint32
-	Port uint32
+	Pid  uint32 `json:"pid"`
+	Port uint32 `json:"port"`
+	CommitHash string `json:"commit_hash,omitempty"`
+	CommitDate string `json:"commit_date,omitempty"`
 }
 
 type LogsResult struct {

@@ -30,10 +30,11 @@ type Client struct {
 	cfg     *Config
 	handler *CommandHandler
 
-	ws     *websocket.Conn
-	send   chan []byte
-	mu     sync.Mutex
-	closed bool
+	ws      *websocket.Conn
+	send    chan []byte
+	mu      sync.Mutex
+	writeMu sync.Mutex
+	closed  bool
 }
 
 // NewClient создаёт клиент.
@@ -138,8 +139,11 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("marshal auth: %w", err)
 	}
 
+	c.writeMu.Lock()
 	_ = ws.SetWriteDeadline(time.Now().Add(WriteWait))
-	if err := ws.WriteMessage(websocket.BinaryMessage, msg); err != nil {
+	err = ws.WriteMessage(websocket.BinaryMessage, msg)
+	c.writeMu.Unlock()
+	if err != nil {
 		return fmt.Errorf("write auth: %w", err)
 	}
 
@@ -187,6 +191,8 @@ func (c *Client) runSession(ctx context.Context) {
 		defer stop()
 		c.readPump(ctx)
 	}()
+
+	go c.metricsPump(ctx, done)
 
 	<-done
 
@@ -249,10 +255,18 @@ func (c *Client) writePump() {
 			return
 		}
 
+		c.writeMu.Lock()
 		_ = ws.SetWriteDeadline(time.Now().Add(WriteWait))
-		if err := ws.WriteMessage(websocket.PingMessage, nil); err != nil {
+		pingPayload, _ := shared.Marshal(shared.Envelope{Event: &shared.Event{Event: "ping"}})
+		if err := ws.WriteMessage(websocket.BinaryMessage, pingPayload); err != nil {
+			c.writeMu.Unlock()
 			return
 		}
+		if err := ws.WriteMessage(websocket.PingMessage, nil); err != nil {
+			c.writeMu.Unlock()
+			return
+		}
+		c.writeMu.Unlock()
 	}
 }
 
@@ -318,6 +332,33 @@ func (c *Client) SendEvent(event string, payload interface{}) error {
 		return errors.New("not connected")
 	}
 
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
 	_ = ws.SetWriteDeadline(time.Now().Add(WriteWait))
 	return ws.WriteMessage(websocket.BinaryMessage, msg)
+}
+
+
+// metricsPump periodically pushes device metrics to the Control Plane.
+func (c *Client) metricsPump(ctx context.Context, done <-chan struct{}) {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-done:
+			return
+		case <-ticker.C:
+			metrics, err := collectMetrics(c.cfg.DataRoot)
+			if err != nil {
+				log.Printf("metrics collection: %v", err)
+				continue
+			}
+			if err := c.SendEvent("metrics", metrics); err != nil {
+				log.Printf("metrics push: %v", err)
+				return
+			}
+		}
+	}
 }

@@ -3,9 +3,11 @@
 package control
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -29,6 +31,7 @@ type Server struct {
 	db            *DB
 	hub           *Hub
 	adminUsername string
+	credentialKey []byte
 	mux           *http.ServeMux
 }
 
@@ -39,7 +42,20 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("create data_root: %w", err)
 	}
 
-	// Подключаемся к MySQL.
+	credentialKey, err := loadCredentialKey(cfg.DataRoot)
+	if err != nil { return nil, fmt.Errorf("load database credential key: %w", err) }
+
+	// Создаём собственную базу Control Plane, если она ещё не существует.
+	// MariaDB уже запущена установщиком; локальный root доступ используется
+	// только для CREATE DATABASE. Все рабочие запросы идут через отдельную учётную запись из MySQLDSN.
+	bootstrapCtx, bootstrapCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	if err := ensureMySQLDatabase(bootstrapCtx, cfg.MySQLDSN); err != nil {
+		bootstrapCancel()
+		return nil, fmt.Errorf("bootstrap Control Plane database: %w", err)
+	}
+	bootstrapCancel()
+
+	// Подключаемся к собственной базе под обычной учётной записью приложения.
 	db, err := NewDB(cfg.MySQLDSN)
 	if err != nil {
 		return nil, fmt.Errorf("connect mysql: %w", err)
@@ -59,7 +75,8 @@ func NewServer(cfg Config) (*Server, error) {
 		}
 		log.Printf("migrations applied from %s", migrationsDir)
 	} else {
-		log.Printf("no migrations dir at %s (skipping)", migrationsDir)
+		db.Close()
+		return nil, fmt.Errorf("required migrations directory is missing: %s: %w", migrationsDir, err)
 	}
 
 	// Чистим просроченные сессии при старте (не критично, если упадёт).
@@ -72,6 +89,7 @@ func NewServer(cfg Config) (*Server, error) {
 		db:            db,
 		hub:           NewHub(),
 		adminUsername: cfg.AdminUsername,
+		credentialKey: credentialKey,
 		mux:           http.NewServeMux(),
 	}
 
@@ -95,17 +113,37 @@ func (s *Server) registerRoutes() {
 	// --- API для пользователей ---
 	s.mux.HandleFunc("/api/register", s.handleRegister)
 	s.mux.HandleFunc("/api/login", s.handleLogin)
+	s.mux.HandleFunc("/api/password", s.RequireAuth(s.handleChangePassword))
 	s.mux.HandleFunc("/api/logout", s.handleLogout)
 	s.mux.HandleFunc("/api/me", s.RequireAuth(s.handleMe))
 	s.mux.HandleFunc("/api/devices", s.RequireAuth(s.handleDevices))
 	s.mux.HandleFunc("/api/devices/", s.RequireAuth(s.handleDeviceByID))
 	s.mux.HandleFunc("/api/sites", s.RequireAuth(s.handleSites))
 	s.mux.HandleFunc("/api/sites/", s.RequireAuth(s.handleSiteByID))
+	// Workspace and operations modules.
+	s.mux.HandleFunc("/api/projects", s.RequireAuth(s.handleProjects))
+	s.mux.HandleFunc("/api/projects/", s.RequireAuth(s.handleProjectByID))
+	s.mux.HandleFunc("/api/databases/servers", s.RequireAuth(s.handleDatabaseServers))
+	s.mux.HandleFunc("/api/databases/servers/", s.RequireAuth(s.handleDatabaseServerByID))
+	s.mux.HandleFunc("/api/databases", s.RequireAuth(s.handleDatabaseCollection))
+	s.mux.HandleFunc("/api/databases/", s.RequireAuth(func(w http.ResponseWriter,r *http.Request) { if strings.HasSuffix(r.URL.Path,"/test") { s.handleDatabaseConnectionTest(w,r); return }; if strings.HasSuffix(r.URL.Path,"/stats") { s.handleDatabaseStats(w,r); return }; s.handleDatabaseByID(w,r) }))
+	s.mux.HandleFunc("/api/database-connections", s.RequireAuth(s.handleDatabaseConnections))
+	s.mux.HandleFunc("/api/logs", s.RequireAuth(s.handleLogs))
+	s.mux.HandleFunc("/api/notifications", s.RequireAuth(s.handleNotifications))
+	s.mux.HandleFunc("/api/settings", s.RequireAuth(s.handleSettings))
+	s.mux.HandleFunc("/api/reports", s.RequireAuth(s.handleReports))
+	s.mux.HandleFunc("/api/backups", s.RequireAuth(s.handleBackups))
+	s.mux.HandleFunc("/api/backups/", s.RequireAuth(s.handleDatabaseBackupChunk))
+	s.mux.HandleFunc("/api/backups/restore", s.RequireAuth(s.handleRestoreDatabaseBackup))
+	s.mux.HandleFunc("/api/domains", s.RequireAuth(s.handleDomains))
+	s.mux.HandleFunc("/api/deployments", s.RequireAuth(s.handleDeployments))
+	s.mux.HandleFunc("/api/monitoring", s.RequireAuth(s.handleMonitoring))
 
 	// --- API для админа ---
 	s.mux.HandleFunc("/admin/api/users", s.RequireAdmin(s.handleAdminUsers))
 	s.mux.HandleFunc("/admin/api/users/", s.RequireAdmin(s.handleAdminUserByID))
 	s.mux.HandleFunc("/admin/api/stats", s.RequireAdmin(s.handleAdminStats))
+	s.mux.HandleFunc("/admin/api/backups/control-plane", s.RequireAdmin(s.handleControlPlaneBackup))
 
 	// --- Статика SvelteKit (последний маршрут — fallback) ---
 	s.mux.HandleFunc("/", s.handleStatic)
@@ -164,6 +202,21 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.status = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack forwards WebSocket upgrade requests through the logging middleware.
+// Without this method Gorilla WebSocket cannot obtain the underlying connection.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("underlying ResponseWriter does not support hijacking")
+	}
+	return hijacker.Hijack()
+}
+
+// Unwrap allows http.ResponseController to access the underlying writer.
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
 }
 
 // ============================================================
