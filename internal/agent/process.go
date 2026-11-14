@@ -13,6 +13,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"veltrix/internal/shared"
 )
 
 // Process — запущенный процесс сайта.
@@ -455,17 +457,7 @@ func runGitPull(path string) (string, error) {
 
 // DeployGitSite clones or fast-forwards the configured repository, runs the optional
 // build command in the configured root directory, and restarts the site there.
-func (m *ProcessManager) DeployGitSite(req struct {
-	SiteId string
-	Path string
-	Port uint32
-	Runtime string
-	GitURL string
-	GitBranch string
-	BuildCommand string
-	RootDir string
-	GitToken string
-}, rebuild bool) (int, string, string, string, error) {
+func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int, string, string, string, error) {
 	if !validSiteID(req.SiteId) { return 0, "", "", "", fmt.Errorf("invalid site id") }
 	siteRoot, err := safeSiteDirectory(m.DataRoot, req.SiteId)
 	if err != nil { return 0, "", "", "", err }
