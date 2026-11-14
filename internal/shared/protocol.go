@@ -221,9 +221,10 @@ type GetLogs struct {
 }
 
 type CreateTunnel struct {
-	SiteId      string
-	TunnelToken string
-	Hostname    string
+	SiteId string `json:"site_id"`
+	TunnelToken string `json:"tunnel_token,omitempty"`
+	Hostname string `json:"hostname"`
+	Port uint32 `json:"port"`
 }
 
 // ============================================================
