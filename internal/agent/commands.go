@@ -162,18 +162,18 @@ func (h *CommandHandler) handleSiteLifecycle(cmd *shared.Command, action string)
 	var req shared.SiteAction
 	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid site action payload") }
 	var pid int
-	var output string
+	var output, commitHash, commitDate string
 	var err error
 	switch action {
 	case "restart":
 		pid, err = h.processes.RestartSite(req.SiteId, req.Path, int(req.Port), req.Runtime)
 	case "deploy":
-		pid, output, err = h.processes.DeploySite(req.SiteId, req.Path, int(req.Port), req.Runtime, false)
+		pid, output, commitHash, commitDate, err = h.processes.DeployGitSite(req, false)
 	case "rebuild":
-		pid, output, err = h.processes.DeploySite(req.SiteId, req.Path, int(req.Port), req.Runtime, true)
+		pid, output, commitHash, commitDate, err = h.processes.DeployGitSite(req, true)
 	}
 	if err != nil { return errorResult(cmd.Id, err.Error()) }
-	payload, _ := shared.Marshal(&shared.StartSiteResult{Pid: uint32(pid), Port: req.Port})
+	payload, _ := shared.Marshal(&shared.StartSiteResult{Pid: uint32(pid), Port: req.Port, CommitHash: commitHash, CommitDate: commitDate})
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: fmt.Sprintf("%s completed (pid %d): %s", action, pid, output), Payload: payload}
 }
 
