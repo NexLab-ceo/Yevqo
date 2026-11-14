@@ -47,7 +47,7 @@
 <div class="page-header"><div><div class="eyebrow">DELIVERY PLATFORM</div><h1 class="page-title">Build Engine</h1><p class="page-desc">Анализируйте проект, проверяйте окружение и запускайте сборку на подключённом Agent.</p></div><Button on:click={load}>↻ Обновить</Button></div>
 <section class="builder-shell">
  <div class="builder-toolbar"><div><span class="section-kicker">BUILD TARGET</span><strong>Выберите приложение</strong></div><div class="target-controls">
-  <select class="input target-select" bind:value={selectedKey} on:change={()=>{plan=null;result=null;}}>
+  <select class="input target-select" bind:value={selectedKey} on:change={()=>{plan=null;result=null;rootDirectory='.';}}>
    <option value="">Выберите сайт</option>
    {#each sites as item}<option value={key(item)}>{item.device_name||'Device '+item.device_id} / {item.site.site_id}</option>{/each}
   </select>
