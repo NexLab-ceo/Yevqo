@@ -43,3 +43,17 @@ func TestAndroidBuildProviderCommands(t *testing.T) {
  steps,err=androidBuildSteps(root,AndroidBuildRequest{Stack:"dotnet"})
  if err!=nil||len(steps)!=1||steps[0].exe!="dotnet"{t.Fatalf("unexpected .NET plan: %#v, %v",steps,err)}
 }
+
+func TestVeltrixManifestAndSafeCommands(t *testing.T) {
+ root:=t.TempDir();app:=filepath.Join(root,"app")
+ if err:=os.MkdirAll(app,0755);err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(filepath.Join(app,"package.json"),[]byte(`{"scripts":{"build":"vite build"}}`),0600);err!=nil{t.Fatal(err)}
+ manifest:= "version: 1\nproject:\n  name: demo\n  root: ./app\nbuild:\n  provider: auto\n  install: npm install\n  command: npm run build\nrun:\n  command: npm run start\n  port: 3000\n"
+ if err:=os.WriteFile(filepath.Join(root,"veltrix.yaml"),[]byte(manifest),0600);err!=nil{t.Fatal(err)}
+ plan,err:=AnalyzeProject(root);if err!=nil{t.Fatal(err)}
+ if plan.Stack!="nodejs"||plan.Root!="app"||plan.Install!="npm install"||plan.Build!="npm run build"||plan.Start!="npm run start"||plan.Port!=3000{t.Fatalf("manifest was not applied: %+v",plan)}
+ step,err:=parseManifestBuildCommand("build","npm run build")
+ if err!=nil||step.exe!="npm"||len(step.args)!=2{t.Fatalf("valid command rejected: %#v %v",step,err)}
+ if _,err:=parseManifestBuildCommand("build","npm run build && curl bad");err==nil{t.Fatal("shell operators must be rejected")}
+ if _,err:=parseManifestBuildCommand("build","sh -c id");err==nil{t.Fatal("shell executables must not be allowlisted")}
+}
