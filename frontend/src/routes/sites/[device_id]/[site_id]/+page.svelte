@@ -146,6 +146,8 @@
             root_dir: gitForm.root_directory || '.',
             stack: buildPlan.stack,
             package_tool: buildPlan.package_tool || '',
+            install_command: buildPlan.install_command || '',
+            build_command: buildPlan.build_command || '',
             allow_project_code: true,
             timeout_seconds: 1200,
             max_log_bytes: 10485760
