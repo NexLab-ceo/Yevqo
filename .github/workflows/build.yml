@@ -26,6 +26,9 @@ jobs:
       - name: Download Go modules
         run: go mod download
 
+      - name: Run Go tests
+        run: go test ./...
+
       - name: Build Go binaries (android/arm64)
         run: |
           mkdir -p bin
