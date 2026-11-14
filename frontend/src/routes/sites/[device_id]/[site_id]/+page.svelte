@@ -320,7 +320,7 @@
                             <p class="muted">Available tools: {buildPlan.android_environment.available_tools.join(', ')}</p>
                         {/if}
                     {/if}
-                    {#if ['nodejs','python','go','rust','php','static'].includes(buildPlan.stack) && !buildPlan.needs_configuration}
+                    {#if (['nodejs','python','go','rust','php','static','java','jvm','ruby','dotnet'].includes(buildPlan.stack) || (buildPlan.provider === 'veltrix' && (buildPlan.install_command || buildPlan.build_command))) && !buildPlan.needs_configuration}
                         <label class="consent-row">
                             <input type="checkbox" bind:checked={allowProjectCode} />
                             Я доверяю этому репозиторию и разрешаю запуск его build-скриптов с правами пользователя Termux.
