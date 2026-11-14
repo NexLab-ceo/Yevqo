@@ -128,6 +128,7 @@
         }
         try {
             buildPlan = JSON.parse(decodeLogs(res.data.payload));
+            if (buildPlan.root_directory) gitForm.root_directory = buildPlan.root_directory;
             activeTab = 'build';
         } catch {
             notify('Получен некорректный ответ анализа', 'error');
