@@ -44,3 +44,6 @@ export function notify(message, type = 'info') {
         notifications.update((list) => list.filter((n) => n.id !== id));
     }, 4000);
 }
+
+// Persisted appearance preference: dark by default.
+export const theme = writable('dark');
