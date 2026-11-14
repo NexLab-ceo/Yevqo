@@ -176,6 +176,8 @@ type AndroidBuildSite struct {
 	RootDir string `json:"root_dir,omitempty"`
 	Stack string `json:"stack"`
 	PackageTool string `json:"package_tool,omitempty"`
+	InstallCommand string `json:"install_command,omitempty"`
+	BuildCommand string `json:"build_command,omitempty"`
 	AllowProjectCode bool `json:"allow_project_code"`
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 	MaxLogBytes int `json:"max_log_bytes,omitempty"`
