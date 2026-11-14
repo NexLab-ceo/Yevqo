@@ -602,8 +602,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			// Keep token encrypted at rest. If omitted, reuse a previously saved token.
 			var encrypted interface{}
 			if strings.TrimSpace(in.TunnelToken)!="" {
-				if len(in.TunnelToken)>4096 || strings.ContainsAny(in.TunnelToken,"
- "){apiError(w,shared.ErrBadRequest("invalid Cloudflare tunnel token"));return}
+				if len(in.TunnelToken)>4096 || strings.ContainsAny(in.TunnelToken,"\\r\\n\\x00"){apiError(w,shared.ErrBadRequest("invalid Cloudflare tunnel token"));return}
 				nonce,ciphertext,e:=encryptCredential(s.credentialKey,[]byte(strings.TrimSpace(in.TunnelToken)))
 				if e!=nil{apiError(w,shared.ErrInternal("could not encrypt tunnel token"));return}
 				encrypted=append(nonce,ciphertext...)
