@@ -23,6 +23,7 @@ type BuildPlan struct {
 		Evidence     []string `json:"evidence"`
 		Warnings     []string `json:"warnings,omitempty"`
 	Capabilities BuildCapabilities `json:"capabilities"`
+	AndroidEnvironment AndroidBuildEnvironment `json:"android_environment"`
 }
 
 // AnalyzeProject inspects only the immediate project root. It does not execute
@@ -41,7 +42,10 @@ func AnalyzeProject(root string) (BuildPlan, error) {
 		if entry.Type().IsRegular() { files[strings.ToLower(entry.Name())] = true }
 	}
 	has := func(names ...string) bool { for _, name := range names { if files[strings.ToLower(name)] { return true } }; return false }
-	plan := BuildPlan{Provider:"auto", Stack:"unknown", Root:".", Confidence:"low", NeedsConfig:true, Evidence:[]string{}, Capabilities: DetectBuildCapabilities()}
+	androidEnv := DetectAndroidBuildEnvironment("")
+	provider := "auto"
+	if androidEnv.Android || androidEnv.Termux { provider = "android-local" }
+	plan := BuildPlan{Provider:provider, Stack:"unknown", Root:".", Confidence:"low", NeedsConfig:true, Evidence:[]string{}, Capabilities: DetectBuildCapabilities(), AndroidEnvironment: androidEnv}
 
 	// Explicit configuration always wins over heuristic detection.
 	if has("veltrix.yaml", "veltrix.yml") {
@@ -51,13 +55,25 @@ func AnalyzeProject(root string) (BuildPlan, error) {
 		return plan, nil
 	}
 	if has("dockerfile") {
-		plan.Provider, plan.Stack, plan.Confidence, plan.NeedsConfig = "dockerfile", "container", "high", false
+		plan.Stack, plan.Confidence = "container", "high"
 		plan.Evidence = append(plan.Evidence, "Dockerfile")
+		if androidEnv.Android || androidEnv.Termux {
+			plan.NeedsConfig = true
+			plan.Warnings = append(plan.Warnings, "Dockerfile execution is disabled in the Android-only Build Engine.")
+		} else {
+			plan.Provider, plan.NeedsConfig = "dockerfile", false
+		}
 		return plan, nil
 	}
 	if has("nixpacks.toml") {
-		plan.Provider, plan.Stack, plan.Confidence, plan.NeedsConfig = "nixpacks", "detected-by-nixpacks", "high", false
+		plan.Stack, plan.Confidence = "detected-by-nixpacks", "high"
 		plan.Evidence = append(plan.Evidence, "nixpacks.toml")
+		if androidEnv.Android || androidEnv.Termux {
+			plan.NeedsConfig = true
+			plan.Warnings = append(plan.Warnings, "Nixpacks execution is disabled in the Android-only Build Engine.")
+		} else {
+			plan.Provider, plan.NeedsConfig = "nixpacks", false
+		}
 		return plan, nil
 	}
 	if has("package.json") {
@@ -130,6 +146,10 @@ func AnalyzeProject(root string) (BuildPlan, error) {
 		return plan, nil
 	}
 
-	plan.Warnings = append(plan.Warnings, "No known project markers found. Choose Dockerfile, Nixpacks, Static Hosting, or provide custom install/build/start commands.")
+	if androidEnv.Android || androidEnv.Termux {
+		plan.Warnings = append(plan.Warnings, "No supported Android local build markers found. Docker, Podman, Nixpacks and arbitrary shell commands are disabled.")
+	} else {
+		plan.Warnings = append(plan.Warnings, "No known project markers found. Configure a supported build provider.")
+	}
 	return plan, nil
 }
