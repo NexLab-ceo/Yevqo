@@ -55,6 +55,8 @@ type AndroidBuildRequest struct {
  RootDir string `json:"root_directory,omitempty"`
  Stack string `json:"stack"`
  PackageTool string `json:"package_tool,omitempty"`
+ InstallCommand string `json:"install_command,omitempty"`
+ BuildCommand string `json:"build_command,omitempty"`
  Timeout time.Duration `json:"-"`
  MaxLogBytes int `json:"max_log_bytes,omitempty"`
  MinAvailableMemoryBytes uint64 `json:"min_available_memory_bytes,omitempty"`
@@ -109,6 +111,12 @@ func safeAndroidBuildRoot(siteRoot,rootDir string)(string,error){
  st,err:=os.Stat(target);if err!=nil{return "",err};if !st.IsDir(){return "",errors.New("project root is not a directory")};return target,nil
 }
 func androidBuildSteps(root string,req AndroidBuildRequest)([]androidBuildStep,error){
+ if req.InstallCommand != "" || req.BuildCommand != "" {
+  steps:=make([]androidBuildStep,0,2)
+  if req.InstallCommand!="" { step,err:=parseManifestBuildCommand("install",req.InstallCommand);if err!=nil{return nil,err};steps=append(steps,step) }
+  if req.BuildCommand!="" { step,err:=parseManifestBuildCommand("build",req.BuildCommand);if err!=nil{return nil,err};steps=append(steps,step) }
+  return steps,nil
+ }
  switch req.Stack{
  case "static":return nil,nil
  case "nodejs":
@@ -137,6 +145,17 @@ func androidBuildSteps(root string,req AndroidBuildRequest)([]androidBuildStep,e
  default:return nil,fmt.Errorf("unsupported Android build stack %q",req.Stack)
  }
 }
+
+func parseManifestBuildCommand(name, raw string) (androidBuildStep,error) {
+ if strings.ContainsAny(raw,";|&`$><\\r\\n") { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command contains unsupported shell syntax",name) }
+ fields:=strings.Fields(raw)
+ if len(fields)==0 { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command is empty",name) }
+ exe:=filepath.Base(fields[0])
+ allowed:=map[string]bool{"npm":true,"npx":true,"pnpm":true,"yarn":true,"bun":true,"python":true,"python3":true,"pip":true,"pip3":true,"go":true,"cargo":true,"composer":true,"php":true,"bundle":true,"mvn":true,"gradle":true,"dotnet":true}
+ if !allowed[exe] { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command executable %q is not allowlisted",name,exe) }
+ return androidBuildStep{name:name,exe:exe,args:fields[1:]},nil
+}
+
 func androidBuildEnv()[]string{allow:=map[string]bool{"PATH":true,"PREFIX":true,"HOME":true,"TMPDIR":true,"LANG":true,"LC_ALL":true,"TERM":true,"ANDROID_ROOT":true,"ANDROID_DATA":true};var env []string;for _,v:=range os.Environ(){k,_,_:=strings.Cut(v,"=");if allow[k]{env=append(env,v)}};return env}
 type boundedBuildLog struct{mu sync.Mutex;data []byte;limit int;truncated bool}
 func(w *boundedBuildLog)Write(p []byte)(int,error){w.mu.Lock();defer w.mu.Unlock();n:=len(p);left:=w.limit-len(w.data);if left>0{if len(p)>left{w.data=append(w.data,p[:left]...);w.truncated=true}else{w.data=append(w.data,p...)}}else{w.truncated=true};return n,nil}
