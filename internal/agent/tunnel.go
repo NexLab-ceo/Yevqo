@@ -55,6 +55,10 @@ func NewTunnelManager(dataRoot string) *TunnelManager {
 //   - tunnelToken:   токен Cloudflare Tunnel (из панели Cloudflare)
 //   - hostname:      публичный домен (например, "blog.user1.com")
 func (m *TunnelManager) StartTunnel(siteID string, port int, tunnelToken, hostname string) (int, error) {
+	if !validTunnelSiteID(siteID) { return 0, errors.New("invalid site id") }
+	if port < 1024 || port > 65535 { return 0, errors.New("invalid site port") }
+	if strings.TrimSpace(tunnelToken) == "" { return 0, errors.New("Cloudflare Tunnel token is required") }
+	if strings.TrimSpace(hostname) == "" || strings.ContainsAny(hostname, "/\\\\ \r\n\t") { return 0, errors.New("invalid public hostname") }
 	// Проверяем, что cloudflared установлен.
 	binary, err := exec.LookPath("cloudflared")
 	if err != nil {
@@ -81,21 +85,19 @@ func (m *TunnelManager) StartTunnel(siteID string, port int, tunnelToken, hostna
 		return 0, fmt.Errorf("create logs dir: %w", err)
 	}
 	logPath := filepath.Join(logDir, siteID+"-tunnel.log")
+	tokenPath := filepath.Join(cfgDir, siteID+".token")
+	if err := os.WriteFile(tokenPath, []byte(strings.TrimSpace(tunnelToken)+"\n"), 0o600); err != nil { return 0, fmt.Errorf("store tunnel token: %w", err) }
+	if err := os.Chmod(tokenPath, 0o600); err != nil { return 0, fmt.Errorf("secure tunnel token: %w", err) }
 
-	// Открываем лог.
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	// Логи и токен доступны только пользователю Agent.
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return 0, fmt.Errorf("open tunnel log: %w", err)
 	}
 
-	// Формируем команду cloudflared.
-	// Используем `cloudflared tunnel run --token <TOKEN>` — самый простой режим.
-	// В этом режиме cloudflared подключается к Cloudflare и сам знает,
-	// какой домен за ним закреплён (через панель Cloudflare).
-	//
-	// Ограничение: один токен = один туннель = один домен.
-	// Если нужно несколько сайтов через один туннель — нужен config.yml.
-	cmd := exec.Command(binary, "tunnel", "run", "--no-autoupdate", "--token", tunnelToken)
+	// Не передаём секрет в argv: его можно было увидеть через список процессов.
+	// Для remotely-managed Tunnel Cloudflare хранит ingress-маршруты в Zero Trust.
+	cmd := exec.Command(binary, "tunnel", "run", "--no-autoupdate", "--token-file", tokenPath)
 	cmd.Dir = m.DataRoot
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -109,17 +111,15 @@ func (m *TunnelManager) StartTunnel(siteID string, port int, tunnelToken, hostna
 		return 0, fmt.Errorf("start cloudflared: %w", err)
 	}
 
-	// Отвязываем от родителя.
+	// Родительский процесс закрывает свой дескриптор; дочерний сохраняет stdout/stderr.
+	_ = logFile.Close()
+	pid := cmd.Process.Pid
 	_ = cmd.Process.Release()
 
-	// Ждём, пока cloudflared подключится к Cloudflare (2 секунды).
-	time.Sleep(2 * time.Second)
-
-	// Проверяем, что процесс жив.
-	pid := cmd.Process.Pid
-	if !isAlive(pid) {
-		logFile.Close()
-		return 0, fmt.Errorf("cloudflared died immediately (check %s)", logPath)
+	// Ждём подтверждения регистрации соединения на edge, а не просто живого PID.
+	if err := waitForTunnelReady(pid, logPath, 20*time.Second); err != nil {
+		_ = killProcess(pid)
+		return 0, fmt.Errorf("Cloudflare Tunnel did not become ready: %w (see %s)", err, logPath)
 	}
 
 	// Сохраняем.
@@ -135,6 +135,30 @@ func (m *TunnelManager) StartTunnel(siteID string, port int, tunnelToken, hostna
 		siteID, hostname, port, pid)
 
 	return pid, nil
+}
+
+
+// validTunnelSiteID keeps site identifiers safe for token/log filenames and pgrep patterns.
+func validTunnelSiteID(id string) bool {
+ if id == "" || len(id) > 64 { return false }
+ for _, r := range id { if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && r != '-' && r != '_' { return false } }
+ return true
+}
+
+// waitForTunnelReady requires cloudflared to report an edge connection registration.
+func waitForTunnelReady(pid int, logPath string, timeout time.Duration) error {
+ deadline := time.Now().Add(timeout)
+ for time.Now().Before(deadline) {
+  if !isAlive(pid) { return errors.New("cloudflared process exited before registering an edge connection") }
+  data, err := os.ReadFile(logPath)
+  if err == nil {
+   logs := strings.ToLower(string(data))
+   if strings.Contains(logs, "registered tunnel connection") || strings.Contains(logs, "connection registered") { return nil }
+   if strings.Contains(logs, "invalid tunnel token") || strings.Contains(logs, "unauthorized") { return errors.New("Cloudflare rejected the tunnel credentials") }
+  }
+  time.Sleep(500 * time.Millisecond)
+ }
+ return errors.New("timed out waiting for a registered tunnel connection")
 }
 
 // ============================================================
@@ -156,7 +180,7 @@ func (m *TunnelManager) StopTunnel(siteID string) error {
 	if err := killProcess(t.PID); err != nil {
 		return err
 	}
-
+	_ = os.Remove(filepath.Join(m.DataRoot, tunnelsDir, siteID+".token"))
 	delete(m.tunnels, siteID)
 	return nil
 }
@@ -238,7 +262,7 @@ func (m *TunnelManager) WriteTunnelConfig(tunnelUUID, credentialsPath string, ru
 func findTunnelPID(siteID string) int {
 	// Ищем cloudflared, у которого в аргументах есть "--token" и siteID
 	// (или имя туннеля).
-	cmd := exec.Command("pgrep", "-f", "cloudflared.*"+siteID)
+	cmd := exec.Command("pgrep", "-f", "cloudflared.*"+siteID+"\\.token")
 	out, err := cmd.Output()
 	if err != nil {
 		return 0
