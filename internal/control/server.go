@@ -30,6 +30,7 @@ type Server struct {
 	cfg           Config
 	db            *DB
 	hub           *Hub
+	logStreams    *logStreamHub
 	adminUsername string
 	credentialKey []byte
 	mux           *http.ServeMux
@@ -88,6 +89,7 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg:           cfg,
 		db:            db,
 		hub:           NewHub(),
+		logStreams:    newLogStreamHub(),
 		adminUsername: cfg.AdminUsername,
 		credentialKey: credentialKey,
 		mux:           http.NewServeMux(),
@@ -108,6 +110,7 @@ func (s *Server) Close() error {
 // registerRoutes настраивает все маршруты.
 func (s *Server) registerRoutes() {
 	// --- WebSocket для агентов ---
+	s.mux.HandleFunc("/ws/logs", s.RequireAuth(s.handleLogStream))
 	s.mux.HandleFunc("/ws", s.handleWebSocket)
 
 	// --- API для пользователей ---
