@@ -20,6 +20,7 @@ type ProcessRecord struct {
 	WorkingDir   string    `json:"working_dir"`
 	LogPath      string    `json:"log_path"`
 	StartedAt    time.Time `json:"started_at"`
+	StartToken   string    `json:"start_token"`
 }
 
 // ProcessRegistry stores process metadata atomically on disk.
