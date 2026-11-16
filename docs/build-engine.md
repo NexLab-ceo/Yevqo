@@ -38,3 +38,28 @@ grandchild processes. Memory/disk checks are preflight estimates, not hard limit
 Dockerfile execution, Docker/Podman, Nixpacks, arbitrary custom shell commands,
 remote builds, and claims of container-grade isolation are disabled.
 Unsupported stacks return explicit errors rather than falling back to host shell.
+
+
+## Git deployment releases
+
+The Agent deploy path checks out each commit into an immutable
+`sites/<site>/.yevqo/releases/<commit>` directory. It does not run
+`git pull` inside the currently active working tree or delete the site's
+starter files. The selected project root is resolved inside the staged release,
+then the detected supported build provider runs with a timeout and bounded log.
+
+The current activation path supports the existing `php`, `go` and `static`
+site runtimes. It starts the candidate and waits for its local TCP port to become
+ready before reporting success. If the candidate cannot start, the Agent attempts
+to restart the previous recorded release. Old release directories are retained
+so rollback data is not removed automatically.
+
+Git deployment accepts HTTPS remotes without embedded credentials and SSH
+remotes (including the standard `git@` user). A saved access token is passed to
+Git through a temporary process environment configuration, not embedded in the
+remote URL. Branch names are validated before invoking Git. Build output is
+bounded; custom shell build commands remain disabled.
+
+Node.js and other detected stacks may be analyzed or built by the local build
+runner, but they are not yet deployable as long-running site runtimes until a
+corresponding supervised start provider is implemented.
