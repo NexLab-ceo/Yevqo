@@ -10,10 +10,10 @@ import (
 
 func TestLogStreamHubPublishesOnlyToMatchingOwnerDeviceAndSite(t *testing.T) {
 	hub := newLogStreamHub()
-	matching := hub.subscribe(7, 11, "web")
-	wrongUser := hub.subscribe(8, 11, "web")
-	wrongDevice := hub.subscribe(7, 12, "web")
-	wrongSite := hub.subscribe(7, 11, "api")
+	matching := hub.subscribe(7, 11, "web", 0)
+	wrongUser := hub.subscribe(8, 11, "web", 0)
+	wrongDevice := hub.subscribe(7, 12, "web", 0)
+	wrongSite := hub.subscribe(7, 11, "api", 0)
 	defer hub.unsubscribe(matching)
 	defer hub.unsubscribe(wrongUser)
 	defer hub.unsubscribe(wrongDevice)
@@ -46,7 +46,7 @@ func TestLogStreamHubPublishesOnlyToMatchingOwnerDeviceAndSite(t *testing.T) {
 
 func TestLogStreamHubDropsOldestWhenSubscriberIsSlow(t *testing.T) {
 	hub := newLogStreamHub()
-	sub := hub.subscribe(1, 2, "site")
+	sub := hub.subscribe(1, 2, "site", 0)
 	defer hub.unsubscribe(sub)
 
 	for i := 0; i < 140; i++ {
