@@ -152,7 +152,7 @@ func (m *ProcessManager) CreateSite(siteID string, port int, runtime string) err
 	if runtime == "nodejs" {
 		packageJSON := "{\n  \"name\": \"yevqo-site\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"scripts\": { \"start\": \"node server.js\" }\n}\n"
 		if err := os.WriteFile(filepath.Join(target, "package.json"), []byte(packageJSON), 0o640); err != nil { _ = os.RemoveAll(target); return fmt.Errorf("create Node.js package manifest: %w", err) }
-		server := "const http = require('http');\nconst host = process.env.HOST || '127.0.0.1';\nconst port = Number(process.env.PORT || 3000);\nhttp.createServer((_req, res) => { res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }); res.end('Hello from Yevqo\\\n'); }).listen(port, host);\n"
+		server := "const http = require('http');\nconst host = process.env.HOST || '127.0.0.1';\nconst port = Number(process.env.PORT || 3000);\nhttp.createServer((_req, res) => { res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }); res.end('Hello from Yevqo'); }).listen(port, host);\n"
 		if err := os.WriteFile(filepath.Join(target, "server.js"), []byte(server), 0o640); err != nil { _ = os.RemoveAll(target); return fmt.Errorf("create Node.js starter server: %w", err) }
 		return nil
 	}
