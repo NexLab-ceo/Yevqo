@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,6 +32,7 @@ type Process struct {
 
 // ProcessManager — менеджер запущенных процессов.
 type ProcessManager struct {
+	deployMu sync.Mutex
 	startMu sync.Mutex
 	mu sync.RWMutex
 	DataRoot string
@@ -527,85 +529,177 @@ func runGitPull(path string) (string, error) {
 }
 
 
-// DeployGitSite clones or fast-forwards the configured repository, runs the optional
-// build command in the configured root directory, and restarts the site there.
+// validDeployBranch rejects option-like and path-traversal branch names before invoking Git.
+func validDeployBranch(branch string) bool {
+	if branch == "" || len(branch) > 128 || strings.HasPrefix(branch, "-") ||
+		strings.Contains(branch, "..") || strings.Contains(branch, "//") ||
+		strings.Contains(branch, "@{") || strings.HasSuffix(branch, "/") ||
+		strings.HasSuffix(branch, ".") {
+		return false
+	}
+	for _, r := range branch {
+		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || strings.ContainsRune("._/-", r)) {
+			return false
+		}
+	}
+	return true
+}
+
+func validDeployRepository(raw string) bool {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	return err == nil && u.Host != "" && u.User == nil &&
+		(u.Scheme == "https" || u.Scheme == "ssh") &&
+		!strings.ContainsAny(raw, "\r\n\x00")
+}
+
+func truncateDeployOutput(value string) string {
+	const max = 64 << 10
+	if len(value) <= max { return value }
+	return value[:max] + "\n[output truncated]"
+}
+
+// DeployGitSite builds an immutable release directory before touching the
+// currently running application. A failed candidate start restores the prior
+// process from its recorded working directory.
 func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int, string, string, string, error) {
+	m.deployMu.Lock()
+	defer m.deployMu.Unlock()
+
 	if !validSiteID(req.SiteId) { return 0, "", "", "", fmt.Errorf("invalid site id") }
-	siteRoot, err := safeSiteDirectory(m.DataRoot, req.SiteId)
-	if err != nil { return 0, "", "", "", err }
-	if req.GitURL == "" { return 0, "", "", "", fmt.Errorf("Git repository is not configured") }
+	if !validDeployRepository(req.GitURL) { return 0, "", "", "", fmt.Errorf("Git repository must be an HTTPS or SSH URL without embedded credentials") }
 	branch := req.GitBranch
 	if branch == "" { branch = "main" }
-	if strings.ContainsAny(branch, " \t\r\n") || strings.Contains(branch, "..") || strings.HasPrefix(branch, "-") {
-		return 0, "", "", "", fmt.Errorf("invalid Git branch")
+	if !validDeployBranch(branch) { return 0, "", "", "", fmt.Errorf("invalid Git branch") }
+	if req.Runtime != "php" && req.Runtime != "go" && req.Runtime != "static" {
+		return 0, "", "", "", fmt.Errorf("runtime %q cannot be launched by this Agent yet; supported runtimes are php, go and static", req.Runtime)
 	}
+
+	siteRoot, err := safeSiteDirectory(m.DataRoot, req.SiteId)
+	if err != nil { return 0, "", "", "", err }
+	if err := os.MkdirAll(siteRoot, 0o750); err != nil { return 0, "", "", "", fmt.Errorf("create site directory: %w", err) }
+
+	metadataRoot := filepath.Join(siteRoot, ".yevqo")
+	stagingRoot := filepath.Join(metadataRoot, "staging")
+	releasesRoot := filepath.Join(metadataRoot, "releases")
+	if err := os.MkdirAll(stagingRoot, 0o700); err != nil { return 0, "", "", "", err }
+	if err := os.MkdirAll(releasesRoot, 0o700); err != nil { return 0, "", "", "", err }
+	stageDir, err := os.MkdirTemp(stagingRoot, "deploy-*")
+	if err != nil { return 0, "", "", "", fmt.Errorf("create deployment staging directory: %w", err) }
+	defer os.RemoveAll(stageDir)
+
 	gitEnv := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if req.GitToken != "" {
+		if len(req.GitToken) > 512 || strings.ContainsAny(req.GitToken, "\r\n\x00") {
+			return 0, "", "", "", fmt.Errorf("invalid Git credential")
+		}
 		encoded := base64.StdEncoding.EncodeToString([]byte("x-access-token:"+req.GitToken))
 		gitEnv = append(gitEnv, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraheader",
 			"GIT_CONFIG_VALUE_0=AUTHORIZATION: basic "+encoded)
 	}
-	var output strings.Builder
-	if _, err := os.Stat(filepath.Join(siteRoot, ".git")); os.IsNotExist(err) {
-		entries, readErr := os.ReadDir(siteRoot)
-		if readErr != nil { return 0, "", "", "", readErr }
-		for _, entry := range entries {
-			name := entry.Name()
-			if name != "index.php" && name != "index.html" && name != "README.md" {
-				return 0, "", "", "", fmt.Errorf("site directory is not empty; refusing to overwrite existing files")
-			}
-		}
-		for _, entry := range entries {
-			if err := os.Remove(filepath.Join(siteRoot, entry.Name())); err != nil { return 0, "", "", "", err }
-		}
-		cmd := exec.Command("git", "clone", "--branch", branch, "--single-branch", req.GitURL, ".")
-		cmd.Dir, cmd.Env = siteRoot, gitEnv
-		out, cloneErr := cmd.CombinedOutput()
-		output.Write(out)
-		if cloneErr != nil { return 0, output.String(), "", "", fmt.Errorf("git clone: %w", cloneErr) }
-	} else if err != nil {
-		return 0, "", "", "", err
-	} else {
-		cmd := exec.Command("git", "-C", siteRoot, "pull", "--ff-only", "origin", branch)
-		cmd.Env = gitEnv
-		out, pullErr := cmd.CombinedOutput()
-		output.Write(out)
-		if pullErr != nil { return 0, output.String(), "", "", fmt.Errorf("git pull: %w", pullErr) }
+	clone := exec.Command("git", "clone", "--branch", branch, "--single-branch", "--depth", "1", req.GitURL, stageDir)
+	clone.Env = gitEnv
+	cloneOutput, cloneErr := clone.CombinedOutput()
+	output := strings.Builder{}
+	output.Write(cloneOutput)
+	if cloneErr != nil {
+		return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout failed: %w", cloneErr)
 	}
+
+	commitBytes, err := exec.Command("git", "-C", stageDir, "rev-parse", "HEAD").Output()
+	if err != nil { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("read checked-out commit: %w", err) }
+	commit := strings.TrimSpace(string(commitBytes))
+	if len(commit) != 40 && len(commit) != 64 { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git returned an invalid commit identifier") }
+	for _, r := range commit { if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git returned an invalid commit identifier") } }
+	dateBytes, err := exec.Command("git", "-C", stageDir, "show", "-s", "--format=%cI", "HEAD").Output()
+	if err != nil { return 0, truncateDeployOutput(output.String()), commit, "", fmt.Errorf("read commit date: %w", err) }
+	commitDate := strings.TrimSpace(string(dateBytes))
+
 	rootDir := req.RootDir
 	if rootDir == "" { rootDir = "." }
 	if filepath.IsAbs(rootDir) || strings.Contains(rootDir, "\\") {
-		return 0, output.String(), "", "", fmt.Errorf("invalid root directory")
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("invalid root directory")
 	}
 	rootDir = filepath.Clean(rootDir)
 	if rootDir == ".." || strings.HasPrefix(rootDir, ".."+string(filepath.Separator)) {
-		return 0, output.String(), "", "", fmt.Errorf("root directory must stay inside the site")
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("root directory must stay inside the site")
 	}
-	buildDir := siteRoot
-	if rootDir != "." { buildDir = filepath.Join(siteRoot, rootDir) }
-	resolvedRoot, resolveErr := filepath.EvalSymlinks(siteRoot)
-	if resolveErr != nil { return 0, output.String(), "", "", resolveErr }
-	resolvedBuild, resolveErr := filepath.EvalSymlinks(buildDir)
-	if resolveErr != nil { return 0, output.String(), "", "", fmt.Errorf("root directory not found: %w", resolveErr) }
-	if rel, relErr := filepath.Rel(resolvedRoot, resolvedBuild); relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return 0, output.String(), "", "", fmt.Errorf("root directory resolves outside the site")
+	buildDir, err := safeAndroidBuildRoot(stageDir, rootDir)
+	if err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("resolve deployment root: %w", err) }
+
+	plan, err := AnalyzeProject(buildDir)
+	if err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, err }
+	expectedStack := map[string]string{"php":"php", "go":"go", "static":"static"}[req.Runtime]
+	if plan.Stack != expectedStack && !(req.Runtime == "php" && plan.Stack == "unknown") {
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("detected stack %q does not match configured runtime %q", plan.Stack, req.Runtime)
 	}
-	if strings.TrimSpace(req.BuildCommand) != "" {
-		return 0, output.String(), "", "", fmt.Errorf("custom shell build commands are disabled on Android; use the Android local BuildSite provider with a supported stack")
+	if req.BuildCommand != "" {
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("custom shell build commands are disabled; use a supported detected stack")
 	}
-	commitCmd := exec.Command("git", "-C", siteRoot, "rev-parse", "HEAD")
-	commitBytes, err := commitCmd.Output()
-	if err != nil { return 0, output.String(), "", "", fmt.Errorf("read deployed commit: %w", err) }
-	commit := strings.TrimSpace(string(commitBytes))
-	dateCmd := exec.Command("git", "-C", siteRoot, "show", "-s", "--format=%cI", "HEAD")
-	dateBytes, err := dateCmd.Output()
-	if err != nil { return 0, output.String(), "", "", fmt.Errorf("read commit date: %w", err) }
-	commitDate := strings.TrimSpace(string(dateBytes))
-	runPath := filepath.Join("sites", req.SiteId)
+	if req.Runtime == "php" && plan.Stack == "unknown" {
+		// Plain PHP sites without Composer have no dependency/build phase.
+	} else {
+		if m.BuildRunner == nil { m.BuildRunner = NewAndroidBuildRunner(m.DataRoot) }
+		build := m.BuildRunner.Run(context.Background(), AndroidBuildRequest{
+			SiteID:req.SiteId, SiteRoot:stageDir, RootDir:rootDir, Stack:plan.Stack,
+			PackageTool:plan.PackageTool, AllowProjectCode:true, Timeout:20*time.Minute, MaxLogBytes:10<<20,
+		})
+		output.WriteString("\n")
+		output.WriteString(build.Output)
+		if !build.Success {
+			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("build failed: %s", build.Error)
+		}
+	}
+
+	releaseDir := filepath.Join(releasesRoot, commit)
+	if _, statErr := os.Stat(releaseDir); statErr == nil {
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("release %s already exists; refusing to overwrite it", commit)
+	} else if !os.IsNotExist(statErr) {
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, statErr
+	}
+	if err := os.Rename(stageDir, releaseDir); err != nil {
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("finalize immutable release: %w", err)
+	}
+
+	var previous ProcessRecord
+	hadPrevious := false
+	if m.registry != nil {
+		previous, hadPrevious = m.registry.Get(req.SiteId)
+	}
+	if hadPrevious && verifyProcessRecord(previous) {
+		if err := m.StopSite(req.SiteId); err != nil {
+			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("stop previous release: %w", err)
+		}
+	} else if hadPrevious {
+		_ = m.registry.Delete(req.SiteId)
+		m.mu.Lock()
+		delete(m.procs, req.SiteId)
+		m.mu.Unlock()
+		hadPrevious = false
+	}
+
+	runPath := filepath.Join("sites", req.SiteId, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
-	pid, err := m.RestartSite(req.SiteId, runPath, int(req.Port), req.Runtime)
-	if err != nil { return 0, output.String(), commit, commitDate, err }
-	return pid, output.String(), commit, commitDate, nil
+	pid, startErr := m.StartSite(req.SiteId, runPath, int(req.Port), req.Runtime)
+	if startErr != nil {
+		if hadPrevious {
+			oldRunPath := previous.RunPath
+			if oldRunPath == "" {
+				rel, relErr := filepath.Rel(siteRoot, previous.WorkingDir)
+				if relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+					oldRunPath = filepath.Join("sites", req.SiteId, rel)
+				}
+			}
+			if oldRunPath != "" {
+				if _, rollbackErr := m.StartSite(req.SiteId, oldRunPath, previous.Port, previous.Runtime); rollbackErr != nil {
+					return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed to start (%v); rollback also failed (%v)", startErr, rollbackErr)
+				}
+			}
+		}
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed health check and previous release was restored: %w", startErr)
+	}
+	output.WriteString(fmt.Sprintf("\nActivated release %s (pid %d)", commit, pid))
+	return pid, truncateDeployOutput(output.String()), commit, commitDate, nil
 }
 
 
