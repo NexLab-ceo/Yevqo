@@ -254,8 +254,11 @@ func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 		}
 	case "log":
 		var le shared.LogEvent
-		if err := shared.Unmarshal(ev.Payload, &le); err == nil {
+		if err := shared.Unmarshal(ev.Payload, &le); err == nil && c.Device != nil {
 			log.Printf("[%s/%s] %s", c.Device.Hostname, le.SiteId, le.Line)
+			if srv.logStreams != nil {
+				srv.logStreams.publish(c.Device.UserID, c.Device.ID, le)
+			}
 		}
 	case "metrics":
 		var metrics shared.MetricsResult
