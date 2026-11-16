@@ -21,6 +21,11 @@
     let terminalText = '';
     let logSocket = null;
     let logConnected = false;
+    let logStreamEnabled = false;
+    let logReconnectTimer = null;
+    let logReconnectAttempts = 0;
+    let logStatus = 'disconnected';
+    const logReconnectDelays = [1000, 2000, 5000, 10000, 20000, 30000];
     let activeTab = 'general';
     let releases = [];
     let releasesLoading = false;
@@ -35,7 +40,15 @@
     let allowDeployCode = false;
     let buildResult = null;
 
-    onDestroy(() => { if (logSocket) { logSocket.close(); logSocket = null; } });
+    onDestroy(() => {
+        logStreamEnabled = false;
+        clearLogReconnectTimer();
+        if (logSocket) {
+            const socket = logSocket;
+            logSocket = null;
+            socket.close();
+        }
+    });
 
     onMount(async () => {
         deviceId = $page.params.device_id;
@@ -126,14 +139,46 @@
             }).join('\n') || 'Устройство офлайн. В базе нет сохранённых записей для этого сайта.';
         }
         terminalLoading = false;
-        if (online) connectLiveLogs();
+        if (online) {\n            logStreamEnabled = true;\n            logReconnectAttempts = 0;\n            connectLiveLogs();\n        }
+    }
+
+    function clearLogReconnectTimer() {
+        if (logReconnectTimer) {
+            clearTimeout(logReconnectTimer);
+            logReconnectTimer = null;
+        }
+    }
+
+    function scheduleLogReconnect() {
+        if (!logStreamEnabled || !online || logReconnectTimer) return;
+        logStatus = 'reconnecting';
+        const index = Math.min(logReconnectAttempts, logReconnectDelays.length - 1);
+        const delay = logReconnectDelays[index];
+        logReconnectAttempts += 1;
+        logReconnectTimer = setTimeout(() => {
+            logReconnectTimer = null;
+            if (logStreamEnabled && online && !logSocket) connectLiveLogs();
+        }, delay);
     }
 
     function connectLiveLogs() {
-        if (!online || logSocket) return;
-        const socket = openSiteLogStream(deviceId, siteId);
+        if (!online || !logStreamEnabled || logSocket) return;
+        clearLogReconnectTimer();
+        logStatus = logReconnectAttempts > 0 ? 'reconnecting' : 'connecting';
+        let socket;
+        try {
+            socket = openSiteLogStream(deviceId, siteId);
+        } catch {
+            scheduleLogReconnect();
+            return;
+        }
         logSocket = socket;
-        socket.onopen = () => { logConnected = true; };
+        socket.onopen = () => {
+            if (logSocket !== socket) return;
+            logConnected = true;
+            logStatus = 'live';
+            logReconnectAttempts = 0;
+        };
         socket.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
@@ -144,23 +189,40 @@
             } catch { /* Ignore malformed stream frames. */ }
         };
         socket.onclose = () => {
-            if (logSocket === socket) logSocket = null;
+            if (logSocket !== socket) return;
+            logSocket = null;
             logConnected = false;
+            if (logStreamEnabled) scheduleLogReconnect();
+            else logStatus = 'disconnected';
         };
-        socket.onerror = () => { logConnected = false; };
+        socket.onerror = () => {
+            if (logSocket !== socket) return;
+            logConnected = false;
+            logStatus = 'reconnecting';
+            // The browser will follow this with close; reconnect is scheduled there.
+        };
     }
 
     function toggleLiveLogs() {
-        if (logSocket) {
-            logSocket.close();
-            logSocket = null;
+        if (logStreamEnabled) {
+            logStreamEnabled = false;
+            clearLogReconnectTimer();
+            logReconnectAttempts = 0;
+            if (logSocket) {
+                const socket = logSocket;
+                logSocket = null;
+                socket.close();
+            }
             logConnected = false;
+            logStatus = 'disconnected';
         } else {
+            logStreamEnabled = true;
+            logReconnectAttempts = 0;
             connectLiveLogs();
         }
     }
-    
-    async function analyzeBuild() {
+
+        async function analyzeBuild() {
         if (!online || analyzingBuild) return;
         analyzingBuild = true;
         buildPlan = null;
@@ -177,8 +239,7 @@
         } catch {
             notify('Получен некорректный ответ анализа', 'error');
         }
-    }
-    async function runAndroidBuild() {
+    }    async function runAndroidBuild() {
         if (!online || !buildPlan || buildRunning) return;
         if (!allowProjectCode) {
             notify('Подтвердите запуск кода проекта перед сборкой', 'warning');
@@ -339,7 +400,7 @@
         </div>
     {:else if activeTab === 'logs'}
         <Card>
-            <div class="logs-head"><div><h2 class="details-title">Terminal / Logs</h2><span class:live={logConnected} class="log-connection">{logConnected ? '● Live stream connected' : '○ Live stream disconnected'}</span></div><div class="log-actions"><Button size="sm" on:click={toggleLiveLogs} disabled={!online}>{logSocket ? 'Остановить поток' : 'Live logs'}</Button><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div></div>
+            <div class="logs-head"><div><h2 class="details-title">Terminal / Logs</h2><span class:live={logConnected} class="log-connection">{logStatus === 'live' ? '● Live' : logStatus === 'connecting' ? '◌ Connecting…' : logStatus === 'reconnecting' ? '↻ Reconnecting…' : '○ Disconnected'}</span></div><div class="log-actions"><Button size="sm" on:click={toggleLiveLogs} disabled={!online}>{logStreamEnabled ? 'Остановить поток' : 'Live logs'}</Button><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div></div>
             {#if terminalLoading}<p class="terminal-loading">Загрузка…</p>{:else}<pre class="terminal">{terminalText || 'Логи пока не загружены.'}</pre>{/if}
         </Card>
     {:else if activeTab === 'environment'}
@@ -357,8 +418,7 @@
                         <div class="env-row"><code>DB_PASSWORD</code><code>••••••••••</code></div>
                     </div>
                 {/each}
-            {:else}<p class="muted">Управляемые базы данных не подключены.</p>{/if}
-        </Card>
+            {:else}<p class="muted">Управляемые базы данных не подключены.</p>{/if}        </Card>
     {:else if activeTab === 'build'}
         <Card>
             <div class="logs-head">
@@ -537,8 +597,7 @@
     .offline-note { color:#EF4444; font-size:12px; margin:16px 0 0; }
     .details-title { margin-bottom:16px; }
     .details { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:16px; }
-    .details div { display:flex; flex-direction:column; gap:5px; }
-    .details span { color:#A1A1AA; font-size:11px; }
+    .details div { display:flex; flex-direction:column; gap:5px; }    .details span { color:#A1A1AA; font-size:11px; }
     .details strong { color:#FAFAFA; font-size:13px; font-weight:500; overflow-wrap:anywhere; }
     .terminal { background:#09090B; border:1px solid #27272A; border-radius:8px; color:#A1A1AA; padding:14px; max-height:55vh; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:11px/1.6 ui-monospace,monospace; }
     .terminal-loading { color:#A1A1AA; font-size:13px; }
