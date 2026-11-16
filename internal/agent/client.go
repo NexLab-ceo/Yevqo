@@ -39,11 +39,17 @@ type Client struct {
 
 // NewClient создаёт клиент.
 func NewClient(cfg *Config) *Client {
-	return &Client{
+	client := &Client{
 		cfg:     cfg,
 		handler: NewCommandHandler(cfg),
 		send:    make(chan []byte, 32),
 	}
+	client.handler.processes.SetLogEmitter(func(siteID, line string) {
+		if err := client.SendEvent("log", shared.LogEvent{SiteId: siteID, Line: line}); err != nil && err.Error() != "not connected" {
+			log.Printf("stream site log: %v", err)
+		}
+	})
+	return client
 }
 
 // Run — главный цикл. Подключается, переподключается при обрыве.
