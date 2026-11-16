@@ -23,7 +23,6 @@ type ProcessRecord struct {
 	StartedAt    time.Time `json:"started_at"`
 	StartToken   string    `json:"start_token"`
 	RunPath      string    `json:"run_path,omitempty"`
-	ExtraEnv     map[string]string `json:"extra_env,omitempty"`
 	RestartCount int       `json:"restart_count,omitempty"`
 	LastRestartAt time.Time `json:"last_restart_at,omitempty"`
 }
