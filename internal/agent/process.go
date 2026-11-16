@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -40,6 +41,7 @@ type ProcessManager struct {
 	BuildRunner *AndroidBuildRunner
 	registry *ProcessRegistry
 	registryErr error
+	logEmitter func(string, string)
 	procs    map[string]*Process // key = siteID
 }
 
@@ -49,6 +51,44 @@ func NewProcessManager(dataRoot string) *ProcessManager {
  m.registry, m.registryErr = NewProcessRegistry(dataRoot)
  if m.registryErr == nil { m.restoreProcesses(); go m.watchProcesses() }
  return m
+}
+
+// SetLogEmitter installs a non-blocking best-effort callback for process output.
+func (m *ProcessManager) SetLogEmitter(emit func(siteID, line string)) {
+	m.mu.Lock()
+	m.logEmitter = emit
+	m.mu.Unlock()
+}
+
+type siteLogWriter struct {
+	mu sync.Mutex
+	siteID string
+	pending []byte
+	emit func(string, string)
+}
+
+func (w *siteLogWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	w.pending = append(w.pending, p...)
+	var lines []string
+	for {
+		i := strings.IndexByte(string(w.pending), '\n')
+		if i < 0 {
+			if len(w.pending) > 8192 {
+				lines = append(lines, string(w.pending[:8192]))
+				w.pending = append([]byte(nil), w.pending[8192:]...)
+			}
+			break
+		}
+		line := strings.TrimSuffix(string(w.pending[:i]), "\r")
+		lines = append(lines, line)
+		w.pending = append([]byte(nil), w.pending[i+1:]...)
+	}
+	w.mu.Unlock()
+	if w.emit != nil {
+		for _, line := range lines { w.emit(w.siteID, line) }
+	}
+	return len(p), nil
 }
 
 // ============================================================
@@ -288,9 +328,14 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 	if runtime == "nodejs" { env = append(env, "HOST=127.0.0.1") }
 	cmd.Env = env
 
-	// Перенаправляем вывод в лог.
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
+	// Persist output locally and stream complete lines to the Control Plane.
+	m.mu.RLock()
+	emitLog := m.logEmitter
+	m.mu.RUnlock()
+	streamWriter := &siteLogWriter{siteID: siteID, emit: emitLog}
+	outputWriter := io.MultiWriter(logFile, streamWriter)
+	cmd.Stdout = outputWriter
+	cmd.Stderr = outputWriter
 
 	// Отвязываем от родителя (чтобы не умер при рестарте агента).
 	cmd.SysProcAttr = &syscall.SysProcAttr{
