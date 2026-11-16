@@ -545,10 +545,13 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 		if st.SiteID != siteID { continue }
 		if len(parts) == 3 && parts[2] == "cmd" {
 			if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
-			var in struct { Action string `json:"action"` }
+			var in struct { Action string `json:"action"`; AllowProjectCode bool `json:"allow_project_code"` }
 			if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
 			if in.Action != "deploy" && in.Action != "rebuild" && in.Action != "restart" && in.Action != "stop" {
 				apiError(w, shared.ErrBadRequest("unsupported site action")); return
+			}
+			if (in.Action == "deploy" || in.Action == "rebuild") && !in.AllowProjectCode {
+				apiError(w, shared.ErrBadRequest("explicit project-code consent is required before deployment")); return
 			}
 			conn, online := s.hub.Get(deviceID)
 			if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
@@ -560,7 +563,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				if strings.TrimSpace(gitCfg.GitURL) == "" { apiError(w, shared.ErrBadRequest("connect a Git repository before deploying")); return }
 				payload = &shared.SiteAction{SiteId: st.SiteID, Path: st.Path, Port: uint32(st.Port), Runtime: st.Runtime,
 					GitURL: gitCfg.GitURL, GitBranch: gitCfg.GitBranch, BuildCommand: gitCfg.BuildCommand,
-					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken}
+					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, AllowProjectCode: in.AllowProjectCode}
 			}
 			if in.Action == "stop" {
 				agentAction = "stop_site"
