@@ -21,6 +21,7 @@
     let terminalText = '';
     let logSocket = null;
     let logConnected = false;
+    let agentLogOnline = false;
     let logStreamEnabled = false;
     let logReconnectTimer = null;
     let logStableTimer = null;
@@ -142,7 +143,9 @@
         }
         terminalLoading = false;
         if (online) {
+            agentLogOnline = true;
             logStreamEnabled = true;
+            agentLogOnline = online;
             logReconnectAttempts = 0;
             connectLiveLogs();
         }
@@ -163,19 +166,19 @@
     }
 
     function scheduleLogReconnect() {
-        if (!logStreamEnabled || !online || logReconnectTimer) return;
+        if (!logStreamEnabled || !agentLogOnline || logReconnectTimer) return;
         logStatus = 'reconnecting';
         const index = Math.min(logReconnectAttempts, logReconnectDelays.length - 1);
         const delay = logReconnectDelays[index];
         logReconnectAttempts += 1;
         logReconnectTimer = setTimeout(() => {
             logReconnectTimer = null;
-            if (logStreamEnabled && online && !logSocket) connectLiveLogs();
+            if (logStreamEnabled && agentLogOnline && !logSocket) connectLiveLogs();
         }, delay);
     }
 
     function connectLiveLogs() {
-        if (!online || !logStreamEnabled || logSocket) return;
+        if (!agentLogOnline || !logStreamEnabled || logSocket) return;
         clearLogReconnectTimer();
         logStatus = logReconnectAttempts > 0 ? 'reconnecting' : 'connecting';
         let socket;
@@ -201,6 +204,22 @@
         socket.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
+                if (message.type === 'agent_status' && String(message.device_id) === String(deviceId)) {
+                    agentLogOnline = message.status === 'online';
+                    if (!agentLogOnline) {
+                        logConnected = false;
+                        clearLogStableTimer();
+                        logStatus = 'agent-offline';
+                    } else if (logStreamEnabled) {
+                        if (logSocket && logSocket.readyState === WebSocket.OPEN) {
+                            logConnected = true;
+                            logStatus = 'live';
+                        } else {
+                            connectLiveLogs();
+                        }
+                    }
+                    return;
+                }
                 if (message.type !== 'log' || message.site_id !== siteId) return;
                 const stamp = message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
                 const lines = (terminalText ? terminalText.split('\n') : []).concat('[' + stamp + '] ' + String(message.line ?? ''));
@@ -212,13 +231,13 @@
             logSocket = null;
             logConnected = false;
             clearLogStableTimer();
-            if (logStreamEnabled) scheduleLogReconnect();
+            if (logStreamEnabled && agentLogOnline) scheduleLogReconnect();
             else logStatus = 'disconnected';
         };
         socket.onerror = () => {
             if (logSocket !== socket) return;
             logConnected = false;
-            logStatus = 'reconnecting';
+            logStatus = agentLogOnline ? 'reconnecting' : 'agent-offline';
             // The browser will follow this with close; reconnect is scheduled there.
         };
     }
@@ -226,6 +245,7 @@
     function toggleLiveLogs() {
         if (logStreamEnabled) {
             logStreamEnabled = false;
+            agentLogOnline = false;
             clearLogReconnectTimer();
             clearLogStableTimer();
             logReconnectAttempts = 0;
@@ -422,7 +442,7 @@
         </div>
     {:else if activeTab === 'logs'}
         <Card>
-            <div class="logs-head"><div><h2 class="details-title">Terminal / Logs</h2><span class:live={logConnected} class="log-connection">{logStatus === 'live' ? '● Live' : logStatus === 'connecting' ? '◌ Connecting…' : logStatus === 'reconnecting' ? '↻ Reconnecting…' : '○ Disconnected'}</span></div><div class="log-actions"><Button size="sm" on:click={toggleLiveLogs} disabled={!online}>{logStreamEnabled ? 'Остановить поток' : 'Live logs'}</Button><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div></div>
+            <div class="logs-head"><div><h2 class="details-title">Terminal / Logs</h2><span class:live={logConnected} class="log-connection">{logStatus === 'live' ? '● Live' : logStatus === 'connecting' ? '◌ Connecting…' : logStatus === 'reconnecting' ? '↻ Reconnecting…' : logStatus === 'agent-offline' ? '● Agent offline' : '○ Disconnected'}</span></div><div class="log-actions"><Button size="sm" on:click={toggleLiveLogs} disabled={!online}>{logStreamEnabled ? 'Остановить поток' : 'Live logs'}</Button><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div></div>
             {#if terminalLoading}<p class="terminal-loading">Загрузка…</p>{:else}<pre class="terminal">{terminalText || 'Логи пока не загружены.'}</pre>{/if}
         </Card>
     {:else if activeTab === 'environment'}
