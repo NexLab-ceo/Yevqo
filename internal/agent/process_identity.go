@@ -54,7 +54,6 @@ func (m *ProcessManager) watchRestoredProcess(record ProcessRecord) {
   return
  }
 }
-}
 // processGroupAlive checks every member of the group, not just its leader.
 // Linux may retain killed orphan descendants as zombies briefly; they cannot
 // execute and must not make a successful shutdown look like a live service.
