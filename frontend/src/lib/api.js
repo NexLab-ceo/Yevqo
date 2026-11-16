@@ -98,6 +98,13 @@ export async function sendCommand(deviceId, action, payload = {}) {
     return request('POST', `/api/devices/${deviceId}/cmd`, { action, payload });
 }
 
+// Same-origin authenticated WebSocket stream for a single site.
+export function openSiteLogStream(deviceId, siteId) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const query = new URLSearchParams({ device_id: String(deviceId), site_id: String(siteId) });
+    return new WebSocket(`${protocol}//${window.location.host}/ws/logs?${query.toString()}`);
+}
+
 // === Sites ===
 
 export async function listSites() {
