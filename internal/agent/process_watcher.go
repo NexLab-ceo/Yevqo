@@ -3,7 +3,9 @@ package agent
 import (
 	"fmt"
 	"net"
-	"net/exec"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"strconv"
 	"time"
 )
