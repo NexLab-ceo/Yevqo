@@ -1,4 +1,4 @@
-# VELTRIX Build Engine — Android / Termux
+# Yevqo Build Engine — Android / Termux
 
 The Agent Build Engine is Android-only. It does not require root, Docker, Podman,
 Nixpacks, a remote build server, or a Linux server. Container markers may be
