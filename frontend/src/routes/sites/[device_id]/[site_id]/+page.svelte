@@ -23,6 +23,7 @@
     let logConnected = false;
     let logStreamEnabled = false;
     let logReconnectTimer = null;
+    let logStableTimer = null;
     let logReconnectAttempts = 0;
     let logStatus = 'disconnected';
     const logReconnectDelays = [1000, 2000, 5000, 10000, 20000, 30000];
@@ -43,6 +44,7 @@
     onDestroy(() => {
         logStreamEnabled = false;
         clearLogReconnectTimer();
+        clearLogStableTimer();
         if (logSocket) {
             const socket = logSocket;
             logSocket = null;
@@ -153,6 +155,13 @@
         }
     }
 
+    function clearLogStableTimer() {
+        if (logStableTimer) {
+            clearTimeout(logStableTimer);
+            logStableTimer = null;
+        }
+    }
+
     function scheduleLogReconnect() {
         if (!logStreamEnabled || !online || logReconnectTimer) return;
         logStatus = 'reconnecting';
@@ -181,7 +190,13 @@
             if (logSocket !== socket) return;
             logConnected = true;
             logStatus = 'live';
-            logReconnectAttempts = 0;
+            // Reset backoff only after a stable connection, not immediately:
+            // flapping sockets should continue backing off.
+            clearLogStableTimer();
+            logStableTimer = setTimeout(() => {
+                logStableTimer = null;
+                if (logSocket === socket && logConnected) logReconnectAttempts = 0;
+            }, 30000);
         };
         socket.onmessage = (event) => {
             try {
@@ -196,6 +211,7 @@
             if (logSocket !== socket) return;
             logSocket = null;
             logConnected = false;
+            clearLogStableTimer();
             if (logStreamEnabled) scheduleLogReconnect();
             else logStatus = 'disconnected';
         };
@@ -211,6 +227,7 @@
         if (logStreamEnabled) {
             logStreamEnabled = false;
             clearLogReconnectTimer();
+            clearLogStableTimer();
             logReconnectAttempts = 0;
             if (logSocket) {
                 const socket = logSocket;
