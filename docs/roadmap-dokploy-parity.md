@@ -3,18 +3,18 @@
 This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It does not promise Docker support on Termux.
 
 ## P0 — Reliable app lifecycle
-- [ ] Persistent process registry (site ID, PID, process group, runtime, port, working directory, start time, restart policy).
-- [ ] Safe PID identity checks after Agent restart; avoid killing unrelated PID reuse.
-- [ ] Process-group termination (SIGTERM, grace period, SIGKILL fallback).
-- [ ] Startup readiness probe (TCP/HTTP) with timeout and useful failure reason.
-- [ ] Process exit watcher and accurate running/stopped/crashed status.
+- [x] Persistent process registry (site ID, PID, process group, runtime, port, working directory and start time). Restart policy persistence remains pending.
+- [x] Safe PID identity checks after Agent restart; avoid killing unrelated PID reuse.
+- [x] Process-group termination (SIGTERM, grace period, SIGKILL fallback).
+- [x] Startup TCP readiness probe with timeout and useful failure reason; HTTP probe remains pending.
+- [ ] Process exit watcher with user-visible crashed state and exit reason (background reconciliation and child reaping are implemented).
 - [ ] Optional restart policy (never / on-failure / always) with bounded backoff.
 - [ ] Per-app stdout/stderr logs, rotation, timestamps, live streaming and log filters.
 - [ ] Deployment job state machine: queued, preparing, cloning, installing, building, starting, healthy, failed, cancelled.
 - [ ] One job per app by default; cancellation and progress events.
 - [ ] Node.js runtime (npm/pnpm/yarn/bun detection), PHP, Go, static and custom start commands.
 - [ ] Deploy = fetch/clone -> install -> build -> start -> health-check -> record release.
-- [ ] Tests for process crash, agent restart, occupied port, stop timeout, failed build, health-check timeout.
+- [ ] Tests for process crash, agent restart, occupied port, stop timeout, failed build, health-check timeout (registry persistence and child reaping have dedicated tests).
 
 ## P1 — Deployment UX and recovery
 - [ ] Environment editor with encrypted storage and scoped injection.
