@@ -601,13 +601,18 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			result, err := conn.SendCommand(ctx, agentAction, payload)
 			if err != nil { apiError(w, shared.ErrInternal("site command failed: " + err.Error())); return }
 			if !result.Ok {
-				// A failed build/checkout leaves the active release untouched. A
-				// failed candidate health check also attempts rollback. Preserve the
-				// recorded site state unless rollback itself failed.
+				// Failed deployments are first-class history entries. Keep the
+				// active site status unless the deployment rollback also failed.
 				rollbackFailed := strings.Contains(result.Message, "rollback also failed")
 				deployAttempt := in.Action == "deploy" || in.Action == "rebuild"
 				if in.Action != "stop" && (!deployAttempt || rollbackFailed) {
 					_ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteError, 0)
+				}
+				if deployAttempt || in.Action == "rollback" {
+					message := strings.TrimSpace(result.Message)
+					if len(message) > 900 { message = message[:900] }
+					_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(user.ID), DeviceID: shared.PtrInt64(deviceID), Action: "site_" + in.Action, Details: map[string]interface{}{"site_id": siteID, "ok": false, "error": message}, IP: clientIP(r)})
+					_, _ = s.db.conn.ExecContext(r.Context(), "INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)", user.ID, "error", "Deployment failed: "+siteID, message)
 				}
 				writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "message": result.Message})
 				return
@@ -622,7 +627,15 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 					_, _ = s.db.conn.ExecContext(r.Context(), "UPDATE sites SET deployed_commit=?,deployed_at=NOW() WHERE device_id=? AND site_id=?", started.CommitHash, deviceID, siteID)
 				}
 			}
-			_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(user.ID), DeviceID: shared.PtrInt64(deviceID), Action: "site_" + in.Action, Details: map[string]interface{}{"site_id": siteID, "ok": true}, IP: clientIP(r)})
+			logDetails := map[string]interface{}{"site_id": siteID, "ok": true, "action": in.Action}
+			if in.Action == "deploy" || in.Action == "rebuild" || in.Action == "rollback" {
+				var started shared.StartSiteResult
+				_ = shared.Unmarshal(result.Payload, &started)
+				if started.CommitHash == "" && in.Action == "rollback" { started.CommitHash = in.ReleaseCommit }
+				if started.CommitHash != "" { logDetails["commit_hash"] = started.CommitHash }
+				if started.CommitDate != "" { logDetails["commit_date"] = started.CommitDate }
+			}
+			_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(user.ID), DeviceID: shared.PtrInt64(deviceID), Action: "site_" + in.Action, Details: logDetails, IP: clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": result.Message})
 			return
 		}
