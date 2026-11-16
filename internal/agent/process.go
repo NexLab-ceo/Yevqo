@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -30,6 +31,7 @@ type Process struct {
 
 // ProcessManager — менеджер запущенных процессов.
 type ProcessManager struct {
+	mu sync.RWMutex
 	DataRoot string
 	BuildRunner *AndroidBuildRunner
 	registry *ProcessRegistry
@@ -165,7 +167,10 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		return 0, fmt.Errorf("site path must be inside sites/<site_id>")
 	}
 	// Проверяем, что процесс ещё не запущен.
-	if p, ok := m.procs[siteID]; ok && isAlive(p.PID) {
+	m.mu.RLock()
+	p, alreadyManaged := m.procs[siteID]
+	m.mu.RUnlock()
+	if alreadyManaged && isAlive(p.PID) {
 		return p.PID, fmt.Errorf("site %s is already running (pid %d)", siteID, p.PID)
 	}
 
@@ -268,8 +273,17 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 	// Wait for TCP readiness rather than assuming a fixed startup delay.
 	pid := cmd.Process.Pid
 	if err := waitForTCP(port, 5*time.Second); err != nil || !isAlive(pid) {
-		logFile.Close()
-		return 0, fmt.Errorf("process failed readiness check (check %s): %v", logPath, err)
+		// A process that never becomes ready must not remain unmanaged.
+		if isAlive(pid) {
+			if stopErr := killProcessGroup(pid, pid); stopErr != nil {
+				fmt.Fprintf(logFile, "failed to stop process after readiness failure: %v\\n", stopErr)
+			}
+		}
+		_ = logFile.Close()
+		if err != nil {
+			return 0, fmt.Errorf("process failed readiness check (check %s): %w", logPath, err)
+		}
+		return 0, fmt.Errorf("process exited before becoming ready (check %s)", logPath)
 	}
 
 	// Persist verified process identity before exposing it as managed.
@@ -290,6 +304,7 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		logFile.Close()
 		return 0, fmt.Errorf("persist process record: %w", err)
 	}
+	m.mu.Lock()
 	m.procs[siteID] = &Process{
 		SiteID:  siteID,
 		PID:     pid,
@@ -298,6 +313,7 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		LogPath: logPath,
 		Cmd:     cmd,
 	}
+	m.mu.Unlock()
 
 	return pid, nil
 }
@@ -314,7 +330,9 @@ func (m *ProcessManager) StopSite(siteID string) error {
 	if !exists { return fmt.Errorf("site %s is not running", siteID) }
 	if !verifyProcessRecord(record) { _ = m.registry.Delete(siteID); delete(m.procs,siteID); return fmt.Errorf("site %s process identity is stale; refusing to signal PID",siteID) }
 	if err := killProcessGroup(record.PID, record.ProcessGroup); err != nil { return err }
+	m.mu.Lock()
 	delete(m.procs, siteID)
+	m.mu.Unlock()
 	return m.registry.Delete(siteID)
 }
 
@@ -423,6 +441,8 @@ func findPIDBySite(dataRoot, siteID string) int {
 
 // ListRunning возвращает список запущенных сайтов.
 func (m *ProcessManager) ListRunning() []*Process {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	out := make([]*Process, 0, len(m.procs))
 	for _, p := range m.procs { if isAlive(p.PID) { out=append(out,p) } }
 	return out
@@ -430,14 +450,19 @@ func (m *ProcessManager) ListRunning() []*Process {
 
 // Get возвращает процесс по siteID.
 func (m *ProcessManager) Get(siteID string) (*Process, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	p, ok := m.procs[siteID]
 	return p, ok
 }
 
 // StopAll останавливает все процессы (при выключении агента).
 func (m *ProcessManager) StopAll() {
-	for siteID := range m.procs {
-		_ = m.StopSite(siteID)
+	if m.registry == nil {
+		return
+	}
+	for _, record := range m.registry.List() {
+		_ = m.StopSite(record.SiteID)
 	}
 }
 // procAttr возвращает SysProcAttr для отвязки процесса.
