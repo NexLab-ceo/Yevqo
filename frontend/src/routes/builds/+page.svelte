@@ -43,7 +43,7 @@
    notify(result.success?'Сборка завершена':(result.error||r.data.message||'Ошибка сборки'),result.success?'success':'error');
  }
 </script>
-<svelte:head><title>Build Engine · VELTRIX Dock</title></svelte:head>
+<svelte:head><title>Build Engine · Yevqo</title></svelte:head>
 <div class="page-header"><div><div class="eyebrow">DELIVERY PLATFORM</div><h1 class="page-title">Build Engine</h1><p class="page-desc">Анализируйте проект, проверяйте окружение и запускайте сборку на подключённом Agent.</p></div><Button on:click={load}>↻ Обновить</Button></div>
 <section class="builder-shell">
  <div class="builder-toolbar"><div><span class="section-kicker">BUILD TARGET</span><strong>Выберите приложение</strong></div><div class="target-controls">
@@ -72,7 +72,7 @@
   <div><small>Default port</small><strong>{plan.port||'—'}</strong></div>
  </div>
  {#if plan.evidence?.length}<p class="muted">Обнаружено: {plan.evidence.join(', ')}</p>{/if}
- {#if plan.needs_configuration}<div class="warning">Автоматически определить сборку не удалось. Требуется конфигурация проекта или поддерживаемый provider.</div>{/if}
+ {#if plan.needs_configuration}<div class="warning">Не удалось определить поддерживаемый локальный стек. Dockerfile, Nixpacks и произвольные shell-команды на Android отключены.</div>{/if}
  <div class="commands">
   {#if plan.install_command}<div><small>INSTALL</small><code>{plan.install_command}</code></div>{/if}
   {#if plan.build_command}<div><small>BUILD</small><code>{plan.build_command}</code></div>{/if}
