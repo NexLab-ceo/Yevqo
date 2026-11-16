@@ -5,7 +5,7 @@
  $: onlineCount=$devices.filter(x=>x.status==='online').length;$: runningSites=allSites.filter(x=>x.site?.status==='running').length;$: offlineCount=$devices.length-onlineCount;
  function openDevice(device){goto('/devices/'+device.id)}
 </script>
-<svelte:head><title>Overview · VELTRIX Dock</title></svelte:head>
+<svelte:head><title>Overview · Yevqo</title></svelte:head>
 <div class="welcome-row"><div><div class="eyebrow"><span class="eyebrow-line"></span> WORKSPACE OVERVIEW</div><h1 class="page-title">Добро пожаловать, {$user?.username||'пользователь'}</h1><p class="page-desc">Ваша инфраструктура — под контролем. Всё важное в одном месте.</p></div><Button variant="primary" on:click={()=>showAddModal=true}>＋ Добавить устройство</Button></div>
 {#if loading}<div class="empty">Загружаем инфраструктуру…</div>{:else}
 <div class="overview-grid">
@@ -19,7 +19,7 @@
  <div class="metric-card"><div class="metric-top"><span>Базы данных</span><span class="metric-icon violet">◈</span></div><div class="metric-value">—</div><div class="metric-foot">Откройте Database servers</div></div>
 </div>
 <div class="section-header"><div><h2 class="section-title">Ваши устройства</h2><p class="section-subtitle">Подключённые хосты и их текущее состояние</p></div><a href="/devices" class="view-link">Все устройства <span>→</span></a></div>
-{#if $devices.length===0}<div class="empty"><div class="empty-symbol">▣</div><h3>Пока нет подключённых устройств</h3><p class="empty-hint">Установите VELTRIX Agent в Termux, чтобы добавить первый Android-хост.</p><div class="empty-action"><Button variant="primary" on:click={()=>showAddModal=true}>Подключить устройство</Button></div></div>
+{#if $devices.length===0}<div class="empty"><div class="empty-symbol">▣</div><h3>Пока нет подключённых устройств</h3><p class="empty-hint">Установите Yevqo Agent в Termux, чтобы добавить первый Android-хост.</p><div class="empty-action"><Button variant="primary" on:click={()=>showAddModal=true}>Подключить устройство</Button></div></div>
 {:else}<div class="device-grid">{#each $devices as device (device.id)}<button class="device-card" on:click={()=>openDevice(device)}><div class="device-top"><span class="device-symbol">▣</span><StatusDot status={device.status}/></div><div class="device-title">{device.hostname||device.device_id?.slice(0,8)||'Android device'}</div><div class="device-id">{device.device_id?.slice(0,18)||'—'}</div><div class="device-divider"></div><div class="device-stats"><span>IP <b>{device.tailscale_ip||'—'}</b></span><span>Сайты <b>{device.site_count||0}</b></span></div></button>{/each}</div>{/if}
 <div class="section-header"><div><h2 class="section-title">Последние сайты</h2><p class="section-subtitle">Приложения на подключённых устройствах</p></div><a href="/sites" class="view-link">Все сайты <span>→</span></a></div>
 {#if allSites.length===0}<div class="empty compact-empty">Здесь появятся сайты, размещённые на ваших устройствах.</div>{:else}<div class="sites-table-wrap"><table class="sites-table"><thead><tr><th>САЙТ</th><th>УСТРОЙСТВО</th><th>RUNTIME</th><th>ПОРТ</th><th>СТАТУС</th></tr></thead><tbody>{#each allSites.slice(0,6) as item (item.device_id+'-'+item.site.site_id)}<tr on:click={()=>openDevice({id:item.device_id})}><td><strong>{item.site.site_id}</strong></td><td>{item.device_name||'Android host'}</td><td>{item.site.runtime}</td><td class="mono">:{item.site.port}</td><td><StatusDot status={item.site.status}/></td></tr>{/each}</tbody></table></div>{/if}
