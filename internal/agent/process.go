@@ -138,7 +138,7 @@ func (m *ProcessManager) AnalyzeSiteBuild(siteID, rootDir string) (BuildPlan, er
 func (m *ProcessManager) CreateSite(siteID string, port int, runtime string) error {
 	if !validSiteID(siteID) { return fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return fmt.Errorf("port must be between 1024 and 65535") }
-	if runtime != "php" && runtime != "go" && runtime != "static" { return fmt.Errorf("unsupported runtime: %s", runtime) }
+	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" { return fmt.Errorf("unsupported runtime: %s", runtime) }
 	target, err := safeSiteDirectory(m.DataRoot, siteID)
 	if err != nil { return err }
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil { return fmt.Errorf("create sites directory: %w", err) }
@@ -156,6 +156,21 @@ func (m *ProcessManager) CreateSite(siteID string, port int, runtime string) err
 	return nil
 }
 
+// nodeStartCommand selects a local Node package manager without invoking a shell.
+func nodeStartCommand(root string) (*exec.Cmd, error) {
+	for _, candidate := range []struct{ lock, bin string }{
+		{"bun.lock", "bun"}, {"bun.lockb", "bun"},
+		{"pnpm-lock.yaml", "pnpm"}, {"yarn.lock", "yarn"},
+	} {
+		if _, err := os.Stat(filepath.Join(root, candidate.lock)); err == nil {
+			if _, err := exec.LookPath(candidate.bin); err != nil { return nil, fmt.Errorf("%s is required by this Node.js project but is not installed", candidate.bin) }
+			return exec.Command(candidate.bin, "run", "start"), nil
+		}
+	}
+	if _, err := exec.LookPath("npm"); err != nil { return nil, fmt.Errorf("npm is required to start this Node.js project but is not installed") }
+	return exec.Command("npm", "run", "start"), nil
+}
+
 func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string) (int, error) {
 	return m.StartSiteWithEnv(siteID, path, port, runtime, nil)
 }
@@ -166,7 +181,7 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 	defer m.startMu.Unlock()
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return 0, fmt.Errorf("port must be between 1024 and 65535") }
-	if runtime != "php" && runtime != "go" && runtime != "static" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
+	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
 	cleanPath := filepath.Clean(path)
 	expectedPath := filepath.Join("sites", siteID)
 	if filepath.IsAbs(path) || (cleanPath != expectedPath && !strings.HasPrefix(cleanPath, expectedPath+string(filepath.Separator))) {
@@ -257,7 +272,7 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		}
 		env = append(env, key+"="+value)
 	}
-	if runtime == "go" { env = append(env, fmt.Sprintf("PORT=%d", port)) }
+	if runtime == "go" || runtime == "nodejs" { env = append(env, fmt.Sprintf("PORT=%d", port)) }\n\tif runtime == "nodejs" { env = append(env, "HOST=127.0.0.1") }
 	cmd.Env = env
 
 	// Перенаправляем вывод в лог.
@@ -587,7 +602,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 	if branch == "" { branch = "main" }
 	if !validDeployBranch(branch) { return 0, "", "", "", fmt.Errorf("invalid Git branch") }
 	if req.Runtime != "php" && req.Runtime != "go" && req.Runtime != "static" {
-		return 0, "", "", "", fmt.Errorf("runtime %q cannot be launched by this Agent yet; supported runtimes are php, go and static", req.Runtime)
+		return 0, "", "", "", fmt.Errorf("runtime %q cannot be launched by this Agent yet; supported runtimes are php, go, static and nodejs", req.Runtime)
 	}
 
 	siteRoot, err := safeSiteDirectory(m.DataRoot, req.SiteId)
@@ -644,7 +659,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 
 	plan, err := AnalyzeProject(buildDir)
 	if err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, err }
-	expectedStack := map[string]string{"php":"php", "go":"go", "static":"static"}[req.Runtime]
+	expectedStack := map[string]string{"php":"php", "go":"go", "static":"static", "nodejs":"nodejs"}[req.Runtime]
 	if plan.Stack != expectedStack && !(req.Runtime == "php" && plan.Stack == "unknown") {
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("detected stack %q does not match configured runtime %q", plan.Stack, req.Runtime)
 	}
