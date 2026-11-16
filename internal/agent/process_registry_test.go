@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"reflect"
 	"testing"
 	"time"
 )
@@ -20,7 +21,7 @@ func TestProcessRegistryPersistsRecords(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	got, ok := reloaded.Get("demo")
 	if !ok { t.Fatal("record missing after reload") }
-	if got != want { t.Fatalf("record mismatch: got %#v, want %#v", got, want) }
+	if !reflect.DeepEqual(got, want) { t.Fatalf("record mismatch: got %#v, want %#v", got, want) }
 
 	if err := reloaded.Delete("demo"); err != nil { t.Fatal(err) }
 	reloaded, err = NewProcessRegistry(root)
