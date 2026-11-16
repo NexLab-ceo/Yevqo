@@ -42,24 +42,28 @@ Unsupported stacks return explicit errors rather than falling back to host shell
 
 ## Git deployment releases
 
-The Agent deploy path checks out each commit into an immutable
+The Agent checks out each commit into an immutable
 `sites/<site>/.yevqo/releases/<commit>` directory. It does not run
-`git pull` inside the currently active working tree or delete the site's
-starter files. The selected project root is resolved inside the staged release,
-then the detected supported build provider runs with a timeout and bounded log.
+`git pull` inside the active working tree or delete starter files. The selected
+project root is resolved inside the staged release, then the detected build
+provider runs with a timeout and bounded log.
 
-The current activation path supports the existing `php`, `go` and `static`
-site runtimes. It starts the candidate and waits for its local TCP port to become
-ready before reporting success. If the candidate cannot start, the Agent attempts
-to restart the previous recorded release. Old release directories are retained
-so rollback data is not removed automatically.
+The activation path supports `php`, `go`, `static` and `nodejs` runtimes.
+Node.js uses npm, pnpm, Yarn or Bun based on the lockfile, runs the project's
+`start` script without invoking a shell, and receives `HOST=127.0.0.1` and
+the configured `PORT`. All project scripts execute with Agent-user privileges
+and require explicit project-code consent.
+
+The Agent exposes release history from immutable release directories, obtains
+commit timestamps from Git metadata, and marks the currently active release
+using its durable process registry. Rollback activates a selected existing
+release without rebuilding it. The Agent validates the commit and release path,
+runs the same readiness check as deployment, and attempts to restore the prior
+process if activation fails. Release history remains on the device and requires
+no database schema migration.
 
 Git deployment accepts HTTPS remotes without embedded credentials and SSH
 remotes (including the standard `git@` user). A saved access token is passed to
-Git through a temporary process environment configuration, not embedded in the
+Git through temporary process environment configuration, not embedded in the
 remote URL. Branch names are validated before invoking Git. Build output is
 bounded; custom shell build commands remain disabled.
-
-Node.js and other detected stacks may be analyzed or built by the local build
-runner, but they are not yet deployable as long-running site runtimes until a
-corresponding supervised start provider is implemented.
