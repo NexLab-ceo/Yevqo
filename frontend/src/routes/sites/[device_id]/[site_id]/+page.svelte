@@ -145,7 +145,6 @@
         if (online) {
             agentLogOnline = true;
             logStreamEnabled = true;
-            agentLogOnline = online;
             logReconnectAttempts = 0;
             connectLiveLogs();
         }
@@ -232,7 +231,7 @@
             logConnected = false;
             clearLogStableTimer();
             if (logStreamEnabled && agentLogOnline) scheduleLogReconnect();
-            else logStatus = 'disconnected';
+            else logStatus = agentLogOnline ? 'disconnected' : 'agent-offline';
         };
         socket.onerror = () => {
             if (logSocket !== socket) return;
