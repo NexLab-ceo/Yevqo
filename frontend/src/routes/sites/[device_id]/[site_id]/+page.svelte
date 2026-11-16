@@ -139,7 +139,11 @@
             }).join('\n') || 'Устройство офлайн. В базе нет сохранённых записей для этого сайта.';
         }
         terminalLoading = false;
-        if (online) {\n            logStreamEnabled = true;\n            logReconnectAttempts = 0;\n            connectLiveLogs();\n        }
+        if (online) {
+            logStreamEnabled = true;
+            logReconnectAttempts = 0;
+            connectLiveLogs();
+        }
     }
 
     function clearLogReconnectTimer() {
@@ -239,7 +243,8 @@
         } catch {
             notify('Получен некорректный ответ анализа', 'error');
         }
-    }    async function runAndroidBuild() {
+    }
+    async function runAndroidBuild() {
         if (!online || !buildPlan || buildRunning) return;
         if (!allowProjectCode) {
             notify('Подтвердите запуск кода проекта перед сборкой', 'warning');
@@ -418,7 +423,8 @@
                         <div class="env-row"><code>DB_PASSWORD</code><code>••••••••••</code></div>
                     </div>
                 {/each}
-            {:else}<p class="muted">Управляемые базы данных не подключены.</p>{/if}        </Card>
+            {:else}<p class="muted">Управляемые базы данных не подключены.</p>{/if}
+        </Card>
     {:else if activeTab === 'build'}
         <Card>
             <div class="logs-head">
@@ -597,7 +603,8 @@
     .offline-note { color:#EF4444; font-size:12px; margin:16px 0 0; }
     .details-title { margin-bottom:16px; }
     .details { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:16px; }
-    .details div { display:flex; flex-direction:column; gap:5px; }    .details span { color:#A1A1AA; font-size:11px; }
+    .details div { display:flex; flex-direction:column; gap:5px; }
+    .details span { color:#A1A1AA; font-size:11px; }
     .details strong { color:#FAFAFA; font-size:13px; font-weight:500; overflow-wrap:anywhere; }
     .terminal { background:#09090B; border:1px solid #27272A; border-radius:8px; color:#A1A1AA; padding:14px; max-height:55vh; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font:11px/1.6 ui-monospace,monospace; }
     .terminal-loading { color:#A1A1AA; font-size:13px; }
