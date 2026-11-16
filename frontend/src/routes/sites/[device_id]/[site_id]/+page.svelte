@@ -188,8 +188,8 @@
                 const message = JSON.parse(event.data);
                 if (message.type !== 'log' || message.site_id !== siteId) return;
                 const stamp = message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-                const lines = (terminalText ? terminalText.split('\\n') : []).concat('[' + stamp + '] ' + String(message.line ?? ''));
-                terminalText = lines.slice(-500).join('\\n');
+                const lines = (terminalText ? terminalText.split('\n') : []).concat('[' + stamp + '] ' + String(message.line ?? ''));
+                terminalText = lines.slice(-500).join('\n');
             } catch { /* Ignore malformed stream frames. */ }
         };
         socket.onclose = () => {
@@ -226,7 +226,7 @@
         }
     }
 
-        async function analyzeBuild() {
+    async function analyzeBuild() {
         if (!online || analyzingBuild) return;
         analyzingBuild = true;
         buildPlan = null;
