@@ -268,7 +268,8 @@
                 if (seq) lastLogSeq = seq;
                 const stamp = message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
                 const lines = (terminalText ? terminalText.split('\n') : []).concat('[' + stamp + '] ' + String(message.line ?? ''));
-                terminalText = lines.slice(-500).join('\n');\n                if (autoScroll) tick().then(() => { if (terminalElement) terminalElement.scrollTop = terminalElement.scrollHeight; });
+                terminalText = lines.slice(-500).join('\n');
+                if (autoScroll) tick().then(() => { if (terminalElement) terminalElement.scrollTop = terminalElement.scrollHeight; });
             } catch { /* Ignore malformed stream frames. */ }
         };
         socket.onclose = () => {
