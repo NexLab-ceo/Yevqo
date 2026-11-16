@@ -268,12 +268,6 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		return 0, fmt.Errorf("start %s: %w", runtime, err)
 	}
 
-	// Отвязываем от родителя (чтобы не ждать завершения).
-	if err := cmd.Process.Release(); err != nil {
-		// Не критично, но логируем.
-		fmt.Fprintf(logFile, "warning: process release: %v\n", err)
-	}
-
 	// Wait for TCP readiness rather than assuming a fixed startup delay.
 	pid := cmd.Process.Pid
 	if err := waitForTCP(port, 5*time.Second); err != nil || !isAlive(pid) {
@@ -283,6 +277,7 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 				fmt.Fprintf(logFile, "failed to stop process after readiness failure: %v\\n", stopErr)
 			}
 		}
+		go cmd.Wait() // Reap the child even when startup fails.
 		_ = logFile.Close()
 		if err != nil {
 			return 0, fmt.Errorf("process failed readiness check (check %s): %w", logPath, err)
@@ -294,17 +289,20 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 	startToken, identityErr := processStartToken(pid)
 	if identityErr != nil {
 		_ = killProcessGroup(pid, pid)
+		go cmd.Wait()
 		logFile.Close()
 		return 0, fmt.Errorf("capture process identity: %w", identityErr)
 	}
 	if m.registryErr != nil {
 		_ = killProcessGroup(pid, pid)
+		go cmd.Wait()
 		logFile.Close()
 		return 0, fmt.Errorf("process registry unavailable: %w", m.registryErr)
 	}
 	record := ProcessRecord{SiteID:siteID, PID:pid, ProcessGroup:pid, Port:port, Runtime:runtime, WorkingDir:absPath, LogPath:logPath, StartedAt:time.Now().UTC(), StartToken:startToken, RunPath:cleanPath}
 	if err := m.registry.Save(record); err != nil {
 		_ = killProcessGroup(pid, pid)
+		go cmd.Wait()
 		logFile.Close()
 		return 0, fmt.Errorf("persist process record: %w", err)
 	}
@@ -319,6 +317,8 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 	}
 	m.mu.Unlock()
 
+	// Keep a waiter attached while the Agent is alive so exited children are reaped.
+	go m.waitForProcessExit(siteID, pid, startToken, cmd)
 	return pid, nil
 }
 
