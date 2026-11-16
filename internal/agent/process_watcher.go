@@ -14,7 +14,9 @@ func (m *ProcessManager) watchProcesses() {
   if m.registry==nil { return }
   for _,record:=range m.registry.List() {
    if verifyProcessRecord(record) { continue }
+   m.mu.Lock()
    delete(m.procs,record.SiteID)
+   m.mu.Unlock()
    _=m.registry.Delete(record.SiteID)
   }
  }
