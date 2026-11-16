@@ -31,6 +31,7 @@ type Process struct {
 
 // ProcessManager — менеджер запущенных процессов.
 type ProcessManager struct {
+	startMu sync.Mutex
 	mu sync.RWMutex
 	DataRoot string
 	BuildRunner *AndroidBuildRunner
@@ -158,6 +159,9 @@ func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string
 }
 
 func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime string, extraEnv map[string]string) (int, error) {
+	// Serialize starts so two requests cannot launch the same site concurrently.
+	m.startMu.Lock()
+	defer m.startMu.Unlock()
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return 0, fmt.Errorf("port must be between 1024 and 65535") }
 	if runtime != "php" && runtime != "go" && runtime != "static" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
@@ -328,7 +332,7 @@ func (m *ProcessManager) StopSite(siteID string) error {
 	if m.registryErr != nil || m.registry == nil { return fmt.Errorf("process registry unavailable: %v", m.registryErr) }
 	record, exists := m.registry.Get(siteID)
 	if !exists { return fmt.Errorf("site %s is not running", siteID) }
-	if !verifyProcessRecord(record) { _ = m.registry.Delete(siteID); delete(m.procs,siteID); return fmt.Errorf("site %s process identity is stale; refusing to signal PID",siteID) }
+	if !verifyProcessRecord(record) { _ = m.registry.Delete(siteID); m.mu.Lock(); delete(m.procs,siteID); m.mu.Unlock(); return fmt.Errorf("site %s process identity is stale; refusing to signal PID",siteID) }
 	if err := killProcessGroup(record.PID, record.ProcessGroup); err != nil { return err }
 	m.mu.Lock()
 	delete(m.procs, siteID)
