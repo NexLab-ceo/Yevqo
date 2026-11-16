@@ -22,6 +22,7 @@
     let activeTab = 'general';
     let releases = [];
     let releasesLoading = false;
+    let rollbackTarget = '';
     let git = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', has_token: false, commit: '', deployed_at: null };
     let gitForm = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', github_token: '' };
     let connections = [];
@@ -78,6 +79,7 @@
             res = await runSiteCommand(deviceId, siteId, action, action === 'deploy' || action === 'rebuild' ? allowDeployCode : false);
         }
         busyAction = '';
+        rollbackTarget = '';
         if (!res.ok || !res.data?.ok) {
             notify(res.error || res.data?.message || 'Команда завершилась ошибкой', 'error');
             await refresh();
@@ -190,6 +192,7 @@
         if (!online || busyAction || !commit) return;
         if (!window.confirm('Откатить сайт на релиз ' + commit.slice(0, 12) + '? Текущая версия останется в истории релизов.')) return;
         busyAction = 'rollback';
+        rollbackTarget = commit;
         const res = await runSiteCommand(deviceId, siteId, 'rollback', false, commit);
         busyAction = '';
         if (!res.ok || !res.data?.ok) {
@@ -408,7 +411,7 @@
                                 </div>
                                 <p class="muted">{release.date ? new Date(release.date).toLocaleString() : 'Дата коммита недоступна'}</p>
                             </div>
-                            <Button size="sm" variant="secondary" disabled={release.active || !!busyAction} loading={busyAction === 'rollback'} on:click={() => rollbackRelease(release.commit)}>{release.active ? 'Текущий' : 'Откатить'}</Button>
+                            <Button size="sm" disabled={release.active || !!busyAction} loading={busyAction === 'rollback' && rollbackTarget === release.commit} on:click={() => rollbackRelease(release.commit)}>{release.active ? 'Текущий' : 'Откатить'}</Button>
                         </article>
                     {/each}
                 </div>
