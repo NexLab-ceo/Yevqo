@@ -22,6 +22,7 @@
     let logSocket = null;
     let logConnected = false;
     let lastLogSeq = 0;
+    let logStreamID = '';
     let agentLogOnline = false;
     let logStreamEnabled = false;
     let logReconnectTimer = null;
@@ -221,6 +222,10 @@
                     return;
                 }
                 if (message.type !== 'log' || message.site_id !== siteId) return;
+                if (message.stream_id && message.stream_id !== logStreamID) {
+                    logStreamID = message.stream_id;
+                    lastLogSeq = 0;
+                }
                 const seq = Number(message.seq || 0);
                 if (seq && seq <= lastLogSeq) return;
                 if (seq) lastLogSeq = seq;
