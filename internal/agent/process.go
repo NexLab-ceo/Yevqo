@@ -581,6 +581,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 	defer m.deployMu.Unlock()
 
 	if !validSiteID(req.SiteId) { return 0, "", "", "", fmt.Errorf("invalid site id") }
+	if !req.AllowProjectCode { return 0, "", "", "", fmt.Errorf("deployment blocked: explicit allow_project_code=true consent is required") }
 	if !validDeployRepository(req.GitURL) { return 0, "", "", "", fmt.Errorf("Git repository must be an HTTPS or SSH URL without embedded credentials") }
 	branch := req.GitBranch
 	if branch == "" { branch = "main" }
