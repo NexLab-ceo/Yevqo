@@ -305,7 +305,7 @@
                     <div><span>Confidence</span><strong>{buildPlan.confidence || 'low'}</strong></div>
                     <div><span>Project root</span><strong>{buildPlan.root || '.'}</strong></div>
                 </div>
-                {#if buildPlan.needs_configuration}<p class="build-warning">Не удалось определить способ сборки автоматически. Выберите Dockerfile, Nixpacks, Static Hosting или задайте пользовательские команды.</p>{/if}
+                {#if buildPlan.needs_configuration}<p class="build-warning">Не удалось определить поддерживаемый стек. На Android/Termux выполняются только поддерживаемые локальные сборщики; Dockerfile, Nixpacks и произвольные shell-команды пока отключены.</p>{/if}
                 {#if buildPlan.evidence?.length}<p class="muted">Найдено: {buildPlan.evidence.join(', ')}</p>{/if}
                 {#if buildPlan.install_command || buildPlan.build_command || buildPlan.start_command}
                     <div class="build-commands">
