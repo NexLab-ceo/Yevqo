@@ -79,7 +79,6 @@
             res = await runSiteCommand(deviceId, siteId, action, action === 'deploy' || action === 'rebuild' ? allowDeployCode : false);
         }
         busyAction = '';
-        rollbackTarget = '';
         if (!res.ok || !res.data?.ok) {
             notify(res.error || res.data?.message || 'Команда завершилась ошибкой', 'error');
             await refresh();
@@ -195,6 +194,7 @@
         rollbackTarget = commit;
         const res = await runSiteCommand(deviceId, siteId, 'rollback', false, commit);
         busyAction = '';
+        rollbackTarget = '';
         if (!res.ok || !res.data?.ok) {
             notify(res.error || res.data?.message || 'Не удалось выполнить откат', 'error');
             await refresh();
