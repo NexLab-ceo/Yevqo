@@ -1,5 +1,5 @@
 <script>
-    import { onMount, onDestroy } from 'svelte';
+    import { onMount, onDestroy, tick } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
     import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, listLogs, listSiteDatabaseConnections, openSiteLogStream } from '$lib/api.js';
@@ -20,6 +20,9 @@
     let terminalLoading = false;
     let terminalText = '';
     let logSearch = '';
+    let logLevel = 'all';
+    let autoScroll = true;
+    let terminalElement;
     let logSocket = null;
     let logConnected = false;
     let lastLogSeq = 0;
@@ -156,6 +159,14 @@
     $: visibleTerminalText = logSearch
         ? terminalText.split('\\n').filter(line => line.toLowerCase().includes(logSearch.toLowerCase())).join('\\n')
         : terminalText;
+    $: filteredTerminalText = visibleTerminalText.split('\\n').filter(line => {
+        if (logLevel === 'all') return true;
+        const upper = line.toUpperCase();
+        if (logLevel === 'error') return /\\b(ERROR|ERR|FATAL|PANIC)\\b/.test(upper);
+        if (logLevel === 'warn') return /\\b(WARN|WARNING)\\b/.test(upper);
+        if (logLevel === 'info') return /\\b(INFO|DEBUG|TRACE)\\b/.test(upper) || !/\\b(ERROR|ERR|FATAL|PANIC|WARN|WARNING)\\b/.test(upper);
+        return true;
+    }).join('\\n');
 
     function clearTerminal() { terminalText = ''; }
 
@@ -248,7 +259,7 @@
                 if (seq) lastLogSeq = seq;
                 const stamp = message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
                 const lines = (terminalText ? terminalText.split('\n') : []).concat('[' + stamp + '] ' + String(message.line ?? ''));
-                terminalText = lines.slice(-500).join('\n');
+                terminalText = lines.slice(-500).join('\n');\n                if (autoScroll) tick().then(() => { if (terminalElement) terminalElement.scrollTop = terminalElement.scrollHeight; });
             } catch { /* Ignore malformed stream frames. */ }
         };
         socket.onclose = () => {
@@ -468,7 +479,7 @@
     {:else if activeTab === 'logs'}
         <Card>
             <div class="logs-head"><div><h2 class="details-title">Terminal / Logs</h2><span class:live={logConnected} class="log-connection">{logStatus === 'live' ? '● Live' : logStatus === 'connecting' ? '◌ Connecting…' : logStatus === 'reconnecting' ? '↻ Reconnecting…' : logStatus === 'agent-offline' ? '● Agent offline' : '○ Disconnected'}</span></div><div class="log-actions"><Button size="sm" on:click={exportTerminal} disabled={!terminalText}>Export</Button><Button size="sm" on:click={clearTerminal}>Clear</Button><Button size="sm" on:click={toggleLiveLogs} disabled={!online}>{logStreamEnabled ? 'Остановить поток' : 'Live logs'}</Button><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div></div>
-            {#if terminalLoading}<p class="terminal-loading">Загрузка…</p>{:else}<input class="log-search" bind:value={logSearch} placeholder="Поиск по логам…" /><pre class="terminal">{visibleTerminalText || (logSearch ? 'Совпадений нет.' : 'Логи пока не загружены.')}</pre>{/if}
+            {#if terminalLoading}<p class="terminal-loading">Загрузка…</p>{:else}<div class="log-filters"><input class="log-search" bind:value={logSearch} placeholder="Поиск по логам…" /><select class="log-level" bind:value={logLevel}><option value="all">Все уровни</option><option value="error">ERROR</option><option value="warn">WARN</option><option value="info">INFO / DEBUG</option></select><label class="autoscroll"><input type="checkbox" bind:checked={autoScroll} /> Автопрокрутка</label></div><pre class="terminal" bind:this={terminalElement} on:scroll={() => autoScroll = terminalElement.scrollHeight - terminalElement.scrollTop - terminalElement.clientHeight < 30}>{filteredTerminalText || (logSearch || logLevel !== 'all' ? 'Совпадений нет.' : 'Логи пока не загружены.')}</pre>{/if}
         </Card>
     {:else if activeTab === 'environment'}
         <Card>
@@ -625,7 +636,7 @@
     .logs-head{display:flex;justify-content:space-between;align-items:center}
     .log-connection{display:block;margin-top:-10px;margin-bottom:12px;font-size:10px;color:#A1A1AA}
     .log-connection.live{color:#22C55E}
-    .log-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.log-search{width:100%;box-sizing:border-box;margin:10px 0;background:#09090B;border:1px solid #27272A;border-radius:7px;padding:9px 12px;color:#FAFAFA;font-size:12px}
+    .log-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.log-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}.log-search{flex:1;min-width:160px;box-sizing:border-box;background:#09090B;border:1px solid #27272A;border-radius:7px;padding:9px 12px;color:#FAFAFA;font-size:12px}.log-level{background:#09090B;border:1px solid #27272A;border-radius:7px;padding:9px;color:#FAFAFA;font-size:12px}.autoscroll{display:flex;gap:6px;align-items:center;color:#A1A1AA;font-size:11px;white-space:nowrap}.autoscroll input{accent-color:#A3E635}
     .terminal{background:#09090B;border:1px solid #27272A;border-radius:8px;color:#D4D4D8;padding:14px;max-height:60vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,monospace}
     .env-group{border:1px solid #27272A;border-radius:8px;padding:14px;margin-top:12px}
     .env-group strong{display:block;color:#FAFAFA;font-size:13px;margin-bottom:10px}
