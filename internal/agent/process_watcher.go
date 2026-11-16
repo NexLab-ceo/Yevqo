@@ -1,53 +1,109 @@
 package agent
 
 import (
- "time"
- "net"
- "os/exec"
- "strconv"
+	"fmt"
+	"net"
+	"net/exec"
+	"strconv"
+	"time"
 )
 
-// watchProcesses reconciles the in-memory view with the durable registry.
-// It detects unexpected exits and removes stale entries (no PID guessing).
+// watchProcesses reconciles the durable registry and removes stale identities.
 func (m *ProcessManager) watchProcesses() {
- ticker:=time.NewTicker(2*time.Second); defer ticker.Stop()
- for range ticker.C {
-  if m.registry==nil { return }
-  for _,record:=range m.registry.List() {
-   if verifyProcessRecord(record) { continue }
-   m.mu.Lock()
-   delete(m.procs,record.SiteID)
-   m.mu.Unlock()
-   _=m.registry.Delete(record.SiteID)
-  }
- }
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		if m.registry == nil { return }
+		for _, record := range m.registry.List() {
+			if verifyProcessRecord(record) { continue }
+			m.mu.Lock()
+			delete(m.procs, record.SiteID)
+			m.mu.Unlock()
+			// Never signal a PID whose identity no longer matches. A stale record
+			// is safe to remove, but automatic recovery is handled by the child waiter.
+			_ = m.registry.Delete(record.SiteID)
+		}
+	}
 }
 
-// IsSiteHealthy reports whether a managed process identity is valid and its
-// configured TCP port accepts connections on localhost.
+// IsSiteHealthy reports process identity and local TCP readiness.
 func (m *ProcessManager) IsSiteHealthy(siteID string) bool {
- if !validSiteID(siteID)||m.registry==nil{return false}
- r,ok:=m.registry.Get(siteID);if !ok||!verifyProcessRecord(r){return false}
- conn,err:=net.DialTimeout("tcp",net.JoinHostPort("127.0.0.1",strconv.Itoa(r.Port)),500*time.Millisecond)
- if err!=nil{return false};_ = conn.Close();return true
+	if !validSiteID(siteID) || m.registry == nil { return false }
+	r, ok := m.registry.Get(siteID)
+	if !ok || !verifyProcessRecord(r) { return false }
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(r.Port)), 500*time.Millisecond)
+	if err != nil { return false }
+	_ = conn.Close()
+	return true
 }
 
-
-// waitForProcessExit reaps a managed child and removes only its own registry
-// record. The PID and start token guard against deleting a replacement process.
+// waitForProcessExit reaps a child and starts bounded recovery only for an
+// unexpected exit. Record identity prevents an old waiter touching a new run.
 func (m *ProcessManager) waitForProcessExit(siteID string, pid int, startToken string, cmd *exec.Cmd) {
 	_ = cmd.Wait()
-
 	m.mu.Lock()
-	if current, ok := m.procs[siteID]; ok && current.PID == pid {
-		delete(m.procs, siteID)
-	}
+	if current, ok := m.procs[siteID]; ok && current.PID == pid { delete(m.procs, siteID) }
 	m.mu.Unlock()
+	if m.registry == nil { return }
+	record, ok := m.registry.Get(siteID)
+	if !ok || record.PID != pid || record.StartToken != startToken { return }
 
-	if m.registry == nil {
+	m.restartMu.Lock()
+	intentional := m.intentionalStops[siteID]
+	m.restartMu.Unlock()
+	_ = m.registry.Delete(siteID)
+	if intentional { return }
+	go m.recoverSite(record)
+}
+
+// recoverSite retries the last known immutable/run path with exponential
+// backoff. Attempts are bounded per site and reset by an explicit StopSite.
+func (m *ProcessManager) recoverSite(record ProcessRecord) {
+	for {
+		m.restartMu.Lock()
+		attempt := m.restartAttempts[record.SiteID] + 1
+		if attempt > maxAutomaticRestarts {
+			m.restartMu.Unlock()
+			m.emitProcessLog(record.SiteID, "automatic restart limit reached; manual intervention required")
+			return
+		}
+		m.restartAttempts[record.SiteID] = attempt
+		m.restartMu.Unlock()
+
+		delay := restartDelay(attempt)
+		m.emitProcessLog(record.SiteID, fmt.Sprintf("unexpected exit; automatic restart %d/%d in %s", attempt, maxAutomaticRestarts, delay))
+		time.Sleep(delay)
+
+		// A manual start/stop or a newer deployment supersedes this recovery.
+		m.restartMu.Lock()
+		stopped := m.intentionalStops[record.SiteID]
+		m.restartMu.Unlock()
+		if stopped { return }
+		if current, exists := m.registry.Get(record.SiteID); exists && verifyProcessRecord(current) { return }
+
+		runPath := record.RunPath
+		if runPath == "" {
+			siteRoot, err := safeSiteDirectory(m.DataRoot, record.SiteID)
+			if err != nil { m.emitProcessLog(record.SiteID, err.Error()); return }
+			rel, err := filepath.Rel(siteRoot, record.WorkingDir)
+			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				m.emitProcessLog(record.SiteID, "recovery aborted: previous working directory is outside site root")
+			 return
+			}
+			runPath = filepath.Join("sites", record.SiteID, rel)
+		}
+		if _, err := m.StartSite(record.SiteID, runPath, record.Port, record.Runtime); err != nil {
+			m.emitProcessLog(record.SiteID, fmt.Sprintf("automatic restart %d failed: %v", attempt, err))
+		 continue
+		}
+		m.emitProcessLog(record.SiteID, fmt.Sprintf("site recovered successfully (attempt %d)", attempt))
 		return
 	}
-	if record, ok := m.registry.Get(siteID); ok && record.PID == pid && record.StartToken == startToken {
-		_ = m.registry.Delete(siteID)
-	}
+}
+
+func (m *ProcessManager) emitProcessLog(siteID, line string) {
+	m.mu.RLock()
+	emit := m.logEmitter
+	m.mu.RUnlock()
+	if emit != nil { emit(siteID, line) }
 }
