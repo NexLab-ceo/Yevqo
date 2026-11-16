@@ -522,7 +522,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 		if err!=nil||!result.Ok{msg:="Не удалось установить cloudflared";if result!=nil&&result.Message!=""{msg=result.Message};apiError(w,shared.ErrBadRequest(msg));return}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"message":"cloudflared installed"});return
 	}
-	if len(parts) != 2 && !(len(parts) == 3 && parts[2] == "cmd") {
+	if len(parts) != 2 && !(len(parts) == 3 && (parts[2] == "cmd" || parts[2] == "releases")) {
 		apiError(w, shared.ErrBadRequest("expected /api/sites/{deviceID}/{siteID}[/cmd]"))
 		return
 	}
@@ -543,11 +543,24 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 	sites, _ := s.db.ListSitesByDevice(r.Context(), deviceID)
 	for _, st := range sites {
 		if st.SiteID != siteID { continue }
+		if len(parts) == 3 && parts[2] == "releases" {
+			if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+			conn, online := s.hub.Get(deviceID)
+			if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
+			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second); defer cancel()
+			result, err := conn.SendCommand(ctx, "list_site_releases", &shared.ListSiteReleases{SiteId:st.SiteID, Runtime:st.Runtime})
+			if err != nil { apiError(w, shared.ErrInternal("could not load release history: "+err.Error())); return }
+			if !result.Ok { apiError(w, shared.ErrBadRequest(result.Message)); return }
+			var history shared.SiteReleasesResult
+			if err := shared.Unmarshal(result.Payload, &history); err != nil { apiError(w, shared.ErrInternal("invalid release history response")); return }
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true, "releases":history.Releases})
+			return
+		}
 		if len(parts) == 3 && parts[2] == "cmd" {
 			if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
-			var in struct { Action string `json:"action"`; AllowProjectCode bool `json:"allow_project_code"` }
+			var in struct { Action string `json:"action"`; AllowProjectCode bool `json:"allow_project_code"`; ReleaseCommit string `json:"release_commit"` }
 			if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
-			if in.Action != "deploy" && in.Action != "rebuild" && in.Action != "restart" && in.Action != "stop" {
+			if in.Action != "deploy" && in.Action != "rebuild" && in.Action != "restart" && in.Action != "stop" && in.Action != "rollback" {
 				apiError(w, shared.ErrBadRequest("unsupported site action")); return
 			}
 			if (in.Action == "deploy" || in.Action == "rebuild") && !in.AllowProjectCode {
@@ -564,6 +577,13 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				payload = &shared.SiteAction{SiteId: st.SiteID, Path: st.Path, Port: uint32(st.Port), Runtime: st.Runtime,
 					GitURL: gitCfg.GitURL, GitBranch: gitCfg.GitBranch, BuildCommand: gitCfg.BuildCommand,
 					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, AllowProjectCode: in.AllowProjectCode}
+			}
+			if in.Action == "rollback" {
+				if !validReleaseCommit(in.ReleaseCommit) { apiError(w, shared.ErrBadRequest("invalid release commit")); return }
+				agentAction = "rollback_site_release"
+				gitCfg, cfgErr := s.siteGitSettings(r.Context(), deviceID, siteID)
+				if cfgErr != nil { apiError(w, shared.ErrInternal("could not load site Git settings")); return }
+				payload = &shared.RollbackSiteRelease{SiteId:st.SiteID, Commit:in.ReleaseCommit, RootDir:gitCfg.RootDir, Runtime:st.Runtime, Port:uint32(st.Port)}
 			}
 			if in.Action == "stop" {
 				agentAction = "stop_site"
@@ -597,7 +617,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				var started shared.StartSiteResult
 				_ = shared.Unmarshal(result.Payload, &started)
 				_ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteRunning, int(started.Pid))
-				if (in.Action == "deploy" || in.Action == "rebuild") && started.CommitHash != "" {
+				if (in.Action == "deploy" || in.Action == "rebuild" || in.Action == "rollback") && (started.CommitHash != "" || in.ReleaseCommit != "") {
 					_, _ = s.db.conn.ExecContext(r.Context(), "UPDATE sites SET deployed_commit=?,deployed_at=NOW() WHERE device_id=? AND site_id=?", started.CommitHash, deviceID, siteID)
 				}
 			}
