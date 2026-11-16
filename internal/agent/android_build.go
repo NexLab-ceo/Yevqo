@@ -2,6 +2,7 @@ package agent
 
 import (
  "context"
+ "encoding/json"
  "errors"
  "fmt"
  "os"
@@ -123,7 +124,13 @@ func androidBuildSteps(root string,req AndroidBuildRequest)([]androidBuildStep,e
   tool:=req.PackageTool;if tool==""{tool="npm"}
   install:=map[string]androidBuildStep{"npm":{"install","npm",[]string{"install","--no-audit","--no-fund"}},"pnpm":{"install","pnpm",[]string{"install","--no-frozen-lockfile"}},"yarn":{"install","yarn",[]string{"install","--non-interactive"}},"bun":{"install","bun",[]string{"install"}}}[tool]
   if install.exe==""{return nil,fmt.Errorf("unsupported Node package manager %q",tool)}
-  return []androidBuildStep{install,{"build",tool,[]string{"run","build"}}},nil
+  steps:=[]androidBuildStep{install}
+   if data,err:=os.ReadFile(filepath.Join(root,"package.json"));err==nil {
+    var manifest struct { Scripts map[string]string `json:"scripts"` }
+    if err:=json.Unmarshal(data,&manifest);err!=nil{return nil,fmt.Errorf("parse package.json: %w",err)}
+    if strings.TrimSpace(manifest.Scripts["build"])!="" { steps=append(steps,androidBuildStep{"build",tool,[]string{"run","build"}}) }
+   } else { return nil,fmt.Errorf("read package.json: %w",err) }
+   return steps,nil
  case "python":
   if _,e:=os.Stat(filepath.Join(root,"requirements.txt"));e==nil{return []androidBuildStep{{"install","python",[]string{"-m","pip","install","-r","requirements.txt"}}},nil}
   if _,e:=os.Stat(filepath.Join(root,"pyproject.toml"));e==nil{return []androidBuildStep{{"install","python",[]string{"-m","pip","install","."}}},nil}
