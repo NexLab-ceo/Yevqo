@@ -295,7 +295,11 @@ func (c *Client) handleCommand(ctx context.Context, cmd *shared.Command) {
 	}
 
 	_ = ws.SetWriteDeadline(time.Now().Add(WriteWait))
-	if err := ws.WriteMessage(websocket.BinaryMessage, msg); err != nil {
+	c.writeMu.Lock()
+	_ = ws.SetWriteDeadline(time.Now().Add(WriteWait))
+	err = ws.WriteMessage(websocket.BinaryMessage, msg)
+	c.writeMu.Unlock()
+	if err != nil {
 		log.Printf("write result: %v", err)
 	}
 
