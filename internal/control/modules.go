@@ -435,7 +435,7 @@ func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeployments(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	if r.Method!=http.MethodGet { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
-	rows,err:=s.db.conn.QueryContext(r.Context(),"SELECT l.id,l.action,l.details,l.created_at,COALESCE(d.hostname,'') FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=? AND l.action IN ('create_site','start_site','stop_site','git_pull') ORDER BY l.id DESC LIMIT 100",u.ID)
+	rows,err:=s.db.conn.QueryContext(r.Context(),"SELECT l.id,l.action,l.details,l.created_at,COALESCE(d.hostname,'') FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=? AND l.action IN ('site_deploy','site_rebuild','site_rollback','site_restart') ORDER BY l.id DESC LIMIT 100",u.ID)
 	if err!=nil { apiError(w,shared.ErrInternal("could not load deployment history")); return }
 	defer rows.Close()
 	out:=make([]map[string]interface{},0)
