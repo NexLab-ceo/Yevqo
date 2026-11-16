@@ -51,7 +51,7 @@ func TestValidDeployRepository(t *testing.T) {
 	for _, raw := range []string{"https://github.com/example/site.git", "ssh://git@github.com/example/site.git"} {
 		if !validDeployRepository(raw) { t.Fatalf("expected repository URL %q to be valid", raw) }
 	}
-	for _, raw := range []string{"file:///tmp/site", "https://user:password@example.com/site.git", "https://example.com/site.git\\n--upload-pack=evil", "git://example.com/site.git"} {
+	for _, raw := range []string{"file:///tmp/site", "https://user:password@example.com/site.git", "https://example.com/site.git\n--upload-pack=evil", "git://example.com/site.git"} {
 		if validDeployRepository(raw) { t.Fatalf("expected repository URL %q to be rejected", raw) }
 	}
 }
@@ -59,6 +59,6 @@ func TestValidDeployRepository(t *testing.T) {
 func TestTruncateDeployOutput(t *testing.T) {
 	input := strings.Repeat("x", (64<<10)+10)
 	got := truncateDeployOutput(input)
-	if len(got) > (64<<10)+len("\\n[output truncated]") { t.Fatalf("output was not bounded: %d bytes", len(got)) }
+	if len(got) > (64<<10)+len("\n[output truncated]") { t.Fatalf("output was not bounded: %d bytes", len(got)) }
 	if !strings.Contains(got, "[output truncated]") { t.Fatal("truncation marker missing") }
 }
