@@ -99,9 +99,9 @@ export async function sendCommand(deviceId, action, payload = {}) {
 }
 
 // Same-origin authenticated WebSocket stream for a single site.
-export function openSiteLogStream(deviceId, siteId) {
+export function openSiteLogStream(deviceId, siteId, since = 0) {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const query = new URLSearchParams({ device_id: String(deviceId), site_id: String(siteId) });
+    const query = new URLSearchParams({ device_id: String(deviceId), site_id: String(siteId), since: String(since) });
     return new WebSocket(`${protocol}//${window.location.host}/ws/logs?${query.toString()}`);
 }
 
