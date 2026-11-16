@@ -29,13 +29,37 @@ func (m *ProcessManager) restoreProcesses() {
   m.procs[r.SiteID]=&Process{SiteID:r.SiteID,PID:r.PID,Port:r.Port,Runtime:r.Runtime,LogPath:r.LogPath}
  }
 }
-func killProcessGroup(pid,pgid int) error {
- if pid<=0||pgid<=0||pid!=pgid{return fmt.Errorf("invalid managed process group")}
- // Re-check the identity immediately before signaling.
- if !isAlive(pid){return fmt.Errorf("process %d is not running",pid)}
- if err:=syscall.Kill(-pgid,syscall.SIGTERM);err!=nil{return fmt.Errorf("signal process group SIGTERM: %w",err)}
- deadline:=time.Now().Add(2*time.Second)
- for time.Now().Before(deadline){if !isAlive(pid){return nil};time.Sleep(100*time.Millisecond)}
- if isAlive(pid){if err:=syscall.Kill(-pgid,syscall.SIGKILL);err!=nil{return fmt.Errorf("signal process group SIGKILL: %w",err)}}
+// processGroupAlive checks the whole group, not only its leader: a server may
+// spawn workers that outlive the main PID.
+func processGroupAlive(pgid int) bool {
+ if pgid <= 0 { return false }
+ err := syscall.Kill(-pgid, 0)
+ return err == nil || err == syscall.EPERM
+}
+
+func killProcessGroup(pid, pgid int) error {
+ if pid <= 0 || pgid <= 0 || pid != pgid { return fmt.Errorf("invalid managed process group") }
+ // Re-check the identity immediately before signaling; never trust a persisted PID.
+ if !isAlive(pid) { return fmt.Errorf("process %d is not running", pid) }
+ if err := syscall.Kill(-pgid, syscall.SIGTERM); err != nil {
+  return fmt.Errorf("signal process group SIGTERM: %w", err)
+ }
+ deadline := time.Now().Add(2 * time.Second)
+ for time.Now().Before(deadline) {
+  if !processGroupAlive(pgid) { return nil }
+  time.Sleep(100 * time.Millisecond)
+ }
+ // SIGKILL all remaining descendants even if the group leader already exited.
+ if processGroupAlive(pgid) {
+  if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil && err != syscall.ESRCH {
+   return fmt.Errorf("signal process group SIGKILL: %w", err)
+  }
+ }
+ deadline = time.Now().Add(time.Second)
+ for time.Now().Before(deadline) {
+  if !processGroupAlive(pgid) { return nil }
+  time.Sleep(50 * time.Millisecond)
+ }
+ if processGroupAlive(pgid) { return fmt.Errorf("process group %d did not exit after SIGKILL", pgid) }
  return nil
 }
