@@ -2,6 +2,11 @@ package agent
 
 import (
 	"os"
+	"net"
+	"net/http"
+	"os/exec"
+	"strconv"
+	"time"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -92,4 +97,33 @@ func TestCreateNodeSiteWritesStarterFiles(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(root, "sites", "node-demo", name)); err != nil { t.Fatalf("expected Node.js starter file %s: %v", name, err) }
 	}
 	if err := manager.CreateSite("invalid-node", 3000, "node"); err == nil { t.Fatal("expected unknown runtime to be rejected") }
+}
+
+func TestNodeRuntimeStartsServesAndStops(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil { t.Skip("Node.js is not installed") }
+	if _, err := exec.LookPath("npm"); err != nil { t.Skip("npm is not installed") }
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil { t.Fatal(err) }
+	port := listener.Addr().(*net.TCPAddr).Port
+	_ = listener.Close()
+
+	root := t.TempDir()
+	manager := NewProcessManager(root)
+	if err := manager.CreateSite("node-http", port, "nodejs"); err != nil { t.Fatal(err) }
+	pid, err := manager.StartSite("node-http", filepath.Join("sites", "node-http"), port, "nodejs")
+	if err != nil { t.Fatalf("start Node.js runtime: %v", err) }
+	if pid <= 0 { t.Fatalf("invalid Node.js PID: %d", pid) }
+	response, err := http.Get("http://127.0.0.1:" + strconv.Itoa(port))
+	if err != nil { t.Fatalf("request Node.js site: %v", err) }
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusOK { t.Fatalf("unexpected HTTP status: %d", response.StatusCode) }
+	if err := manager.StopSite("node-http"); err != nil { t.Fatalf("stop Node.js runtime: %v", err) }
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", "127.0.0.1:"+strconv.Itoa(port), 100*time.Millisecond)
+		if err != nil { return }
+		_ = conn.Close()
+		time.Sleep(25*time.Millisecond)
+	}
+	t.Fatal("Node.js listener remained open after StopSite")
 }
