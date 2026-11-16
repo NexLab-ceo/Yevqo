@@ -43,11 +43,14 @@ type ProcessManager struct {
 	registryErr error
 	logEmitter func(string, string)
 	procs    map[string]*Process // key = siteID
+	restartMu sync.Mutex
+	restartAttempts map[string]int
+	intentionalStops map[string]bool
 }
 
 // NewProcessManager создаёт менеджер.
 func NewProcessManager(dataRoot string) *ProcessManager {
- m := &ProcessManager{DataRoot:dataRoot, BuildRunner:NewAndroidBuildRunner(dataRoot), procs:make(map[string]*Process)}
+ m := &ProcessManager{DataRoot:dataRoot, BuildRunner:NewAndroidBuildRunner(dataRoot), procs:make(map[string]*Process), restartAttempts:make(map[string]int), intentionalStops:make(map[string]bool)}
  m.registry, m.registryErr = NewProcessRegistry(dataRoot)
  if m.registryErr == nil { m.restoreProcesses(); go m.watchProcesses() }
  return m
@@ -442,11 +445,14 @@ func (m *ProcessManager) StopSite(siteID string) error {
 	record, exists := m.registry.Get(siteID)
 	if !exists { return fmt.Errorf("site %s is not running", siteID) }
 	if !verifyProcessRecord(record) { _ = m.registry.Delete(siteID); m.mu.Lock(); delete(m.procs,siteID); m.mu.Unlock(); return fmt.Errorf("site %s process identity is stale; refusing to signal PID",siteID) }
-	if err := killProcessGroup(record.PID, record.ProcessGroup); err != nil { return err }
+	m.restartMu.Lock(); m.intentionalStops[siteID] = true; m.restartMu.Unlock()
+	if err := killProcessGroup(record.PID, record.ProcessGroup); err != nil { m.restartMu.Lock(); delete(m.intentionalStops, siteID); m.restartMu.Unlock(); return err }
 	m.mu.Lock()
 	delete(m.procs, siteID)
 	m.mu.Unlock()
-	return m.registry.Delete(siteID)
+	err := m.registry.Delete(siteID)
+	m.restartMu.Lock(); delete(m.intentionalStops, siteID); delete(m.restartAttempts, siteID); m.restartMu.Unlock()
+	return err
 }
 
 // ============================================================
