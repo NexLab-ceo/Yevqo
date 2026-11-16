@@ -76,6 +76,10 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleSiteLifecycle(cmd, "deploy")
 	case "rebuild":
 		return h.handleSiteLifecycle(cmd, "rebuild")
+	case "list_site_releases":
+		return h.handleListSiteReleases(cmd)
+	case "rollback_site_release":
+		return h.handleRollbackSiteRelease(cmd)
 	case "git_pull":
 		return h.handleGitPull(cmd)
 	case "get_logs":
