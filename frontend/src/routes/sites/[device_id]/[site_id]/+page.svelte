@@ -170,6 +170,15 @@
 
     function clearTerminal() { terminalText = ''; }
 
+    async function copyTerminal() {
+        try {
+            await navigator.clipboard.writeText(terminalText);
+            notify('Логи скопированы', 'success');
+        } catch {
+            notify('Не удалось скопировать: браузер не разрешил доступ к буферу обмена', 'error');
+        }
+    }
+
     function exportTerminal() {
         const blob = new Blob([terminalText], { type: 'text/plain;charset=utf-8' });
         const url = URL.createObjectURL(blob);
@@ -478,7 +487,7 @@
         </div>
     {:else if activeTab === 'logs'}
         <Card>
-            <div class="logs-head"><div><h2 class="details-title">Terminal / Logs</h2><span class:live={logConnected} class="log-connection">{logStatus === 'live' ? '● Live' : logStatus === 'connecting' ? '◌ Connecting…' : logStatus === 'reconnecting' ? '↻ Reconnecting…' : logStatus === 'agent-offline' ? '● Agent offline' : '○ Disconnected'}</span></div><div class="log-actions"><Button size="sm" on:click={exportTerminal} disabled={!terminalText}>Export</Button><Button size="sm" on:click={clearTerminal}>Clear</Button><Button size="sm" on:click={toggleLiveLogs} disabled={!online}>{logStreamEnabled ? 'Остановить поток' : 'Live logs'}</Button><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div></div>
+            <div class="logs-head"><div><h2 class="details-title">Terminal / Logs</h2><span class:live={logConnected} class="log-connection">{logStatus === 'live' ? '● Live' : logStatus === 'connecting' ? '◌ Connecting…' : logStatus === 'reconnecting' ? '↻ Reconnecting…' : logStatus === 'agent-offline' ? '● Agent offline' : '○ Disconnected'}</span></div><div class="log-actions"><Button size="sm" on:click={copyTerminal} disabled={!terminalText}>Copy</Button><Button size="sm" on:click={exportTerminal} disabled={!terminalText}>Export</Button><Button size="sm" on:click={clearTerminal}>Clear</Button><Button size="sm" on:click={toggleLiveLogs} disabled={!online}>{logStreamEnabled ? 'Остановить поток' : 'Live logs'}</Button><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div></div>
             {#if terminalLoading}<p class="terminal-loading">Загрузка…</p>{:else}<div class="log-filters"><input class="log-search" bind:value={logSearch} placeholder="Поиск по логам…" /><select class="log-level" bind:value={logLevel}><option value="all">Все уровни</option><option value="error">ERROR</option><option value="warn">WARN</option><option value="info">INFO / DEBUG</option></select><label class="autoscroll"><input type="checkbox" bind:checked={autoScroll} /> Автопрокрутка</label></div><pre class="terminal" bind:this={terminalElement} on:scroll={() => autoScroll = terminalElement.scrollHeight - terminalElement.scrollTop - terminalElement.clientHeight < 30}>{filteredTerminalText || (logSearch || logLevel !== 'all' ? 'Совпадений нет.' : 'Логи пока не загружены.')}</pre>{/if}
         </Card>
     {:else if activeTab === 'environment'}
