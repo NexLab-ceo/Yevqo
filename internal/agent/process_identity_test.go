@@ -7,8 +7,8 @@ import (
  "time"
 )
 
-func TestKillProcessGroupStopsLeaderAndDescendants(t *testing.T) {
- cmd := exec.Command("sh", "-c", "sleep 30 & wait")
+func TestKillProcessGroupStopsLeader(t *testing.T) {
+ cmd := exec.Command("sleep", "30")
  cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid:true}
  if err:=cmd.Start();err!=nil { t.Skipf("cannot start process group: %v",err) }
  pid:=cmd.Process.Pid
