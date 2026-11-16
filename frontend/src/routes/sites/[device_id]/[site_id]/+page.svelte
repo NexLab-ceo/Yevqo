@@ -19,6 +19,7 @@
     let showTerminal = false;
     let terminalLoading = false;
     let terminalText = '';
+    let logSearch = '';
     let logSocket = null;
     let logConnected = false;
     let lastLogSeq = 0;
@@ -150,6 +151,22 @@
             logReconnectAttempts = 0;
             connectLiveLogs();
         }
+    }
+
+    $: visibleTerminalText = logSearch
+        ? terminalText.split('\\n').filter(line => line.toLowerCase().includes(logSearch.toLowerCase())).join('\\n')
+        : terminalText;
+
+    function clearTerminal() { terminalText = ''; }
+
+    function exportTerminal() {
+        const blob = new Blob([terminalText], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'yevqo-' + siteId + '-logs.txt';
+        link.click();
+        URL.revokeObjectURL(url);
     }
 
     function clearLogReconnectTimer() {
@@ -450,8 +467,8 @@
         </div>
     {:else if activeTab === 'logs'}
         <Card>
-            <div class="logs-head"><div><h2 class="details-title">Terminal / Logs</h2><span class:live={logConnected} class="log-connection">{logStatus === 'live' ? '● Live' : logStatus === 'connecting' ? '◌ Connecting…' : logStatus === 'reconnecting' ? '↻ Reconnecting…' : logStatus === 'agent-offline' ? '● Agent offline' : '○ Disconnected'}</span></div><div class="log-actions"><Button size="sm" on:click={toggleLiveLogs} disabled={!online}>{logStreamEnabled ? 'Остановить поток' : 'Live logs'}</Button><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div></div>
-            {#if terminalLoading}<p class="terminal-loading">Загрузка…</p>{:else}<pre class="terminal">{terminalText || 'Логи пока не загружены.'}</pre>{/if}
+            <div class="logs-head"><div><h2 class="details-title">Terminal / Logs</h2><span class:live={logConnected} class="log-connection">{logStatus === 'live' ? '● Live' : logStatus === 'connecting' ? '◌ Connecting…' : logStatus === 'reconnecting' ? '↻ Reconnecting…' : logStatus === 'agent-offline' ? '● Agent offline' : '○ Disconnected'}</span></div><div class="log-actions"><Button size="sm" on:click={exportTerminal} disabled={!terminalText}>Export</Button><Button size="sm" on:click={clearTerminal}>Clear</Button><Button size="sm" on:click={toggleLiveLogs} disabled={!online}>{logStreamEnabled ? 'Остановить поток' : 'Live logs'}</Button><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div></div>
+            {#if terminalLoading}<p class="terminal-loading">Загрузка…</p>{:else}<input class="log-search" bind:value={logSearch} placeholder="Поиск по логам…" /><pre class="terminal">{visibleTerminalText || (logSearch ? 'Совпадений нет.' : 'Логи пока не загружены.')}</pre>{/if}
         </Card>
     {:else if activeTab === 'environment'}
         <Card>
@@ -608,7 +625,7 @@
     .logs-head{display:flex;justify-content:space-between;align-items:center}
     .log-connection{display:block;margin-top:-10px;margin-bottom:12px;font-size:10px;color:#A1A1AA}
     .log-connection.live{color:#22C55E}
-    .log-actions{display:flex;gap:8px;align-items:center}
+    .log-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.log-search{width:100%;box-sizing:border-box;margin:10px 0;background:#09090B;border:1px solid #27272A;border-radius:7px;padding:9px 12px;color:#FAFAFA;font-size:12px}
     .terminal{background:#09090B;border:1px solid #27272A;border-radius:8px;color:#D4D4D8;padding:14px;max-height:60vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,monospace}
     .env-group{border:1px solid #27272A;border-radius:8px;padding:14px;margin-top:12px}
     .env-group strong{display:block;color:#FAFAFA;font-size:13px;margin-bottom:10px}
