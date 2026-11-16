@@ -305,7 +305,9 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 
 	// Wait for TCP readiness rather than assuming a fixed startup delay.
 	pid := cmd.Process.Pid
-	if err := waitForTCP(port, 5*time.Second); err != nil || !isAlive(pid) {
+	readinessTimeout := 5 * time.Second
+	if runtime == "nodejs" { readinessTimeout = 20 * time.Second }
+	if err := waitForTCP(port, readinessTimeout); err != nil || !isAlive(pid) {
 		// A process that never becomes ready must not remain unmanaged.
 		if isAlive(pid) {
 			if stopErr := killProcessGroup(pid, pid); stopErr != nil {
