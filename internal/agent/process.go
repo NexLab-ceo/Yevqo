@@ -41,7 +41,7 @@ type ProcessManager struct {
 func NewProcessManager(dataRoot string) *ProcessManager {
  m := &ProcessManager{DataRoot:dataRoot, BuildRunner:NewAndroidBuildRunner(dataRoot), procs:make(map[string]*Process)}
  m.registry, m.registryErr = NewProcessRegistry(dataRoot)
- if m.registryErr == nil { m.restoreProcesses() }
+ if m.registryErr == nil { m.restoreProcesses(); go m.watchProcesses() }
  return m
 }
 
@@ -265,14 +265,11 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		fmt.Fprintf(logFile, "warning: process release: %v\n", err)
 	}
 
-	// Ждём, пока процесс займёт порт (200 мс).
-	time.Sleep(200 * time.Millisecond)
-
-	// Проверяем, что процесс жив.
+	// Wait for TCP readiness rather than assuming a fixed startup delay.
 	pid := cmd.Process.Pid
-	if !isAlive(pid) {
+	if err := waitForTCP(port, 5*time.Second); err != nil || !isAlive(pid) {
 		logFile.Close()
-		return 0, fmt.Errorf("process died immediately (check %s)", logPath)
+		return 0, fmt.Errorf("process failed readiness check (check %s): %v", logPath, err)
 	}
 
 	// Persist verified process identity before exposing it as managed.
