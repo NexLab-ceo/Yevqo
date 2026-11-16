@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"veltrix/internal/shared"
 )
 
 func TestValidSiteID(t *testing.T) {
@@ -61,4 +63,14 @@ func TestTruncateDeployOutput(t *testing.T) {
 	got := truncateDeployOutput(input)
 	if len(got) > (64<<10)+len("\n[output truncated]") { t.Fatalf("output was not bounded: %d bytes", len(got)) }
 	if !strings.Contains(got, "[output truncated]") { t.Fatal("truncation marker missing") }
+}
+
+
+func TestDeployRequiresExplicitProjectCodeConsent(t *testing.T) {
+	manager := &ProcessManager{}
+	req := shared.SiteAction{SiteId: "demo", GitURL: "https://github.com/example/demo.git", Runtime: "static"}
+	_, _, _, _, err := manager.DeployGitSite(req, false)
+	if err == nil || !strings.Contains(err.Error(), "explicit allow_project_code=true consent") {
+		t.Fatalf("expected explicit deployment consent error, got %v", err)
+	}
 }
