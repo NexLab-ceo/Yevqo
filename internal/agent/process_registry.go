@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -56,6 +57,11 @@ func (r *ProcessRegistry) load() error {
 		return fmt.Errorf("decode process registry: %w", err)
 	}
 	if rows != nil { r.rows = rows }
+	// Older versions persisted injected DB credentials in extra_env. Rewrite
+	// that legacy registry without the sensitive field during startup.
+	if bytes.Contains(data, []byte(`"extra_env"`)) {
+		return r.persistLocked()
+	}
 	return nil
 }
 
