@@ -1,7 +1,10 @@
 package agent
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -27,4 +30,24 @@ func TestProcessRegistryPersistsRecords(t *testing.T) {
 	reloaded, err = NewProcessRegistry(root)
 	if err != nil { t.Fatal(err) }
 	if _, ok := reloaded.Get("demo"); ok { t.Fatal("record still exists after delete") }
+}
+
+
+func TestProcessRegistryScrubsLegacyEnvironmentSecrets(t *testing.T) {
+	root := t.TempDir()
+	legacy := `{"demo":{"site_id":"demo","pid":1234,"process_group":1234,"port":3000,"runtime":"php","working_dir":"/tmp/demo","log_path":"/tmp/demo.log","started_at":"1970-01-01T00:01:40Z","start_token":"123","extra_env":{"DB_PASSWORD":"do-not-persist-me"}}}`
+	path := filepath.Join(root, "processes.json")
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewProcessRegistry(root); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "do-not-persist-me") || strings.Contains(string(got), "extra_env") {
+		t.Fatalf("legacy environment secrets were not scrubbed: %s", got)
+	}
 }
