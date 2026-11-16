@@ -74,3 +74,12 @@ func TestDeployRequiresExplicitProjectCodeConsent(t *testing.T) {
 		t.Fatalf("expected explicit deployment consent error, got %v", err)
 	}
 }
+
+func TestNodeStartCommandUsesPackageManagerWithoutShell(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte("{\"scripts\":{\"start\":\"node server.js\"}}"), 0o600); err != nil { t.Fatal(err) }
+	cmd, err := nodeStartCommand(root)
+	if err != nil { t.Skipf("npm not installed in test environment: %v", err) }
+	if cmd.Path == "" || len(cmd.Args) != 3 || cmd.Args[1] != "run" || cmd.Args[2] != "start" { t.Fatalf("unexpected Node start command: %#v", cmd.Args) }
+	if strings.Contains(strings.ToLower(cmd.Path), "sh") { t.Fatalf("Node runtime must not invoke a shell: %s", cmd.Path) }
+}
