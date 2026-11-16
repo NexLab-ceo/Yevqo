@@ -494,6 +494,7 @@ func (s *Server) handleSites(w http.ResponseWriter, r *http.Request) {
 // ============================================================
 
 var domainPattern = regexp.MustCompile("(?i)^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$")
+var releaseCommitPattern = regexp.MustCompile("^(?:[a-f0-9]{40}|[a-f0-9]{64})$")
 
 func nullableString(v string) interface{} { if v == "" { return nil }; return v }
 
@@ -579,7 +580,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, AllowProjectCode: in.AllowProjectCode}
 			}
 			if in.Action == "rollback" {
-				if !validReleaseCommit(in.ReleaseCommit) { apiError(w, shared.ErrBadRequest("invalid release commit")); return }
+				if !releaseCommitPattern.MatchString(in.ReleaseCommit) { apiError(w, shared.ErrBadRequest("invalid release commit")); return }
 				agentAction = "rollback_site_release"
 				gitCfg, cfgErr := s.siteGitSettings(r.Context(), deviceID, siteID)
 				if cfgErr != nil { apiError(w, shared.ErrInternal("could not load site Git settings")); return }
