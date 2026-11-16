@@ -257,6 +257,10 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		cmd = exec.Command(binary)
 		cmd.Dir = absPath
 		cmd.Env = append(os.Environ(), fmt.Sprintf("PORT=%d", port))
+	case "nodejs":
+		cmd, err = nodeStartCommand(absPath)
+		if err != nil { logFile.Close(); return 0, err }
+		cmd.Dir = absPath
 	case "static":
 		// Статика — через php -S (он умеет отдавать статические файлы).
 		cmd = exec.Command("php", "-S", fmt.Sprintf("127.0.0.1:%d", port), "-t", ".")
