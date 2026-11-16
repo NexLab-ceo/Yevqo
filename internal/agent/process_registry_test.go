@@ -2,6 +2,7 @@ package agent
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -49,5 +50,39 @@ func TestProcessRegistryScrubsLegacyEnvironmentSecrets(t *testing.T) {
 	}
 	if strings.Contains(string(got), "do-not-persist-me") || strings.Contains(string(got), "extra_env") {
 		t.Fatalf("legacy environment secrets were not scrubbed: %s", got)
+	}
+}
+
+
+func TestWaitForProcessExitReapsAndRemovesOnlyMatchingRecord(t *testing.T) {
+	root := t.TempDir()
+	registry, err := NewProcessRegistry(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("sh", "-c", "sleep 0.2")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := cmd.Process.Pid
+	token, err := processStartToken(pid)
+	if err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatal(err)
+	}
+	record := ProcessRecord{SiteID: "demo", PID: pid, ProcessGroup: pid, Port: 3000, Runtime: "php", WorkingDir: root, LogPath: filepath.Join(root, "demo.log"), StartedAt: time.Now(), StartToken: token}
+	if err := registry.Save(record); err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		t.Fatal(err)
+	}
+	manager := &ProcessManager{registry: registry, procs: map[string]*Process{"demo": {SiteID: "demo", PID: pid}}}
+	manager.waitForProcessExit("demo", pid, token, cmd)
+	if _, ok := registry.Get("demo"); ok {
+		t.Fatal("exited process record was not removed")
+	}
+	if _, ok := manager.Get("demo"); ok {
+		t.Fatal("exited process remained in memory")
 	}
 }
