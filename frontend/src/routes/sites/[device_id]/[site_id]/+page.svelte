@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, listLogs, listSiteDatabaseConnections } from '$lib/api.js';
+    import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, listLogs, listSiteDatabaseConnections } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -20,6 +20,8 @@
     let terminalLoading = false;
     let terminalText = '';
     let activeTab = 'general';
+    let releases = [];
+    let releasesLoading = false;
     let git = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', has_token: false, commit: '', deployed_at: null };
     let gitForm = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', github_token: '' };
     let connections = [];
@@ -174,6 +176,33 @@
         else notify(buildResult.error || res.data.message || 'Сборка завершилась ошибкой', 'error');
     }
 
+
+    async function loadReleases() {
+        if (!online || releasesLoading) return;
+        releasesLoading = true;
+        const res = await getSiteReleases(deviceId, siteId);
+        releasesLoading = false;
+        if (!res.ok) { notify(res.error || 'Не удалось загрузить историю релизов', 'error'); return; }
+        releases = res.data.releases || [];
+    }
+
+    async function rollbackRelease(commit) {
+        if (!online || busyAction || !commit) return;
+        if (!window.confirm('Откатить сайт на релиз ' + commit.slice(0, 12) + '? Текущая версия останется в истории релизов.')) return;
+        busyAction = 'rollback';
+        const res = await runSiteCommand(deviceId, siteId, 'rollback', false, commit);
+        busyAction = '';
+        if (!res.ok || !res.data?.ok) {
+            notify(res.error || res.data?.message || 'Не удалось выполнить откат', 'error');
+            await refresh();
+            await loadReleases();
+            return;
+        }
+        notify(res.data.message || 'Откат выполнен', 'success');
+        await refresh();
+        await loadReleases();
+    }
+
     async function saveGit() {
         if (busyAction) return;
         busyAction = 'git';
@@ -245,6 +274,7 @@
         <button class:active={activeTab === 'environment'} on:click={() => activeTab = 'environment'}>Environment</button>
         <button class:active={activeTab === 'build'} on:click={() => activeTab = 'build'}>Build</button>
         <button class:active={activeTab === 'git'} on:click={() => activeTab = 'git'}>Git</button>
+        <button class:active={activeTab === 'releases'} on:click={() => { activeTab = 'releases'; loadReleases(); }}>Releases</button>
     </nav>
 
     {#if activeTab === 'general'}
@@ -354,6 +384,36 @@
                 <p class="muted">Запусти анализ, чтобы определить стек, сборщик, команды и наличие конфигурации. Неизвестные проекты не считаются ошибкой.</p>
             {/if}
         </Card>
+
+    {:else if activeTab === 'releases'}
+        <Card>
+            <div class="release-heading">
+                <div><h2 class="details-title">Release history</h2><p class="muted">Неизменяемые версии из .yevqo/releases. Откат не запускает повторную сборку.</p></div>
+                <Button size="sm" on:click={loadReleases} disabled={!online || releasesLoading}>{releasesLoading ? 'Загрузка…' : 'Обновить'}</Button>
+            </div>
+            {#if !online}
+                <p class="muted">Подключите Agent, чтобы посмотреть историю релизов.</p>
+            {:else if releasesLoading}
+                <p class="muted">Загрузка истории…</p>
+            {:else if releases.length === 0}
+                <div class="empty-state">Релизов пока нет. Выполните первый Deploy из вкладки Git.</div>
+            {:else}
+                <div class="release-list">
+                    {#each releases as release (release.commit)}
+                        <article class="release-row">
+                            <div class="release-info">
+                                <div class="release-title">
+                                    <code>{release.commit.slice(0, 12)}</code>
+                                    {#if release.active}<span class="release-active">Активен</span>{/if}
+                                </div>
+                                <p class="muted">{release.date ? new Date(release.date).toLocaleString() : 'Дата коммита недоступна'}</p>
+                            </div>
+                            <Button size="sm" variant="secondary" disabled={release.active || !!busyAction} loading={busyAction === 'rollback'} on:click={() => rollbackRelease(release.commit)}>{release.active ? 'Текущий' : 'Откатить'}</Button>
+                        </article>
+                    {/each}
+                </div>
+            {/if}
+        </Card>
     {:else if activeTab === 'git'}
         <Card>
             <h2 class="details-title">Git Repository</h2>
@@ -413,12 +473,19 @@
     .build-commands{display:grid;gap:8px;margin-top:14px}
     .build-commands code{font-size:12px;color:#D4D4D8;overflow-wrap:anywhere}
     .build-warning{padding:12px;border:1px solid #854D0E;border-radius:8px;color:#FBBF24;font-size:12px;line-height:1.5}
+    .release-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+    .release-list{display:grid;gap:10px;margin-top:16px}
+    .release-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px;border:1px solid #27272A;border-radius:10px;background:#111113}
+    .release-title{display:flex;align-items:center;gap:10px;font-weight:600}
+    .release-title code{font-size:13px;color:#D4D4D8}
+    .release-active{font-size:11px;padding:3px 7px;border-radius:999px;background:#1D3320;color:#A3E635}
+    .release-info p{margin:6px 0 0}
     .git-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:18px}
     .git-form label{display:grid;gap:7px;color:#D4D4D8;font-size:12px}.git-form .wide{grid-column:1/-1}
     .input{width:100%;box-sizing:border-box;background:#09090B;border:1px solid #3F3F46;border-radius:7px;padding:10px 12px;color:#FAFAFA;font-size:13px}
     .git-form small{color:#A1A1AA}.security-note{margin-top:14px;color:#FBBF24;font-size:11px}
     .save-row{display:flex;justify-content:flex-end;margin-top:18px}
-    @media(max-width:600px){.git-form{grid-template-columns:1fr}.git-form .wide{grid-column:auto}}
+    @media(max-width:600px){.release-heading,.release-row{align-items:flex-start;flex-direction:column}.git-form{grid-template-columns:1fr}.git-form .wide{grid-column:auto}}
     .back { background: transparent; border: 0; color: #3B82F6; cursor: pointer; padding: 0; margin-bottom: 12px; font-size: 13px; }
     .device-state,.site-state { display:flex; align-items:center; gap:8px; color:#A1A1AA; font-size:12px; }
     .panel-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
