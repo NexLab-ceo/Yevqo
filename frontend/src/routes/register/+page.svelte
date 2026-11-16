@@ -39,7 +39,7 @@
 <div class="auth-page">
     <div class="auth-card">
         <div class="auth-header">
-            <h1 class="auth-title">VELTRIX Dock</h1>
+            <h1 class="auth-title">Yevqo</h1>
             <p class="auth-subtitle">Создание аккаунта</p>
         </div>
 
