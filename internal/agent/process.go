@@ -32,16 +32,17 @@ type Process struct {
 type ProcessManager struct {
 	DataRoot string
 	BuildRunner *AndroidBuildRunner
+	registry *ProcessRegistry
+	registryErr error
 	procs    map[string]*Process // key = siteID
 }
 
 // NewProcessManager создаёт менеджер.
 func NewProcessManager(dataRoot string) *ProcessManager {
-	return &ProcessManager{
-		DataRoot: dataRoot,
-		BuildRunner: NewAndroidBuildRunner(dataRoot),
-		procs:    make(map[string]*Process),
-	}
+ m := &ProcessManager{DataRoot:dataRoot, BuildRunner:NewAndroidBuildRunner(dataRoot), procs:make(map[string]*Process)}
+ m.registry, m.registryErr = NewProcessRegistry(dataRoot)
+ if m.registryErr == nil { m.restoreProcesses() }
+ return m
 }
 
 // ============================================================
@@ -274,7 +275,24 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		return 0, fmt.Errorf("process died immediately (check %s)", logPath)
 	}
 
-	// Сохраняем в память.
+	// Persist verified process identity before exposing it as managed.
+	startToken, identityErr := processStartToken(pid)
+	if identityErr != nil {
+		_ = killProcessGroup(pid, pid)
+		logFile.Close()
+		return 0, fmt.Errorf("capture process identity: %w", identityErr)
+	}
+	if m.registryErr != nil {
+		_ = killProcessGroup(pid, pid)
+		logFile.Close()
+		return 0, fmt.Errorf("process registry unavailable: %w", m.registryErr)
+	}
+	record := ProcessRecord{SiteID:siteID, PID:pid, ProcessGroup:pid, Port:port, Runtime:runtime, WorkingDir:absPath, LogPath:logPath, StartedAt:time.Now().UTC(), StartToken:startToken}
+	if err := m.registry.Save(record); err != nil {
+		_ = killProcessGroup(pid, pid)
+		logFile.Close()
+		return 0, fmt.Errorf("persist process record: %w", err)
+	}
 	m.procs[siteID] = &Process{
 		SiteID:  siteID,
 		PID:     pid,
@@ -294,27 +312,12 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 // StopSite останавливает сайт (SIGTERM, потом SIGKILL).
 func (m *ProcessManager) StopSite(siteID string) error {
 	if !validSiteID(siteID) { return fmt.Errorf("invalid site id") }
-	p, ok := m.procs[siteID]
-	if !ok {
-		// Попробуем найти PID через pgrep (на случай, если агент перезапускался).
-		pid := findPIDBySite(m.DataRoot, siteID)
-		if pid == 0 {
-			return fmt.Errorf("site %s is not running", siteID)
-		}
-		// Убиваем.
-		if err := killProcess(pid); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	// Есть в памяти — убиваем.
-	if err := killProcess(p.PID); err != nil {
-		return err
-	}
-
+	record, exists := m.registry.Get(siteID)
+	if !exists { return fmt.Errorf("site %s is not running", siteID) }
+	if !verifyProcessRecord(record) { _ = m.registry.Delete(siteID); delete(m.procs,siteID); return fmt.Errorf("site %s process identity is stale; refusing to signal PID",siteID) }
+	if err := killProcessGroup(record.PID, record.ProcessGroup); err != nil { return err }
 	delete(m.procs, siteID)
-	return nil
+	return m.registry.Delete(siteID)
 }
 
 // ============================================================
@@ -423,11 +426,7 @@ func findPIDBySite(dataRoot, siteID string) int {
 // ListRunning возвращает список запущенных сайтов.
 func (m *ProcessManager) ListRunning() []*Process {
 	out := make([]*Process, 0, len(m.procs))
-	for _, p := range m.procs {
-		if isAlive(p.PID) {
-			out = append(out, p)
-		}
-	}
+	for _, p := range m.procs { if isAlive(p.PID) { out=append(out,p) } }
 	return out
 }
 
