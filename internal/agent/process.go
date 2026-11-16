@@ -813,9 +813,18 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 	if rootDir == ".." || strings.HasPrefix(rootDir, ".."+string(filepath.Separator)) { return 0, fmt.Errorf("release root directory escapes site") }
 	siteRoot, err := safeSiteDirectory(m.DataRoot, siteID)
 	if err != nil { return 0, err }
-	releaseDir := filepath.Join(siteRoot, ".yevqo", "releases", commit)
+	releasesRoot := filepath.Join(siteRoot, ".yevqo", "releases")
+	resolvedReleasesRoot, err := filepath.EvalSymlinks(releasesRoot)
+	if err != nil { return 0, fmt.Errorf("release history not found") }
+	releaseDir := filepath.Join(releasesRoot, commit)
 	resolvedRelease, err := filepath.EvalSymlinks(releaseDir)
 	if err != nil { return 0, fmt.Errorf("release not found: %s", commit) }
+	releaseRel, err := filepath.Rel(resolvedReleasesRoot, resolvedRelease)
+	if err != nil || releaseRel == "." || releaseRel == ".." || strings.HasPrefix(releaseRel, ".."+string(filepath.Separator)) {
+		return 0, fmt.Errorf("release path resolves outside release history")
+	}
+	releaseInfo, err := os.Stat(resolvedRelease)
+	if err != nil || !releaseInfo.IsDir() { return 0, fmt.Errorf("release is not a directory") }
 	resolvedRoot, err := filepath.EvalSymlinks(filepath.Join(resolvedRelease, rootDir))
 	if err != nil { return 0, fmt.Errorf("release root directory not found: %w", err) }
 	rel, err := filepath.Rel(resolvedRelease, resolvedRoot)
