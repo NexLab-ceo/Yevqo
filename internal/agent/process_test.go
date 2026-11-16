@@ -151,3 +151,15 @@ func TestValidReleaseCommit(t *testing.T) {
 		if validReleaseCommit(commit) { t.Fatalf("expected invalid commit %q", commit) }
 	}
 }
+
+func TestRollbackRejectsReleaseSymlinkEscape(t *testing.T) {
+	root:=t.TempDir()
+	releases:=filepath.Join(root,"sites","demo",".yevqo","releases")
+	if err:=os.MkdirAll(releases,0700);err!=nil{t.Fatal(err)}
+	outside:=filepath.Join(root,"outside")
+	if err:=os.MkdirAll(outside,0700);err!=nil{t.Fatal(err)}
+	commit:=strings.Repeat("b",40)
+	if err:=os.Symlink(outside,filepath.Join(releases,commit));err!=nil{t.Skipf("symlinks unavailable: %v",err)}
+	manager:=&ProcessManager{DataRoot:root}
+	if _,err:=manager.RollbackSiteRelease("demo",commit,".","nodejs",3000);err==nil||!strings.Contains(err.Error(),"outside release history"){t.Fatalf("expected release symlink escape to be rejected, got %v",err)}
+}
