@@ -566,7 +566,13 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				agentAction = "stop_site"
 				payload = &shared.StopSite{SiteId: st.SiteID}
 			}
-			ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+			commandTimeout := 2 * time.Minute
+			if in.Action == "deploy" || in.Action == "rebuild" {
+				// Git checkout and the local build provider can legitimately take
+				// much longer than a normal lifecycle command.
+				commandTimeout = 25 * time.Minute
+			}
+			ctx, cancel := context.WithTimeout(r.Context(), commandTimeout)
 			defer cancel()
 			result, err := conn.SendCommand(ctx, agentAction, payload)
 			if err != nil { apiError(w, shared.ErrInternal("site command failed: " + err.Error())); return }
