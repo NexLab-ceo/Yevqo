@@ -13,7 +13,7 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 - [ ] Deployment job state machine: queued, preparing, cloning, installing, building, starting, healthy, failed, cancelled.
 - [ ] One job per app by default; cancellation and progress events.
 - [ ] Node.js runtime (npm/pnpm/yarn/bun detection), PHP, Go, static and custom start commands.
-- [ ] Deploy = fetch/clone -> install -> build -> start -> health-check -> record release.
+- [x] Deploy = staged Git checkout -> supported dependency/build provider -> start -> TCP health-check -> immutable release record, with previous-release restart on candidate failure.
 - [ ] Tests for process crash, agent restart, occupied port, stop timeout, failed build, health-check timeout (registry persistence and child reaping have dedicated tests).
 
 ## P1 — Deployment UX and recovery
