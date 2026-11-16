@@ -207,6 +207,7 @@ type GitPull struct {
 
 type SiteAction struct {
 	SiteId string `json:"site_id"`
+	AllowProjectCode bool `json:"allow_project_code,omitempty"`
 	Path string `json:"path"`
 	Port uint32 `json:"port"`
 	Runtime string `json:"runtime"`
