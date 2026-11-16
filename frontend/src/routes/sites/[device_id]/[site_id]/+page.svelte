@@ -21,6 +21,7 @@
     let terminalText = '';
     let logSocket = null;
     let logConnected = false;
+    let lastLogSeq = 0;
     let agentLogOnline = false;
     let logStreamEnabled = false;
     let logReconnectTimer = null;
@@ -182,7 +183,7 @@
         logStatus = logReconnectAttempts > 0 ? 'reconnecting' : 'connecting';
         let socket;
         try {
-            socket = openSiteLogStream(deviceId, siteId);
+            socket = openSiteLogStream(deviceId, siteId, lastLogSeq);
         } catch {
             scheduleLogReconnect();
             return;
@@ -220,6 +221,9 @@
                     return;
                 }
                 if (message.type !== 'log' || message.site_id !== siteId) return;
+                const seq = Number(message.seq || 0);
+                if (seq && seq <= lastLogSeq) return;
+                if (seq) lastLogSeq = seq;
                 const stamp = message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
                 const lines = (terminalText ? terminalText.split('\n') : []).concat('[' + stamp + '] ' + String(message.line ?? ''));
                 terminalText = lines.slice(-500).join('\n');
