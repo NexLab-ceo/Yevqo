@@ -302,7 +302,7 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		logFile.Close()
 		return 0, fmt.Errorf("process registry unavailable: %w", m.registryErr)
 	}
-	record := ProcessRecord{SiteID:siteID, PID:pid, ProcessGroup:pid, Port:port, Runtime:runtime, WorkingDir:absPath, LogPath:logPath, StartedAt:time.Now().UTC(), StartToken:startToken, RunPath:cleanPath, ExtraEnv:cloneEnv(extraEnv)}
+	record := ProcessRecord{SiteID:siteID, PID:pid, ProcessGroup:pid, Port:port, Runtime:runtime, WorkingDir:absPath, LogPath:logPath, StartedAt:time.Now().UTC(), StartToken:startToken, RunPath:cleanPath}
 	if err := m.registry.Save(record); err != nil {
 		_ = killProcessGroup(pid, pid)
 		logFile.Close()
