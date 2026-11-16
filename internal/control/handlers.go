@@ -580,7 +580,14 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			result, err := conn.SendCommand(ctx, agentAction, payload)
 			if err != nil { apiError(w, shared.ErrInternal("site command failed: " + err.Error())); return }
 			if !result.Ok {
-				if in.Action != "stop" { _ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteError, 0) }
+				// A failed build/checkout leaves the active release untouched. A
+				// failed candidate health check also attempts rollback. Preserve the
+				// recorded site state unless rollback itself failed.
+				rollbackFailed := strings.Contains(result.Message, "rollback also failed")
+				deployAttempt := in.Action == "deploy" || in.Action == "rebuild"
+				if in.Action != "stop" && (!deployAttempt || rollbackFailed) {
+					_ = s.db.UpdateSiteStatus(r.Context(), deviceID, siteID, shared.SiteError, 0)
+				}
 				writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "message": result.Message})
 				return
 			}
