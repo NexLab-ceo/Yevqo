@@ -60,35 +60,42 @@ func (m *ProcessManager) SetLogEmitter(emit func(siteID, line string)) {
 	m.mu.Unlock()
 }
 
-type siteLogWriter struct {
-	mu sync.Mutex
-	siteID string
-	pending []byte
-	emit func(string, string)
-}
-
-func (w *siteLogWriter) Write(p []byte) (int, error) {
-	w.mu.Lock()
-	w.pending = append(w.pending, p...)
-	var lines []string
+func (m *ProcessManager) streamLogFile(siteID, logPath string, offset int64, pid int, emit func(string, string)) {
+	file, err := os.Open(logPath)
+	if err != nil { return }
+	defer file.Close()
+	ticker := time.NewTicker(150 * time.Millisecond)
+	defer ticker.Stop()
+	pending := make([]byte, 0, 4096)
 	for {
-		i := strings.IndexByte(string(w.pending), '\n')
-		if i < 0 {
-			if len(w.pending) > 8192 {
-				lines = append(lines, string(w.pending[:8192]))
-				w.pending = append([]byte(nil), w.pending[8192:]...)
+		buffer := make([]byte, 4096)
+		n, readErr := file.ReadAt(buffer, offset)
+		if n > 0 {
+			offset += int64(n)
+			pending = append(pending, buffer[:n]...)
+			for {
+				i := strings.IndexByte(string(pending), '\n')
+				if i < 0 { break }
+				line := strings.TrimSuffix(string(pending[:i]), "\r")
+				pending = append([]byte(nil), pending[i+1:]...)
+				if emit != nil { emit(siteID, line) }
 			}
-			break
+			if len(pending) > 8192 {
+				if emit != nil { emit(siteID, string(pending[:8192])) }
+				pending = append([]byte(nil), pending[8192:]...)
+			}
 		}
-		line := strings.TrimSuffix(string(w.pending[:i]), "\r")
-		lines = append(lines, line)
-		w.pending = append([]byte(nil), w.pending[i+1:]...)
+		if readErr != nil && readErr != io.EOF { return }
+		m.mu.RLock()
+		process, managed := m.procs[siteID]
+		stillManaged := managed && process.PID == pid
+		m.mu.RUnlock()
+		if !stillManaged || !isAlive(pid) {
+			if len(pending) > 0 && emit != nil { emit(siteID, string(pending)) }
+			return
+		}
+		<-ticker.C
 	}
-	w.mu.Unlock()
-	if w.emit != nil {
-		for _, line := range lines { w.emit(w.siteID, line) }
-	}
-	return len(p), nil
 }
 
 // ============================================================
@@ -328,14 +335,13 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 	if runtime == "nodejs" { env = append(env, "HOST=127.0.0.1") }
 	cmd.Env = env
 
-	// Persist output locally and stream complete lines to the Control Plane.
-	m.mu.RLock()
-	emitLog := m.logEmitter
-	m.mu.RUnlock()
-	streamWriter := &siteLogWriter{siteID: siteID, emit: emitLog}
-	outputWriter := io.MultiWriter(logFile, streamWriter)
-	cmd.Stdout = outputWriter
-	cmd.Stderr = outputWriter
+	// Keep process output attached directly to the file. The Agent tails the
+	// file separately so child processes never inherit a Go-managed output pipe.
+	logInfo, _ := logFile.Stat()
+	logStartOffset := int64(0)
+	if logInfo != nil { logStartOffset = logInfo.Size() }
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
 
 	// Отвязываем от родителя (чтобы не умер при рестарте агента).
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -401,6 +407,10 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 
 	// Keep a waiter attached while the Agent is alive so exited children are reaped.
 	go m.waitForProcessExit(siteID, pid, startToken, cmd)
+	m.mu.RLock()
+	emitLog := m.logEmitter
+	m.mu.RUnlock()
+	go m.streamLogFile(siteID, logPath, logStartOffset, pid, emitLog)
 	return pid, nil
 }
 
