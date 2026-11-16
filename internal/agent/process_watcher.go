@@ -18,6 +18,11 @@ func (m *ProcessManager) watchProcesses() {
 		if m.registry == nil { return }
 		for _, record := range m.registry.List() {
 			if verifyProcessRecord(record) { continue }
+			m.mu.RLock()
+			managed, tracked := m.procs[record.SiteID]
+			tracked = tracked && managed.PID == record.PID
+			m.mu.RUnlock()
+			if tracked { continue } // the waiter owns crash recovery for this child
 			m.mu.Lock()
 			delete(m.procs, record.SiteID)
 			m.mu.Unlock()
