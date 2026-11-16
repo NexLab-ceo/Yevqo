@@ -86,3 +86,10 @@ PostgreSQL installation, database creation, application-role provisioning, encry
 - Authentication is sent by the Agent as the first WebSocket binary message using the protocol `AuthRequest` envelope. Its `token` field is the user's referral/authentication token. The endpoint does not require an Authorization header or a `?token=` query parameter.
 - The WebSocket route is intentionally unauthenticated at HTTP upgrade time; authentication happens immediately after upgrade in the first protocol message.
 - The HTTP logging middleware must preserve the `http.Hijacker` interface used by Gorilla WebSocket. The Control Plane's `responseWriter` forwards hijacking so the WebSocket handshake can complete.
+
+
+### Agent process safety
+- Managed applications are tracked by PID plus the Linux process start token; a reused PID is not treated as the original application.
+- Each application runs in its own process group. The Agent waits for child exits while it is running and reconciles persisted records after restart.
+- Startup failures are terminated instead of leaving untracked application processes behind.
+- Database environment values are passed only to the selected application's runtime process. They are no longer written to the process registry; legacy `extra_env` values are scrubbed from the registry when it loads.
