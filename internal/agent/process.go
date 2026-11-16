@@ -705,13 +705,15 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 					oldRunPath = filepath.Join("sites", req.SiteId, rel)
 				}
 			}
-			if oldRunPath != "" {
-				if _, rollbackErr := m.StartSite(req.SiteId, oldRunPath, previous.Port, previous.Runtime); rollbackErr != nil {
-					return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed to start (%v); rollback also failed (%v)", startErr, rollbackErr)
-				}
+			if oldRunPath == "" {
+				return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed to start (%v); rollback also failed (previous release path is unavailable)", startErr)
 			}
+			if _, rollbackErr := m.StartSite(req.SiteId, oldRunPath, previous.Port, previous.Runtime); rollbackErr != nil {
+				return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed to start (%v); rollback also failed (%v)", startErr, rollbackErr)
+			}
+			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed health check; previous release was restored: %w", startErr)
 		}
-		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed health check and previous release was restored: %w", startErr)
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed health check and no previous release was active: %w", startErr)
 	}
 	output.WriteString(fmt.Sprintf("\nActivated release %s (pid %d)", commit, pid))
 	return pid, truncateDeployOutput(output.String()), commit, commitDate, nil
