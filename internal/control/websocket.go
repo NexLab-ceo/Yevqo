@@ -57,6 +57,15 @@ func (h *Hub) Remove(deviceID int64) {
 	delete(h.conns, deviceID)
 }
 
+// RemoveConn prevents an old socket's teardown from removing a newer Agent session.
+func (h *Hub) RemoveConn(a *AgentConn) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.conns[a.Device.ID] != a { return false }
+	delete(h.conns, a.Device.ID)
+	return true
+}
+
 func (h *Hub) Get(deviceID int64) (*AgentConn, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -107,8 +116,10 @@ func (srv *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 func (c *AgentConn) readPump(srv *Server) {
 	defer func() {
 		if c.Device != nil {
-			c.hub.Remove(c.Device.ID)
-			_ = c.db.MarkDeviceOffline(context.Background(), c.Device.ID)
+			if c.hub.RemoveConn(c) {
+				_ = c.db.MarkDeviceOffline(context.Background(), c.Device.ID)
+				if srv.logStreams != nil { srv.logStreams.publishAgentStatus(c.Device.UserID, c.Device.ID, "offline") }
+			}
 		}
 		c.ws.Close()
 	}()
@@ -213,6 +224,7 @@ func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 
 	c.Device = device
 	c.hub.Add(c)
+	if srv.logStreams != nil { srv.logStreams.publishAgentStatus(device.UserID, device.ID, "online") }
 
 	resp := shared.Envelope{
 		AuthResp: &shared.AuthResponse{
