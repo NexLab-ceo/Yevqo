@@ -1,4 +1,4 @@
-name: Build VELTRIX Dock
+name: Build Yevqo
 
 on:
   push:
@@ -115,12 +115,12 @@ jobs:
           Package: veltrix-all
           Version: $VERSION
           Architecture: aarch64
-          Maintainer: VELTRIX
+          Maintainer: NexLab
           Depends: mariadb, php, git, curl, jq, termux-services
           Section: utils
           Priority: optional
           Homepage: https://github.com/NexLab-ceo/veltrix
-          Description: Complete VELTRIX Dock Control Plane and Agent for Termux
+          Description: Yevqo Control Plane and Agent for Termux
            Includes server, Agent, web UI, migrations and setup scripts.
            cloudflared can be installed separately when Cloudflare Tunnel is needed.
           EOF
@@ -134,7 +134,7 @@ jobs:
           Section: utils
           Priority: optional
           Homepage: https://github.com/NexLab-ceo/veltrix
-          Description: VELTRIX Dock remote Android Agent for Termux
+          Description: Yevqo remote Android Agent for Termux
            Includes only the Agent executable and its interactive setup script.
            cloudflared is optional and can be installed separately.
           EOF
