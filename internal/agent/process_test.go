@@ -36,3 +36,29 @@ func TestSafeSiteDirectoryRejectsSymlinkEscape(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(sites, "escape")); err != nil { t.Skipf("symlinks unavailable: %v", err) }
 	if _, err := safeSiteDirectory(root, "escape"); err == nil { t.Fatal("expected symlink escape to be rejected") }
 }
+
+
+func TestValidDeployBranch(t *testing.T) {
+	for _, branch := range []string{"main", "release/2026.11", "feature/new-site", "v1_2"} {
+		if !validDeployBranch(branch) { t.Fatalf("expected branch %q to be valid", branch) }
+	}
+	for _, branch := range []string{"", "-option", "../main", "main..evil", "main//test", "main/", "main.", "branch name", "main\\test", "main@{1}"} {
+		if validDeployBranch(branch) { t.Fatalf("expected branch %q to be rejected", branch) }
+	}
+}
+
+func TestValidDeployRepository(t *testing.T) {
+	for _, raw := range []string{"https://github.com/example/site.git", "ssh://git@github.com/example/site.git"} {
+		if !validDeployRepository(raw) { t.Fatalf("expected repository URL %q to be valid", raw) }
+	}
+	for _, raw := range []string{"file:///tmp/site", "https://user:password@example.com/site.git", "https://example.com/site.git\\n--upload-pack=evil", "git://example.com/site.git"} {
+		if validDeployRepository(raw) { t.Fatalf("expected repository URL %q to be rejected", raw) }
+	}
+}
+
+func TestTruncateDeployOutput(t *testing.T) {
+	input := strings.Repeat("x", (64<<10)+10)
+	got := truncateDeployOutput(input)
+	if len(got) > (64<<10)+len("\\n[output truncated]") { t.Fatalf("output was not bounded: %d bytes", len(got)) }
+	if !strings.Contains(got, "[output truncated]") { t.Fatal("truncation marker missing") }
+}
