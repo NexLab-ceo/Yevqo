@@ -286,6 +286,7 @@
             <select id="runtime" class="input" bind:value={newSite.runtime}>
                 <option value="php">PHP</option>
                 <option value="go">Go</option>
+                <option value="nodejs">Node.js</option>
                 <option value="static">Статика</option>
             </select>
         </div>
