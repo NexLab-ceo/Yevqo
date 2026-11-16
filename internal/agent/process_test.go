@@ -113,6 +113,7 @@ func TestNodeRuntimeStartsServesAndStops(t *testing.T) {
 	pid, err := manager.StartSite("node-http", filepath.Join("sites", "node-http"), port, "nodejs")
 	if err != nil { t.Fatalf("start Node.js runtime: %v", err) }
 	if pid <= 0 { t.Fatalf("invalid Node.js PID: %d", pid) }
+	defer func() { _ = manager.StopSite("node-http") }()
 	response, err := http.Get("http://127.0.0.1:" + strconv.Itoa(port))
 	if err != nil { t.Fatalf("request Node.js site: %v", err) }
 	_ = response.Body.Close()
