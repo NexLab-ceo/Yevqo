@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -613,7 +614,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 	branch := req.GitBranch
 	if branch == "" { branch = "main" }
 	if !validDeployBranch(branch) { return 0, "", "", "", fmt.Errorf("invalid Git branch") }
-	if req.Runtime != "php" && req.Runtime != "go" && req.Runtime != "static" {
+	if req.Runtime != "php" && req.Runtime != "go" && req.Runtime != "static" && req.Runtime != "nodejs" {
 		return 0, "", "", "", fmt.Errorf("runtime %q cannot be launched by this Agent yet; supported runtimes are php, go, static and nodejs", req.Runtime)
 	}
 
@@ -746,6 +747,113 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 	return pid, truncateDeployOutput(output.String()), commit, commitDate, nil
 }
 
+
+
+type SiteRelease struct {
+	Commit string `json:"commit"`
+	Date string `json:"date,omitempty"`
+	Active bool `json:"active"`
+	Runtime string `json:"runtime"`
+}
+
+func validReleaseCommit(commit string) bool {
+	if len(commit) != 40 && len(commit) != 64 { return false }
+	for _, r := range commit { if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) { return false } }
+	return true
+}
+
+// ListSiteReleases reads immutable release directories and marks the release
+// currently referenced by the durable process registry.
+func (m *ProcessManager) ListSiteReleases(siteID, runtime string) ([]SiteRelease, error) {
+	if !validSiteID(siteID) { return nil, fmt.Errorf("invalid site id") }
+	root, err := safeSiteDirectory(m.DataRoot, siteID)
+	if err != nil { return nil, err }
+	releasesRoot := filepath.Join(root, ".yevqo", "releases")
+	entries, err := os.ReadDir(releasesRoot)
+	if os.IsNotExist(err) { return []SiteRelease{}, nil }
+	if err != nil { return nil, fmt.Errorf("read release history: %w", err) }
+	activeCommit := ""
+	if m.registry != nil {
+		if record, ok := m.registry.Get(siteID); ok {
+			prefix := filepath.Join("sites", siteID, ".yevqo", "releases") + string(filepath.Separator)
+			rel := filepath.Clean(record.RunPath)
+			if strings.HasPrefix(rel, prefix) {
+				rest := strings.TrimPrefix(rel, prefix)
+				activeCommit = strings.SplitN(rest, string(filepath.Separator), 2)[0]
+			}
+		}
+	}
+	out := make([]SiteRelease, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || !validReleaseCommit(entry.Name()) { continue }
+		releaseDir := filepath.Join(releasesRoot, entry.Name())
+		resolved, resolveErr := filepath.EvalSymlinks(releaseDir)
+		if resolveErr != nil { continue }
+		rel, relErr := filepath.Rel(releasesRoot, resolved)
+		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { continue }
+		date := ""
+		if dateBytes, gitErr := exec.Command("git", "-C", resolved, "show", "-s", "--format=%cI", "HEAD").Output(); gitErr == nil {
+			date = strings.TrimSpace(string(dateBytes))
+		}
+		out = append(out, SiteRelease{Commit:entry.Name(), Date:date, Active:entry.Name()==activeCommit, Runtime:runtime})
+	}
+	sort.Slice(out, func(i,j int) bool {
+		if out[i].Date == out[j].Date { return out[i].Commit > out[j].Commit }
+		return out[i].Date > out[j].Date
+	})
+	if len(out) > 50 { out = out[:50] }
+	return out, nil
+}
+
+// RollbackSiteRelease switches to an existing immutable release without
+// rebuilding it. If activation fails, the previously running process is restored.
+func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime string, port int) (int, error) {
+	m.deployMu.Lock()
+	defer m.deployMu.Unlock()
+	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
+	if !validReleaseCommit(commit) { return 0, fmt.Errorf("invalid release commit") }
+	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
+	if port < 1024 || port > 65535 { return 0, fmt.Errorf("invalid site port") }
+	if rootDir == "" { rootDir = "." }
+	if filepath.IsAbs(rootDir) || strings.Contains(rootDir, "\\") { return 0, fmt.Errorf("invalid release root directory") }
+	rootDir = filepath.Clean(rootDir)
+	if rootDir == ".." || strings.HasPrefix(rootDir, ".."+string(filepath.Separator)) { return 0, fmt.Errorf("release root directory escapes site") }
+	siteRoot, err := safeSiteDirectory(m.DataRoot, siteID)
+	if err != nil { return 0, err }
+	releaseDir := filepath.Join(siteRoot, ".yevqo", "releases", commit)
+	resolvedRelease, err := filepath.EvalSymlinks(releaseDir)
+	if err != nil { return 0, fmt.Errorf("release not found: %s", commit) }
+	resolvedRoot, err := filepath.EvalSymlinks(filepath.Join(resolvedRelease, rootDir))
+	if err != nil { return 0, fmt.Errorf("release root directory not found: %w", err) }
+	rel, err := filepath.Rel(resolvedRelease, resolvedRoot)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return 0, fmt.Errorf("release root resolves outside release directory") }
+	if m.registry == nil || m.registryErr != nil { return 0, fmt.Errorf("process registry unavailable: %v", m.registryErr) }
+	previous, hadPrevious := m.registry.Get(siteID)
+	if hadPrevious && verifyProcessRecord(previous) {
+		if err := m.StopSite(siteID); err != nil { return 0, fmt.Errorf("stop current release: %w", err) }
+	} else if hadPrevious {
+		_ = m.registry.Delete(siteID)
+		m.mu.Lock(); delete(m.procs, siteID); m.mu.Unlock()
+		hadPrevious = false
+	}
+	runPath := filepath.Join("sites", siteID, ".yevqo", "releases", commit)
+	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
+	pid, startErr := m.StartSite(siteID, runPath, port, runtime)
+	if startErr == nil { return pid, nil }
+	if hadPrevious {
+		oldPath := previous.RunPath
+		if oldPath == "" {
+			if rel, e := filepath.Rel(siteRoot, previous.WorkingDir); e == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				oldPath = filepath.Join("sites", siteID, rel)
+			}
+		}
+		if oldPath == "" { return 0, fmt.Errorf("rollback activation failed (%v); previous process path unavailable", startErr) }
+		if _, restoreErr := m.StartSite(siteID, oldPath, previous.Port, previous.Runtime); restoreErr != nil {
+			return 0, fmt.Errorf("rollback activation failed (%v); restoring previous release also failed (%v)", startErr, restoreErr)
+		}
+	}
+	return 0, fmt.Errorf("could not activate release %s: %w", commit, startErr)
+}
 
 // BuildSite runs the Android-native local provider for a site. Project code is
 // executed only when the caller explicitly sets AllowProjectCode.
