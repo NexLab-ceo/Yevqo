@@ -83,3 +83,13 @@ func TestNodeStartCommandUsesPackageManagerWithoutShell(t *testing.T) {
 	if cmd.Path == "" || len(cmd.Args) != 3 || cmd.Args[1] != "run" || cmd.Args[2] != "start" { t.Fatalf("unexpected Node start command: %#v", cmd.Args) }
 	if strings.Contains(strings.ToLower(cmd.Path), "sh") { t.Fatalf("Node runtime must not invoke a shell: %s", cmd.Path) }
 }
+
+func TestCreateNodeSiteWritesStarterFiles(t *testing.T) {
+	root := t.TempDir()
+	manager := NewProcessManager(root)
+	if err := manager.CreateSite("node-demo", 3000, "nodejs"); err != nil { t.Fatal(err) }
+	for _, name := range []string{"package.json", "server.js"} {
+		if _, err := os.Stat(filepath.Join(root, "sites", "node-demo", name)); err != nil { t.Fatalf("expected Node.js starter file %s: %v", name, err) }
+	}
+	if err := manager.CreateSite("invalid-node", 3000, "node"); err == nil { t.Fatal("expected unknown runtime to be rejected") }
+}
