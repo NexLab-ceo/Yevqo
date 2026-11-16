@@ -749,13 +749,6 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 
 
 
-type SiteRelease struct {
-	Commit string `json:"commit"`
-	Date string `json:"date,omitempty"`
-	Active bool `json:"active"`
-	Runtime string `json:"runtime"`
-}
-
 func validReleaseCommit(commit string) bool {
 	if len(commit) != 40 && len(commit) != 64 { return false }
 	for _, r := range commit { if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) { return false } }
@@ -764,13 +757,13 @@ func validReleaseCommit(commit string) bool {
 
 // ListSiteReleases reads immutable release directories and marks the release
 // currently referenced by the durable process registry.
-func (m *ProcessManager) ListSiteReleases(siteID, runtime string) ([]SiteRelease, error) {
+func (m *ProcessManager) ListSiteReleases(siteID, runtime string) ([]shared.SiteRelease, error) {
 	if !validSiteID(siteID) { return nil, fmt.Errorf("invalid site id") }
 	root, err := safeSiteDirectory(m.DataRoot, siteID)
 	if err != nil { return nil, err }
 	releasesRoot := filepath.Join(root, ".yevqo", "releases")
 	entries, err := os.ReadDir(releasesRoot)
-	if os.IsNotExist(err) { return []SiteRelease{}, nil }
+	if os.IsNotExist(err) { return []shared.SiteRelease{}, nil }
 	if err != nil { return nil, fmt.Errorf("read release history: %w", err) }
 	activeCommit := ""
 	if m.registry != nil {
@@ -783,7 +776,7 @@ func (m *ProcessManager) ListSiteReleases(siteID, runtime string) ([]SiteRelease
 			}
 		}
 	}
-	out := make([]SiteRelease, 0, len(entries))
+	out := make([]shared.SiteRelease, 0, len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() || !validReleaseCommit(entry.Name()) { continue }
 		releaseDir := filepath.Join(releasesRoot, entry.Name())
@@ -795,7 +788,7 @@ func (m *ProcessManager) ListSiteReleases(siteID, runtime string) ([]SiteRelease
 		if dateBytes, gitErr := exec.Command("git", "-C", resolved, "show", "-s", "--format=%cI", "HEAD").Output(); gitErr == nil {
 			date = strings.TrimSpace(string(dateBytes))
 		}
-		out = append(out, SiteRelease{Commit:entry.Name(), Date:date, Active:entry.Name()==activeCommit, Runtime:runtime})
+		out = append(out, shared.SiteRelease{Commit:entry.Name(), Date:date, Active:entry.Name()==activeCommit, Runtime:runtime})
 	}
 	sort.Slice(out, func(i,j int) bool {
 		if out[i].Date == out[j].Date { return out[i].Commit > out[j].Commit }
