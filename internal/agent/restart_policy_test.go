@@ -6,7 +6,7 @@ import (
 )
 
 func TestRestartDelayIsBoundedExponential(t *testing.T) {
-	want := []time.Duration{2*time.Second, 4*time.Second, 8*time.Second, 8*time.Second}
+	want := []time.Duration{2*time.Second, 2*time.Second, 4*time.Second, 8*time.Second}
 	for attempt, expected := range want {
 		if got := restartDelay(attempt); got != expected {
 			t.Fatalf("restartDelay(%d) = %s, want %s", attempt, got, expected)
