@@ -57,3 +57,15 @@ func TestVeltrixManifestAndSafeCommands(t *testing.T) {
  if _,err:=parseManifestBuildCommand("build","npm run build && curl bad");err==nil{t.Fatal("shell operators must be rejected")}
  if _,err:=parseManifestBuildCommand("build","sh -c id");err==nil{t.Fatal("shell executables must not be allowlisted")}
 }
+
+func TestNodeBuildSkipsMissingBuildScript(t *testing.T) {
+	root:=t.TempDir()
+	if err:=os.WriteFile(filepath.Join(root,"package.json"),[]byte(`{"scripts":{"start":"node server.js"}}`),0600);err!=nil{t.Fatal(err)}
+	steps,err:=androidBuildSteps(root,AndroidBuildRequest{Stack:"nodejs",PackageTool:"npm"})
+	if err!=nil{t.Fatal(err)}
+	if len(steps)!=1||steps[0].name!="install"{t.Fatalf("expected install-only plan, got %#v",steps)}
+	if err:=os.WriteFile(filepath.Join(root,"package.json"),[]byte(`{"scripts":{"build":"vite build"}}`),0600);err!=nil{t.Fatal(err)}
+	steps,err=androidBuildSteps(root,AndroidBuildRequest{Stack:"nodejs",PackageTool:"npm"})
+	if err!=nil{t.Fatal(err)}
+	if len(steps)!=2||steps[1].name!="build"{t.Fatalf("expected install and build steps, got %#v",steps)}
+}
