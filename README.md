@@ -1,6 +1,6 @@
-# VELTRIX Dock
+# Yevqo
 
-The `main` branch is the active VELTRIX Dock implementation. It contains the SvelteKit Control Plane, Go Agent, Android/Termux packages, website lifecycle, database operations, Build Engine and Cloudflare Tunnel integration.
+The `main` branch is the active Yevqo implementation. It contains the SvelteKit Control Plane, Go Agent, Android/Termux packages, website lifecycle, database operations, Build Engine and Cloudflare Tunnel integration.
 
 ## Что скачать
 
