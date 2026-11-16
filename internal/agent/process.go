@@ -1,4 +1,4 @@
-// Package agent — часть VELTRIX Dock, которая работает на телефонах пользователей.
+// Package agent — часть Yevqo, которая работает на телефонах пользователей.
 // Этот файл: запуск/остановка процессов (php -S, Go, статика).
 package agent
 
@@ -144,8 +144,8 @@ func (m *ProcessManager) CreateSite(siteID string, port int, runtime string) err
 		if os.IsExist(err) { return fmt.Errorf("site directory already exists") }
 		return fmt.Errorf("create site directory: %w", err)
 	}
-	fileName, body := "index.php", "<?php\n// Your VELTRIX website starts here.\necho 'Hello from VELTRIX';\n"
-	if runtime == "static" { fileName, body = "index.html", "<!doctype html>\n<html lang=\"en\"><meta charset=\"utf-8\"><title>VELTRIX site</title><h1>Your site is ready</h1></html>\n" }
+	fileName, body := "index.php", "<?php\n// Your Yevqo website starts here.\necho 'Hello from Yevqo';\n"
+	if runtime == "static" { fileName, body = "index.html", "<!doctype html>\n<html lang=\"en\"><meta charset=\"utf-8\"><title>Yevqo site</title><h1>Your site is ready</h1></html>\n" }
 	if runtime == "go" { fileName, body = "README.md", "# Go site\n\nBuild your application as ./site before starting this site.\n" }
 	f, err := os.OpenFile(filepath.Join(target, fileName), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o640)
 	if err != nil { _ = os.RemoveAll(target); return fmt.Errorf("create starter file: %w", err) }
