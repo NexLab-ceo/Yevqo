@@ -108,8 +108,8 @@ export async function getSite(deviceId, siteId) {
     return request('GET', `/api/sites/${deviceId}/${siteId}`);
 }
 
-export async function runSiteCommand(deviceId, siteId, action) {
-    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/cmd`, { action });
+export async function runSiteCommand(deviceId, siteId, action, allowProjectCode = false) {
+    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/cmd`, { action, allow_project_code: allowProjectCode });
 }
 
 export async function getSiteGit(deviceId, siteId) {
