@@ -216,6 +216,26 @@ func (h *CommandHandler) handleSiteLifecycle(cmd *shared.Command, action string)
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: fmt.Sprintf("%s completed (pid %d): %s", action, pid, output), Payload: payload}
 }
 
+
+func (h *CommandHandler) handleListSiteReleases(cmd *shared.Command) *shared.Result {
+	var req shared.ListSiteReleases
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid list_site_releases payload") }
+	releases, err := h.processes.ListSiteReleases(req.SiteId, req.Runtime)
+	if err != nil { return errorResult(cmd.Id, err.Error()) }
+	payload, err := shared.Marshal(&shared.SiteReleasesResult{Releases:releases})
+	if err != nil { return errorResult(cmd.Id, "could not encode release history") }
+	return &shared.Result{Id:cmd.Id, Ok:true, Message:"release history loaded", Payload:payload}
+}
+
+func (h *CommandHandler) handleRollbackSiteRelease(cmd *shared.Command) *shared.Result {
+	var req shared.RollbackSiteRelease
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid rollback_site_release payload") }
+	pid, err := h.processes.RollbackSiteRelease(req.SiteId, req.Commit, req.RootDir, req.Runtime, int(req.Port))
+	if err != nil { return errorResult(cmd.Id, err.Error()) }
+	payload, _ := shared.Marshal(&shared.StartSiteResult{Pid:uint32(pid), Port:req.Port, CommitHash:req.Commit})
+	return &shared.Result{Id:cmd.Id, Ok:true, Message:fmt.Sprintf("rollback completed: release %s is active (pid %d)", req.Commit, pid), Payload:payload}
+}
+
 func (h *CommandHandler) handleGitPull(cmd *shared.Command) *shared.Result {
 	var req shared.GitPull
 	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
