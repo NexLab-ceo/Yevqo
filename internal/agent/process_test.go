@@ -128,3 +128,26 @@ func TestNodeRuntimeStartsServesAndStops(t *testing.T) {
 	}
 	t.Fatal("Node.js listener remained open after StopSite")
 }
+
+func TestListSiteReleasesMarksActiveRelease(t *testing.T) {
+	root := t.TempDir()
+	releasesRoot := filepath.Join(root, "sites", "demo", ".yevqo", "releases")
+	if err := os.MkdirAll(releasesRoot, 0700); err != nil { t.Fatal(err) }
+	releaseDir := filepath.Join(releasesRoot, strings.Repeat("a", 40))
+	if err := os.MkdirAll(releaseDir, 0700); err != nil { t.Fatal(err) }
+	manager := &ProcessManager{DataRoot:root}
+	manager.registry, manager.registryErr = NewProcessRegistry(root)
+	if err := manager.registry.Save(ProcessRecord{SiteID:"demo", PID:123, ProcessGroup:123, RunPath:filepath.Join("sites","demo",".yevqo","releases",strings.Repeat("a",40)), StartToken:"test"}); err != nil { t.Fatal(err) }
+	releases, err := manager.ListSiteReleases("demo", "nodejs")
+	if err != nil { t.Fatal(err) }
+	if len(releases) != 1 || !releases[0].Active || releases[0].Runtime != "nodejs" { t.Fatalf("unexpected release history: %#v", releases) }
+}
+
+func TestValidReleaseCommit(t *testing.T) {
+	for _, commit := range []string{strings.Repeat("a",40), strings.Repeat("f",64)} {
+		if !validReleaseCommit(commit) { t.Fatalf("expected valid commit %q", commit) }
+	}
+	for _, commit := range []string{"", strings.Repeat("a",39), strings.Repeat("g",40), "../"+strings.Repeat("a",40)} {
+		if validReleaseCommit(commit) { t.Fatalf("expected invalid commit %q", commit) }
+	}
+}
