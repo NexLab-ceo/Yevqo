@@ -312,6 +312,7 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 // StopSite останавливает сайт (SIGTERM, потом SIGKILL).
 func (m *ProcessManager) StopSite(siteID string) error {
 	if !validSiteID(siteID) { return fmt.Errorf("invalid site id") }
+	if m.registryErr != nil || m.registry == nil { return fmt.Errorf("process registry unavailable: %v", m.registryErr) }
 	record, exists := m.registry.Get(siteID)
 	if !exists { return fmt.Errorf("site %s is not running", siteID) }
 	if !verifyProcessRecord(record) { _ = m.registry.Delete(siteID); delete(m.procs,siteID); return fmt.Errorf("site %s process identity is stale; refusing to signal PID",siteID) }
