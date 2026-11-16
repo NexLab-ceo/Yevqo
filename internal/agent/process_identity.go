@@ -27,7 +27,33 @@ func (m *ProcessManager) restoreProcesses() {
  for _,r:=range m.registry.List(){
   if !validSiteID(r.SiteID)||!verifyProcessRecord(r){_ = m.registry.Delete(r.SiteID);continue}
   m.procs[r.SiteID]=&Process{SiteID:r.SiteID,PID:r.PID,Port:r.Port,Runtime:r.Runtime,LogPath:r.LogPath}
+  go m.watchRestoredProcess(r)
  }
+}
+
+// watchRestoredProcess monitors a process adopted after Agent restart. Such a
+// process is not a child, so cmd.Wait cannot reap it; poll its start identity.
+func (m *ProcessManager) watchRestoredProcess(record ProcessRecord) {
+ ticker := time.NewTicker(2 * time.Second)
+ defer ticker.Stop()
+ for range ticker.C {
+  if verifyProcessRecord(record) { continue }
+  current, ok := m.registry.Get(record.SiteID)
+  if !ok || current.PID != record.PID || current.StartToken != record.StartToken { return }
+  m.mu.Lock()
+  managed, exists := m.procs[record.SiteID]
+  if exists && managed.PID == record.PID { delete(m.procs, record.SiteID) }
+  m.mu.Unlock()
+  _ = m.registry.Delete(record.SiteID)
+  m.restartMu.Lock()
+  if m.restartAttempts == nil { m.restartAttempts = make(map[string]int) }
+  if m.intentionalStops == nil { m.intentionalStops = make(map[string]bool) }
+  intentional := m.intentionalStops[record.SiteID]
+  m.restartMu.Unlock()
+  if !intentional { go m.recoverSite(record) }
+  return
+ }
+}
 }
 // processGroupAlive checks every member of the group, not just its leader.
 // Linux may retain killed orphan descendants as zombies briefly; they cannot
