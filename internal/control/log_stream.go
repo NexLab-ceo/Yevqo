@@ -41,6 +41,25 @@ func (h *logStreamHub) unsubscribe(sub *logStreamSubscriber) {
 	h.mu.Unlock()
 }
 
+func (h *logStreamHub) publishAgentStatus(userID, deviceID int64, status string) {
+	payload, err := json.Marshal(map[string]interface{}{
+		"type": "agent_status", "device_id": deviceID, "status": status,
+		"timestamp": time.Now().UTC(),
+	})
+	if err != nil { return }
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for sub := range h.subscribers {
+		if sub.userID != userID || sub.deviceID != deviceID { continue }
+		select {
+		case sub.messages <- payload:
+		default:
+			select { case <-sub.messages: default: }
+			select { case sub.messages <- payload: default: }
+		}
+	}
+}
+
 func (h *logStreamHub) publish(userID, deviceID int64, event shared.LogEvent) {
 	payload, err := json.Marshal(map[string]interface{}{
 		"type": "log", "device_id": deviceID, "site_id": event.SiteId,
