@@ -57,7 +57,19 @@ func NewProcessManager(dataRoot string) *ProcessManager {
 func (m *ProcessManager) SetLogEmitter(emit func(siteID, line string)) {
 	m.mu.Lock()
 	m.logEmitter = emit
+	processes := make([]*Process, 0, len(m.procs))
+	for _, process := range m.procs {
+		if isAlive(process.PID) { processes = append(processes, process) }
+	}
 	m.mu.Unlock()
+
+	// Resume streaming for processes restored from the durable registry after
+	// an Agent restart. Start at EOF to avoid replaying old log history.
+	for _, process := range processes {
+		info, err := os.Stat(process.LogPath)
+		if err != nil { continue }
+		go m.streamLogFile(process.SiteID, process.LogPath, info.Size(), process.PID, emit)
+	}
 }
 
 func (m *ProcessManager) streamLogFile(siteID, logPath string, offset int64, pid int, emit func(string, string)) {
