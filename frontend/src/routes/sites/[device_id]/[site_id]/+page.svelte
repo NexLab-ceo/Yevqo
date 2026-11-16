@@ -157,16 +157,16 @@
     }
 
     $: visibleTerminalText = logSearch
-        ? terminalText.split('\\n').filter(line => line.toLowerCase().includes(logSearch.toLowerCase())).join('\\n')
+        ? terminalText.split('\n').filter(line => line.toLowerCase().includes(logSearch.toLowerCase())).join('\n')
         : terminalText;
-    $: filteredTerminalText = visibleTerminalText.split('\\n').filter(line => {
+    $: filteredTerminalText = visibleTerminalText.split('\n').filter(line => {
         if (logLevel === 'all') return true;
         const upper = line.toUpperCase();
-        if (logLevel === 'error') return /\\b(ERROR|ERR|FATAL|PANIC)\\b/.test(upper);
-        if (logLevel === 'warn') return /\\b(WARN|WARNING)\\b/.test(upper);
-        if (logLevel === 'info') return /\\b(INFO|DEBUG|TRACE)\\b/.test(upper) || !/\\b(ERROR|ERR|FATAL|PANIC|WARN|WARNING)\\b/.test(upper);
+        if (logLevel === 'error') return /\b(ERROR|ERR|FATAL|PANIC)\b/.test(upper);
+        if (logLevel === 'warn') return /\b(WARN|WARNING)\b/.test(upper);
+        if (logLevel === 'info') return /\b(INFO|DEBUG|TRACE)\b/.test(upper) || !/\b(ERROR|ERR|FATAL|PANIC|WARN|WARNING)\b/.test(upper);
         return true;
-    }).join('\\n');
+    }).join('\n');
 
     function clearTerminal() { terminalText = ''; }
 
