@@ -3,6 +3,7 @@ package agent
 import (
  "time"
  "net"
+ "os/exec"
  "strconv"
 )
 
@@ -29,4 +30,24 @@ func (m *ProcessManager) IsSiteHealthy(siteID string) bool {
  r,ok:=m.registry.Get(siteID);if !ok||!verifyProcessRecord(r){return false}
  conn,err:=net.DialTimeout("tcp",net.JoinHostPort("127.0.0.1",strconv.Itoa(r.Port)),500*time.Millisecond)
  if err!=nil{return false};_ = conn.Close();return true
+}
+
+
+// waitForProcessExit reaps a managed child and removes only its own registry
+// record. The PID and start token guard against deleting a replacement process.
+func (m *ProcessManager) waitForProcessExit(siteID string, pid int, startToken string, cmd *exec.Cmd) {
+	_ = cmd.Wait()
+
+	m.mu.Lock()
+	if current, ok := m.procs[siteID]; ok && current.PID == pid {
+		delete(m.procs, siteID)
+	}
+	m.mu.Unlock()
+
+	if m.registry == nil {
+		return
+	}
+	if record, ok := m.registry.Get(siteID); ok && record.PID == pid && record.StartToken == startToken {
+		_ = m.registry.Delete(siteID)
+	}
 }
