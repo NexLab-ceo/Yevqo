@@ -1,6 +1,6 @@
 # Yevqo
 
-The `main` branch is the active Yevqo implementation. It contains the SvelteKit Control Plane, Go Agent, Android/Termux packages, website lifecycle, database operations, Build Engine and Cloudflare Tunnel integration.
+The `main` branch is the active Yevqo implementation. It contains the SvelteKit Control Plane, Go Agent, Android/Termux packages, website lifecycle, database operations, Build Engine and Cloudflare Tunnel integration. Existing Termux package names, service identifiers and data directories still use the legacy `veltrix-*` names for upgrade compatibility; they are not the product's public name.
 
 ## Что скачать
 
@@ -22,7 +22,7 @@ The `main` branch is the active Yevqo implementation. It contains the SvelteKit 
 - Database Server records are isolated per account and device. A server cannot be removed while database metadata references it.
 - Account settings persist Simple / Advanced mode, locale and theme.
 - Activity logs, notifications, account summary reports and backup metadata have read APIs.
-- The Termux installer prepares MariaDB and the local application account, then copies SQL migrations into the Control Plane data directory. On every startup, Control Plane idempotently ensures its own database exists using the local MariaDB client, creates the core tables from `000_core.sql` on first run, then applies additive migrations `001`–`006`. Applied migration names and checksums are recorded in `schema_migrations`. Missing migration files are a startup error rather than silently skipping schema setup.
+- The Termux installer prepares MariaDB and the local application account, then copies SQL migrations into the Control Plane data directory. On every startup, Control Plane idempotently ensures its own database exists using the local MariaDB client, creates the core tables from `000_core.sql` on first run, then applies additive migrations `001`–`010`. Applied migration names and checksums are recorded in `schema_migrations`. Missing migration files are a startup error rather than silently skipping schema setup.
 
 ### Important implementation boundary
 PostgreSQL installation, database creation, application-role provisioning, encrypted credential storage, website process injection and local database backup are now wired through typed Agent commands. Restore, download/export, MariaDB/MySQL, existing-cluster adoption and full credential rotation remain pending. The UI reports device-side actions only after the Agent confirms them.
