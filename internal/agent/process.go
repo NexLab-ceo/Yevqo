@@ -224,8 +224,13 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 		// Для Go предполагаем, что бинарник уже собран в папке сайта.
 		binary := filepath.Join(absPath, "site")
 		if _, err := os.Stat(binary); err != nil {
-			logFile.Close()
-			return 0, fmt.Errorf("go binary not found: %s (build it first)", binary)
+			// The built-in Go provider emits veltrix-app; retain compatibility
+			// with existing manually supplied "site" binaries.
+			binary = filepath.Join(absPath, "veltrix-app")
+			if _, fallbackErr := os.Stat(binary); fallbackErr != nil {
+				logFile.Close()
+				return 0, fmt.Errorf("go binary not found: expected site or veltrix-app in %s (build it first)", absPath)
+			}
 		}
 		cmd = exec.Command(binary)
 		cmd.Dir = absPath
