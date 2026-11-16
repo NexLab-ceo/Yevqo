@@ -22,14 +22,14 @@
  async function toggleTheme(){if(modeSaving)return;modeSaving=true;const next=$theme==='dark'?'light':'dark';const r=await saveSettings({theme:next});if(r.ok)theme.set(next);else notify(r.error||'Не удалось изменить тему','error');modeSaving=false}
  async function handleLogout(){await logout();user.set(null);goto('/login')}
 </script>
-<svelte:head><meta name="theme-color" content={$theme === "dark" ? "#09090B" : "#F4F6FA"}/><title>VELTRIX Dock</title></svelte:head>
-{#if loading}<div class="loading-screen"><span class="loading-mark">V</span><span>VELTRIX Dock</span><i></i></div>
+<svelte:head><meta name="theme-color" content={$theme === "dark" ? "#09090B" : "#F4F6FA"}/><title>Yevqo</title></svelte:head>
+{#if loading}<div class="loading-screen"><span class="loading-mark">Y</span><span>Yevqo</span><i></i></div>
 {:else if !$isAuthenticated}<slot/>
 {:else}
 <div class="app-shell" data-mode={$uiMode} data-theme={$theme}>
  {#if mobileNavOpen}<button class="mobile-scrim" aria-label="Закрыть меню" on:click={()=>mobileNavOpen=false}></button>{/if}
  <aside class:mobile-open={mobileNavOpen} class="sidebar">
-  <a class="brand-lockup" href="/"><span class="brand-mark">V</span><span class="brand-copy"><strong>VELTRIX</strong><small>DOCK</small></span><span class="brand-version">BETA</span></a>
+  <a class="brand-lockup" href="/"><span class="brand-mark">Y</span><span class="brand-copy"><strong>Yevqo</strong></span><span class="brand-version">BETA</span></a>
   <button class="workspace-switcher" on:click={()=>goto('/settings')}><span class="workspace-avatar">N</span><span class="workspace-copy"><strong>Personal workspace</strong><small>Free plan · Local host</small></span><span class="switch-chevron">⌄</span></button>
   <nav class="sidebar-nav">
    {#each groups as group}
