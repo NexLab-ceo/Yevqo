@@ -27,6 +27,7 @@
     let analyzingBuild = false;
     let buildRunning = false;
     let allowProjectCode = false;
+    let allowDeployCode = false;
     let buildResult = null;
 
     onMount(async () => {
@@ -61,6 +62,10 @@
 
     async function runAction(action) {
         if (!online || busyAction) return;
+        if ((action === 'deploy' || action === 'rebuild') && !allowDeployCode) {
+            notify('Подтвердите выполнение кода репозитория перед деплоем', 'warning');
+            return;
+        }
         busyAction = action;
         let res;
         if (action === 'start') {
@@ -68,7 +73,7 @@
                 site_id: site.site_id, path: site.path, port: site.port, runtime: site.runtime
             });
         } else {
-            res = await runSiteCommand(deviceId, siteId, action);
+            res = await runSiteCommand(deviceId, siteId, action, action === 'deploy' || action === 'rebuild' ? allowDeployCode : false);
         }
         busyAction = '';
         if (!res.ok || !res.data?.ok) {
@@ -214,9 +219,13 @@
                 <span>{site.status === 'running' ? 'Running' : site.status === 'error' ? 'Error' : 'Stopped'}</span>
             </div>
         </div>
+        <div class="deploy-consent">
+            <label><input type="checkbox" bind:checked={allowDeployCode} /> Я доверяю этому Git-репозиторию и разрешаю выполнять его install/build-скрипты на устройстве.</label>
+            <small>Код сборки выполняется с правами пользователя Agent; это не изолированная песочница.</small>
+        </div>
         <div class="actions">
-            <Button variant="primary" disabled={!online || !!busyAction} loading={busyAction === 'deploy'} on:click={() => runAction('deploy')}>Deploy</Button>
-            <Button disabled={!online || !!busyAction} loading={busyAction === 'rebuild'} on:click={() => runAction('rebuild')}>Rebuild</Button>
+            <Button variant="primary" disabled={!online || !!busyAction || !allowDeployCode} loading={busyAction === 'deploy'} on:click={() => runAction('deploy')}>Deploy</Button>
+            <Button disabled={!online || !!busyAction || !allowDeployCode} loading={busyAction === 'rebuild'} on:click={() => runAction('rebuild')}>Rebuild</Button>
             <Button disabled={!online || !!busyAction} loading={busyAction === 'restart'} on:click={() => runAction('restart')}>Reload</Button>
             {#if site.status === 'running'}
                 <Button variant="danger" disabled={!online || !!busyAction} loading={busyAction === 'stop'} on:click={() => runAction('stop')}>Stop</Button>
