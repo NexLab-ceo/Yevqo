@@ -1,8 +1,8 @@
 <script>
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, listLogs, listSiteDatabaseConnections } from '$lib/api.js';
+    import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, listLogs, listSiteDatabaseConnections, openSiteLogStream } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -19,6 +19,8 @@
     let showTerminal = false;
     let terminalLoading = false;
     let terminalText = '';
+    let logSocket = null;
+    let logConnected = false;
     let activeTab = 'general';
     let releases = [];
     let releasesLoading = false;
@@ -32,6 +34,8 @@
     let allowProjectCode = false;
     let allowDeployCode = false;
     let buildResult = null;
+
+    onDestroy(() => { if (logSocket) { logSocket.close(); logSocket = null; } });
 
     onMount(async () => {
         deviceId = $page.params.device_id;
@@ -122,6 +126,38 @@
             }).join('\n') || 'Устройство офлайн. В базе нет сохранённых записей для этого сайта.';
         }
         terminalLoading = false;
+        if (online) connectLiveLogs();
+    }
+
+    function connectLiveLogs() {
+        if (!online || logSocket) return;
+        const socket = openSiteLogStream(deviceId, siteId);
+        logSocket = socket;
+        socket.onopen = () => { logConnected = true; };
+        socket.onmessage = (event) => {
+            try {
+                const message = JSON.parse(event.data);
+                if (message.type !== 'log' || message.site_id !== siteId) return;
+                const stamp = message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+                const lines = (terminalText ? terminalText.split('\\n') : []).concat('[' + stamp + '] ' + String(message.line ?? ''));
+                terminalText = lines.slice(-500).join('\\n');
+            } catch { /* Ignore malformed stream frames. */ }
+        };
+        socket.onclose = () => {
+            if (logSocket === socket) logSocket = null;
+            logConnected = false;
+        };
+        socket.onerror = () => { logConnected = false; };
+    }
+
+    function toggleLiveLogs() {
+        if (logSocket) {
+            logSocket.close();
+            logSocket = null;
+            logConnected = false;
+        } else {
+            connectLiveLogs();
+        }
     }
     
     async function analyzeBuild() {
@@ -303,7 +339,7 @@
         </div>
     {:else if activeTab === 'logs'}
         <Card>
-            <div class="logs-head"><h2 class="details-title">Terminal / Logs</h2><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div>
+            <div class="logs-head"><div><h2 class="details-title">Terminal / Logs</h2><span class:live={logConnected} class="log-connection">{logConnected ? '● Live stream connected' : '○ Live stream disconnected'}</span></div><div class="log-actions"><Button size="sm" on:click={toggleLiveLogs} disabled={!online}>{logSocket ? 'Остановить поток' : 'Live logs'}</Button><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div></div>
             {#if terminalLoading}<p class="terminal-loading">Загрузка…</p>{:else}<pre class="terminal">{terminalText || 'Логи пока не загружены.'}</pre>{/if}
         </Card>
     {:else if activeTab === 'environment'}
@@ -459,6 +495,9 @@
     .detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
     .commit{font:18px ui-monospace,monospace;color:#BEF264}.muted{font-size:12px;color:#A1A1AA;line-height:1.6}
     .logs-head{display:flex;justify-content:space-between;align-items:center}
+    .log-connection{display:block;margin-top:-10px;margin-bottom:12px;font-size:10px;color:#A1A1AA}
+    .log-connection.live{color:#22C55E}
+    .log-actions{display:flex;gap:8px;align-items:center}
     .terminal{background:#09090B;border:1px solid #27272A;border-radius:8px;color:#D4D4D8;padding:14px;max-height:60vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,monospace}
     .env-group{border:1px solid #27272A;border-radius:8px;padding:14px;margin-top:12px}
     .env-group strong{display:block;color:#FAFAFA;font-size:13px;margin-bottom:10px}
