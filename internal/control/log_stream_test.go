@@ -56,3 +56,26 @@ func TestLogStreamHubDropsOldestWhenSubscriberIsSlow(t *testing.T) {
 		t.Fatalf("queued messages = %d, want bounded queue of 128", got)
 	}
 }
+
+func TestLogStreamReplayIsBoundedAndCarriesEpoch(t *testing.T) {
+	hub := newLogStreamHub()
+	for i := 0; i < 300; i++ {
+		hub.publish(3, 4, shared.LogEvent{SiteId: "site", Line: "line"})
+	}
+	sub := hub.subscribe(3, 4, "site", 0)
+	defer hub.unsubscribe(sub)
+	if got := len(sub.messages); got != 128 {
+		t.Fatalf("replay queue = %d, want 128", got)
+	}
+	raw := <-sub.messages
+	var event map[string]interface{}
+	if err := json.Unmarshal(raw, &event); err != nil {
+		t.Fatalf("decode replay event: %v", err)
+	}
+	if event["stream_id"] != hub.streamID {
+		t.Fatalf("stream_id = %v, want %s", event["stream_id"], hub.streamID)
+	}
+	if event["seq"] != float64(173) {
+		t.Fatalf("first replay seq = %v, want 173 (latest 128 of 300)", event["seq"])
+	}
+}
