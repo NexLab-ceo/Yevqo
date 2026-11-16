@@ -218,6 +218,27 @@ type SiteAction struct {
 	GitToken string `json:"git_token,omitempty"`
 }
 
+type ListSiteReleases struct {
+	SiteId string `json:"site_id"`
+	Runtime string `json:"runtime,omitempty"`
+}
+type RollbackSiteRelease struct {
+	SiteId string `json:"site_id"`
+	Commit string `json:"commit"`
+	RootDir string `json:"root_dir,omitempty"`
+	Runtime string `json:"runtime"`
+	Port uint32 `json:"port"`
+}
+type SiteReleasesResult struct {
+	Releases []SiteRelease `json:"releases"`
+}
+type SiteRelease struct {
+	Commit string `json:"commit"`
+	Date string `json:"date,omitempty"`
+	Active bool `json:"active"`
+	Runtime string `json:"runtime,omitempty"`
+}
+
 type GetLogs struct {
 	SiteId string `json:"site_id"`
 	Lines  uint32 `json:"lines"`
