@@ -433,6 +433,11 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 // StopSite останавливает сайт (SIGTERM, потом SIGKILL).
 func (m *ProcessManager) StopSite(siteID string) error {
 	if !validSiteID(siteID) { return fmt.Errorf("invalid site id") }
+	// Start and stop must be mutually exclusive for a site. Without this lock,
+	// a concurrent StartSite could pass its "already running" check while a
+	// StopSite is removing the process record, leaving an unmanaged process.
+	m.startMu.Lock()
+	defer m.startMu.Unlock()
 	if m.registryErr != nil || m.registry == nil { return fmt.Errorf("process registry unavailable: %v", m.registryErr) }
 	record, exists := m.registry.Get(siteID)
 	if !exists { return fmt.Errorf("site %s is not running", siteID) }
