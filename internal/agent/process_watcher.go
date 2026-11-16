@@ -68,6 +68,8 @@ func (m *ProcessManager) waitForProcessExit(siteID string, pid int, startToken s
 func (m *ProcessManager) recoverSite(record ProcessRecord) {
 	for {
 		m.restartMu.Lock()
+		if m.restartAttempts == nil { m.restartAttempts = make(map[string]int) }
+		if m.intentionalStops == nil { m.intentionalStops = make(map[string]bool) }
 		attempt := m.restartAttempts[record.SiteID] + 1
 		if attempt > maxAutomaticRestarts {
 			m.restartMu.Unlock()
