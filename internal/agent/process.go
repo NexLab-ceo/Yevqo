@@ -553,9 +553,18 @@ func validDeployBranch(branch string) bool {
 
 func validDeployRepository(raw string) bool {
 	u, err := url.Parse(strings.TrimSpace(raw))
-	return err == nil && u.Host != "" && u.User == nil &&
-		(u.Scheme == "https" || u.Scheme == "ssh") &&
-		!strings.ContainsAny(raw, "\r\n\x00")
+	if err != nil || u.Host == "" || strings.ContainsAny(raw, "\r\n\x00") {
+		return false
+	}
+	if u.Scheme == "https" {
+		return u.User == nil
+	}
+	if u.Scheme == "ssh" {
+		if u.User == nil { return true }
+		_, hasPassword := u.User.Password()
+		return u.User.Username() == "git" && !hasPassword
+	}
+	return false
 }
 
 func truncateDeployOutput(value string) string {
