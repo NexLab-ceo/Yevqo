@@ -1,4 +1,4 @@
-# VELTRIX Dock — Dokploy parity roadmap
+# Yevqo — Dokploy parity roadmap
 
 This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It does not promise Docker support on Termux.
 
