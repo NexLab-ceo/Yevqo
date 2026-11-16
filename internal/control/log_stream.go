@@ -11,26 +11,34 @@ import (
 	"veltrix/internal/shared"
 )
 
+type logReplayEntry struct { userID, deviceID int64; siteID string; seq uint64; payload []byte }
+
 type logStreamSubscriber struct {
 	userID   int64
 	deviceID int64
 	siteID   string
 	messages chan []byte
+	lastSeq uint64
 }
 
 type logStreamHub struct {
 	mu          sync.Mutex
 	subscribers map[*logStreamSubscriber]struct{}
+	history []logReplayEntry
+	sequence map[string]uint64
 }
 
 func newLogStreamHub() *logStreamHub {
-	return &logStreamHub{subscribers: make(map[*logStreamSubscriber]struct{})}
+	return &logStreamHub{subscribers: make(map[*logStreamSubscriber]struct{}), sequence: make(map[string]uint64)}
 }
 
-func (h *logStreamHub) subscribe(userID, deviceID int64, siteID string) *logStreamSubscriber {
-	sub := &logStreamSubscriber{userID: userID, deviceID: deviceID, siteID: siteID, messages: make(chan []byte, 128)}
+func logStreamKey(userID, deviceID int64, siteID string) string { return strconv.FormatInt(userID,10)+":"+strconv.FormatInt(deviceID,10)+":"+siteID }
+
+func (h *logStreamHub) subscribe(userID, deviceID int64, siteID string, since uint64) *logStreamSubscriber {
+	sub := &logStreamSubscriber{userID:userID, deviceID:deviceID, siteID:siteID, messages:make(chan []byte,128), lastSeq:since}
 	h.mu.Lock()
-	h.subscribers[sub] = struct{}{}
+	h.subscribers[sub]=struct{}{}
+	for _, entry := range h.history { if entry.userID==userID && entry.deviceID==deviceID && entry.siteID==siteID && entry.seq>since { select { case sub.messages<-entry.payload: default: } } }
 	h.mu.Unlock()
 	return sub
 }
@@ -61,30 +69,11 @@ func (h *logStreamHub) publishAgentStatus(userID, deviceID int64, status string)
 }
 
 func (h *logStreamHub) publish(userID, deviceID int64, event shared.LogEvent) {
-	payload, err := json.Marshal(map[string]interface{}{
-		"type": "log", "device_id": deviceID, "site_id": event.SiteId,
-		"line": event.Line, "timestamp": time.Now().UTC(),
-	})
-	if err != nil {
-		return
-	}
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	for sub := range h.subscribers {
-		if sub.userID != userID || sub.deviceID != deviceID || sub.siteID != event.SiteId {
-			continue
-		}
-		select {
-		case sub.messages <- payload:
-		default:
-			// A slow browser must not block the Agent connection. Drop the
-			// oldest queued line and keep the newest output.
-			select { case <-sub.messages: default: }
-			select { case sub.messages <- payload: default: }
-		}
-	}
+ key:=logStreamKey(userID,deviceID,event.SiteId); h.mu.Lock(); h.sequence[key]++; seq:=h.sequence[key]
+ payload,err:=json.Marshal(map[string]interface{}{"type":"log","device_id":deviceID,"site_id":event.SiteId,"line":event.Line,"timestamp":time.Now().UTC(),"seq":seq}); if err!=nil {h.mu.Unlock();return}
+ h.history=append(h.history,logReplayEntry{userID:userID,deviceID:deviceID,siteID:event.SiteId,seq:seq,payload:payload}); if len(h.history)>2000 {h.history=append([]logReplayEntry(nil),h.history[len(h.history)-2000:]...)}
+ for sub:=range h.subscribers {if sub.userID!=userID||sub.deviceID!=deviceID||sub.siteID!=event.SiteId {continue};select{case sub.messages<-payload:default:select{case <-sub.messages:default:};select{case sub.messages<-payload:default:}}};h.mu.Unlock()
 }
-
 func validLogSiteID(value string) bool {
 	if len(value) == 0 || len(value) > 64 { return false }
 	for _, r := range value {
@@ -126,7 +115,8 @@ func (s *Server) handleLogStream(w http.ResponseWriter, r *http.Request) {
 	_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 	conn.SetPongHandler(func(string) error { return conn.SetReadDeadline(time.Now().Add(60 * time.Second)) })
 
-	sub := s.logStreams.subscribe(user.ID, deviceID, siteID)
+	since, _ := strconv.ParseUint(r.URL.Query().Get("since"), 10, 64)
+	sub := s.logStreams.subscribe(user.ID, deviceID, siteID, since)
 	defer s.logStreams.unsubscribe(sub)
 
 	ping := time.NewTicker(25 * time.Second)
