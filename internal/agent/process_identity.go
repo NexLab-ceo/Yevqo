@@ -29,11 +29,29 @@ func (m *ProcessManager) restoreProcesses() {
   m.procs[r.SiteID]=&Process{SiteID:r.SiteID,PID:r.PID,Port:r.Port,Runtime:r.Runtime,LogPath:r.LogPath}
  }
 }
-// processGroupAlive checks the whole group, not only its leader: a server may
-// spawn workers that outlive the main PID.
+// processGroupAlive checks every member of the group, not just its leader.
+// Linux may retain killed orphan descendants as zombies briefly; they cannot
+// execute and must not make a successful shutdown look like a live service.
 func processGroupAlive(pgid int) bool {
  if pgid <= 0 { return false }
- err := syscall.Kill(-pgid, 0)
+ entries, err := os.ReadDir("/proc")
+ if err == nil {
+  for _, entry := range entries {
+   if _, parseErr := strconv.Atoi(entry.Name()); parseErr != nil { continue }
+   data, readErr := os.ReadFile("/proc/" + entry.Name() + "/stat")
+   if readErr != nil { continue }
+   raw := string(data)
+   end := strings.LastIndex(raw, ")")
+   if end < 0 { continue }
+   fields := strings.Fields(raw[end+2:]) // state, ppid, pgrp, ...
+   if len(fields) < 3 || fields[0] == "Z" || fields[0] == "X" { continue }
+   group, parseErr := strconv.Atoi(fields[2])
+   if parseErr == nil && group == pgid { return true }
+  }
+  return false
+ }
+ // Fallback for non-Linux environments where /proc is unavailable.
+ err = syscall.Kill(-pgid, 0)
  return err == nil || err == syscall.EPERM
 }
 
