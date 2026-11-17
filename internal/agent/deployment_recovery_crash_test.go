@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
