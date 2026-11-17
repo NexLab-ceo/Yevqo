@@ -49,6 +49,11 @@ func NewClient(cfg *Config) *Client {
 			log.Printf("stream site log: %v", err)
 		}
 	})
+	client.handler.processes.SetStatusEmitter(func(siteID, status string, pid int) {
+		if err := client.SendEvent("status", shared.StatusEvent{SiteId: siteID, Status: status, Pid: uint32(max(pid, 0))}); err != nil && err.Error() != "not connected" {
+			log.Printf("stream site status: %v", err)
+		}
+	})
 	return client
 }
 
