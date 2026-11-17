@@ -20,6 +20,7 @@ type siteGitSettings struct {
 	GitBranch    string
 	BuildCommand string
 	RootDir      string
+	HealthCheckPath string
 	GitToken     string
 	Commit       string
 	DeployedAt   sql.NullTime
@@ -30,6 +31,7 @@ type siteGitInput struct {
 	Branch        string `json:"branch"`
 	BuildCommand  string `json:"build_command"`
 	RootDirectory string `json:"root_directory"`
+	HealthCheckPath string `json:"health_check_path"`
 	GitHubToken   string `json:"github_token"`
 }
 
@@ -54,9 +56,9 @@ func (s *Server) siteGitSettings(ctx context.Context, deviceID int64, siteID str
 	var out siteGitSettings
 	var gitURL, commit sql.NullString
 	var encrypted []byte
-	err := s.db.conn.QueryRowContext(ctx, `SELECT git_url,git_branch,build_command,root_dir,git_token_enc,deployed_commit,deployed_at
+	err := s.db.conn.QueryRowContext(ctx, `SELECT git_url,git_branch,build_command,root_dir,health_check_path,git_token_enc,deployed_commit,deployed_at
 		FROM sites WHERE device_id=? AND site_id=?`, deviceID, siteID).Scan(
-		&gitURL, &out.GitBranch, &out.BuildCommand, &out.RootDir, &encrypted, &commit, &out.DeployedAt)
+		&gitURL, &out.GitBranch, &out.BuildCommand, &out.RootDir, &out.HealthCheckPath, &encrypted, &commit, &out.DeployedAt)
 	if err != nil { return nil, err }
 	if gitURL.Valid { out.GitURL = gitURL.String }
 	if commit.Valid { out.Commit = commit.String }
@@ -82,7 +84,7 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 		if err != nil { apiError(w, shared.ErrInternal("could not load Git settings")); return }
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"ok": true, "repository_url": cfg.GitURL, "branch": cfg.GitBranch,
-			"build_command": cfg.BuildCommand, "root_directory": cfg.RootDir,
+			"build_command": cfg.BuildCommand, "root_directory": cfg.RootDir, "health_check_path": cfg.HealthCheckPath,
 			"has_token": len(cfg.GitToken)>0, "commit": cfg.Commit,
 			"deployed_at": func() interface{} { if cfg.DeployedAt.Valid { return cfg.DeployedAt.Time }; return nil }(),
 		})
@@ -103,6 +105,10 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 		}
 		rootDir, ok := validateSiteRootDir(in.RootDirectory)
 		if !ok { apiError(w, shared.ErrBadRequest("root directory must be inside the site directory")); return }
+		healthPath := strings.TrimSpace(in.HealthCheckPath)
+		if healthPath != "" && (len(healthPath) > 255 || !strings.HasPrefix(healthPath, "/") || strings.HasPrefix(healthPath, "//") || strings.ContainsAny(healthPath, "\\r\\n\\x00") || strings.Contains(healthPath, "..")) {
+			apiError(w, shared.ErrBadRequest("health check path must be a safe local URL path")); return
+		}
 		var encrypted interface{}
 		if in.GitHubToken != "" {
 			if len(in.GitHubToken) > 512 { apiError(w, shared.ErrBadRequest("GitHub token is too long")); return }
@@ -110,9 +116,9 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 			if err != nil { apiError(w, shared.ErrInternal("could not encrypt GitHub token")); return }
 			encrypted = append(nonce, ciphertext...)
 		}
-		_, err = s.db.conn.ExecContext(r.Context(), `UPDATE sites SET git_url=?,git_branch=?,build_command=?,root_dir=?,
+		_, err = s.db.conn.ExecContext(r.Context(), `UPDATE sites SET git_url=?,git_branch=?,build_command=?,root_dir=?,health_check_path=?,
 			git_token_enc=COALESCE(?,git_token_enc) WHERE device_id=? AND site_id=?`,
-			nullableString(in.RepositoryURL), in.Branch, strings.TrimSpace(in.BuildCommand), rootDir, encrypted, deviceID, siteID)
+			nullableString(in.RepositoryURL), in.Branch, strings.TrimSpace(in.BuildCommand), rootDir, healthPath, encrypted, deviceID, siteID)
 		if err != nil { apiError(w, shared.ErrInternal("could not save Git settings")); return }
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"message":"Git settings saved","has_token":in.GitHubToken!=""})
 	default:
