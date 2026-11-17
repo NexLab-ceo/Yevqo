@@ -108,13 +108,29 @@ func (m *ProcessManager) recoverSite(record ProcessRecord) {
 			}
 			runPath = filepath.Join("sites", record.SiteID, rel)
 		}
-		if _, err := m.StartSiteWithCommand(record.SiteID, runPath, record.Port, record.Runtime, record.StartCommand); err != nil {
+		startPort := record.Port
+		if record.BackendPort > 0 { startPort = record.BackendPort }
+		if _, err := m.StartSiteWithCommand(record.SiteID, runPath, startPort, record.Runtime, record.StartCommand); err != nil {
 			m.emitProcessLog(record.SiteID, fmt.Sprintf("automatic restart %d failed: %v", attempt, err))
-		 continue
+			continue
 		}
-		if current, ok := m.registry.Get(record.SiteID); ok && record.RestartPolicy != "" {
+		if current, ok := m.registry.Get(record.SiteID); ok {
+			current.Port = record.Port
+			current.BackendPort = record.BackendPort
 			current.RestartPolicy = record.RestartPolicy
-			_ = m.registry.Save(current)
+			if err := m.registry.Save(current); err != nil {
+				m.emitProcessLog(record.SiteID, fmt.Sprintf("could not persist recovered backend identity: %v", err))
+				continue
+			}
+			m.mu.Lock()
+			if process := m.procs[record.SiteID]; process != nil && process.PID == current.PID { process.Port = current.Port }
+			m.mu.Unlock()
+			if current.BackendPort > 0 {
+				if err := m.ensureDeploymentProxy(record.SiteID, current.Port, current.BackendPort); err != nil {
+					m.emitProcessLog(record.SiteID, fmt.Sprintf("could not restore stable listener after restart: %v", err))
+					continue
+				}
+			}
 		}
 		m.emitProcessLog(record.SiteID, fmt.Sprintf("site recovered successfully (attempt %d)", attempt))
 		if current, ok := m.registry.Get(record.SiteID); ok { m.emitProcessStatus(record.SiteID, "running", current.PID) }
