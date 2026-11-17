@@ -2,7 +2,7 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, openSiteLogStream } from '$lib/api.js';
+    import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, openSiteLogStream } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -47,6 +47,10 @@
     let git = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', health_check_path: '', start_command: '', has_token: false, commit: '', deployed_at: null };
     let gitForm = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', health_check_path: '', start_command: '', github_token: '' };
     let connections = [];
+    let envVariables = [];
+    let newEnvName = '';
+    let newEnvValue = '';
+    let savingEnv = false;
     let buildPlan = null;
     let analyzingBuild = false;
     let buildRunning = false;
@@ -73,9 +77,9 @@
     });
 
     async function refresh() {
-        const [deviceRes, siteRes, gitRes, envRes] = await Promise.all([
+        const [deviceRes, siteRes, gitRes, connectionsRes, variablesRes] = await Promise.all([
             getDevice(deviceId), getSite(deviceId, siteId), getSiteGit(deviceId, siteId),
-            listSiteDatabaseConnections(deviceId, siteId)
+            listSiteDatabaseConnections(deviceId, siteId), listSiteEnvironment(deviceId, siteId)
         ]);
         if (!deviceRes.ok || !siteRes.ok) {
             notify(deviceRes.error || siteRes.error || 'Не удалось загрузить сайт', 'error');
@@ -92,13 +96,36 @@
                 health_check_path: git.health_check_path || '', start_command: git.start_command || '', github_token: ''
             };
         }
-        connections = envRes.ok ? (envRes.data.connections || []) : [];
+        connections = connectionsRes.ok ? (connectionsRes.data.connections || []) : [];
+        envVariables = variablesRes.ok ? (variablesRes.data.variables || []) : [];
         if (online) {
             const policyRes = await sendCommand(deviceId, 'get_site_restart_policy', { site_id: siteId });
             if (policyRes.ok && policyRes.data?.ok && policyRes.data.payload) {
                 try { restartPolicy = JSON.parse(decodeLogs(policyRes.data.payload)).policy || 'on-failure'; } catch { /* keep safe default */ }
             }
         }
+    }
+
+    async function saveEnvironmentVariable() {
+        const name = newEnvName.trim();
+        if (!name || !newEnvValue || savingEnv) return;
+        savingEnv = true;
+        const res = await saveSiteEnvironment(deviceId, siteId, name, newEnvValue);
+        savingEnv = false;
+        if (!res.ok) { notify(res.error || 'Не удалось сохранить переменную', 'error'); return; }
+        newEnvName = '';
+        newEnvValue = '';
+        notify('Переменная сохранена в зашифрованном виде', 'success');
+        const refreshed = await listSiteEnvironment(deviceId, siteId);
+        if (refreshed.ok) envVariables = refreshed.data.variables || [];
+    }
+
+    async function removeEnvironmentVariable(name) {
+        if (!confirm('Удалить переменную ' + name + '?')) return;
+        const res = await deleteSiteEnvironment(deviceId, siteId, name);
+        if (!res.ok) { notify(res.error || 'Не удалось удалить переменную', 'error'); return; }
+        envVariables = envVariables.filter(item => item.name !== name);
+        notify('Переменная удалена', 'success');
     }
 
     async function saveRestartPolicy() {
@@ -577,7 +604,20 @@
     {:else if activeTab === 'environment'}
         <Card>
             <h2 class="details-title">Environment</h2>
-            <p class="muted">Секреты не раскрываются. Значения DB_* передаются процессу выбранного сайта.</p>
+            <p class="muted">Секреты хранятся с AES-GCM шифрованием и передаются только процессу этого сайта при запуске, перезапуске и деплое. Сохранённые значения повторно не раскрываются.</p>
+            <div class="env-editor">
+                <div class="env-add">
+                    <input class="input" bind:value={newEnvName} placeholder="VARIABLE_NAME" maxlength="64" autocomplete="off" />
+                    <input class="input" bind:value={newEnvValue} placeholder="Value" type="password" autocomplete="new-password" />
+                    <Button variant="primary" loading={savingEnv} disabled={!online || !newEnvName.trim() || !newEnvValue} on:click={saveEnvironmentVariable}>Add / Update</Button>
+                </div>
+                {#if !online}<p class="muted">Подключите Agent, чтобы применить изменения при следующем запуске приложения.</p>{/if}
+                {#if envVariables.length}
+                    <div class="env-list">{#each envVariables as variable}
+                        <div class="env-row"><code>{variable.name}</code><span>••••••••••</span><Button size="sm" on:click={() => removeEnvironmentVariable(variable.name)}>Удалить</Button></div>
+                    {/each}</div>
+                {:else}<p class="muted">Пользовательские переменные ещё не добавлены.</p>{/if}
+            </div>
             {#if connections.length}
                 {#each connections as connection}
                     <div class="env-group">
@@ -723,6 +763,7 @@
 </Modal>
 
 <style>
+.env-editor{display:grid;gap:10px;margin:12px 0}.env-add{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px}.env-list{display:grid;gap:6px}.env-list .env-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid #253149;border-radius:8px;background:#0b1220}.env-list .env-row code{flex:1;color:#c7d2fe}.env-list .env-row span{color:#64748b;font-size:10px}@media(max-width:700px){.env-add{grid-template-columns:1fr}.env-list .env-row{flex-wrap:wrap}}
     .deploy-consent{display:grid;gap:5px;margin:12px 0;padding:10px 12px;border:1px solid #854D0E;background:#21190D;border-radius:8px}
     .deploy-consent label{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#FDE68A;line-height:1.5}
     .deploy-consent input{accent-color:#F59E0B;margin:2px 0 0}
