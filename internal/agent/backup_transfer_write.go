@@ -24,7 +24,9 @@ func writeBackupChunk(req shared.WriteBackupChunk)(*shared.WriteBackupChunkResul
 	switch req.ResourceType{
 	case "site":
 		if !validSiteID(req.SiteId)||!siteBackupFilePattern.MatchString(req.FileName)||!strings.HasPrefix(req.FileName,req.SiteId+"-"){return nil,fmt.Errorf("invalid website backup target")}
-		dir, _ = ensureSafeSubdirectory(prefix,filepath.Join("var","lib","veltrix-agent","backups","sites",req.SiteId),0700);if dir==""{return nil,fmt.Errorf("could not prepare website backup directory")}
+		var err error
+		dir, err = ensureSafeSubdirectory(prefix,filepath.Join("var","lib","veltrix-agent","backups","sites",req.SiteId),0700)
+		if err != nil { return nil, err }
 		finalName=req.FileName
 	case "database":
 		if req.ServerID<1||!safeDatabaseBackupFile.MatchString(req.FileName)||strings.Contains(req.FileName,".."){return nil,fmt.Errorf("invalid database backup target")}
