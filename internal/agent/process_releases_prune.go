@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -116,4 +117,9 @@ func (m *ProcessManager) PruneSiteReleases(siteID string, keep int) ([]string, e
 		removed = append(removed, release.commit)
 	}
 	return removed, nil
+}
+
+func execGitCommitDate(path string) (string, error) {
+	out, err := exec.Command("git", "-C", path, "show", "-s", "--format=%cI", "HEAD").Output()
+	return strings.TrimSpace(string(out)), err
 }
