@@ -717,10 +717,17 @@ func truncateDeployOutput(value string) string {
 // currently running application. A failed candidate start restores the prior
 // process from its recorded working directory.
 func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int, string, string, string, error) {
+	return m.DeployGitSiteWithJob(context.Background(), "", req, rebuild)
+}
+
+func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string, req shared.SiteAction, rebuild bool) (int, string, string, string, error) {
+	if ctx == nil { ctx = context.Background() }
 	m.operationMu.Lock()
 	defer m.operationMu.Unlock()
 
 	if !validSiteID(req.SiteId) { return 0, "", "", "", fmt.Errorf("invalid site id") }
+	m.UpdateDeploymentJob(req.SiteId, jobID, "preparing", 5, "Preparing deployment workspace")
+	if err := ctx.Err(); err != nil { return 0, "", "", "", err }
 	if !req.AllowProjectCode { return 0, "", "", "", fmt.Errorf("deployment blocked: explicit allow_project_code=true consent is required") }
 	if !validDeployRepository(req.GitURL) { return 0, "", "", "", fmt.Errorf("Git repository must be an HTTPS or SSH URL without embedded credentials") }
 	branch := req.GitBranch
@@ -757,7 +764,8 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 	// Git transports can otherwise wait indefinitely on a stalled network or
 	// an unresponsive SSH endpoint. Bound checkout time independently from the
 	// longer build phase so a deployment cannot hold the engine forever.
-	cloneCtx, cancelClone := context.WithTimeout(context.Background(), 10*time.Minute)
+	m.UpdateDeploymentJob(req.SiteId, jobID, "cloning", 15, "Cloning Git repository")
+	cloneCtx, cancelClone := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancelClone()
 	clone := exec.CommandContext(cloneCtx, "git", "clone", "--branch", branch, "--single-branch", "--depth", "1", req.GitURL, stageDir)
 	clone.Env = gitEnv
@@ -780,6 +788,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 	if err != nil { return 0, truncateDeployOutput(output.String()), commit, "", fmt.Errorf("read commit date: %w", err) }
 	commitDate := strings.TrimSpace(string(dateBytes))
 
+	if err := ctx.Err(); err != nil { return 0, truncateDeployOutput(output.String()), "", "", err }
 	rootDir := req.RootDir
 	if rootDir == "" { rootDir = "." }
 	if filepath.IsAbs(rootDir) || strings.Contains(rootDir, "\\") {
@@ -805,7 +814,9 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 		// Plain PHP sites without Composer have no dependency/build phase.
 	} else {
 		if m.BuildRunner == nil { m.BuildRunner = NewAndroidBuildRunner(m.DataRoot) }
-		build := m.BuildRunner.Run(context.Background(), AndroidBuildRequest{
+		m.UpdateDeploymentJob(req.SiteId, jobID, "installing", 40, "Installing project dependencies")
+		m.UpdateDeploymentJob(req.SiteId, jobID, "building", 60, "Running build provider")
+		build := m.BuildRunner.Run(ctx, AndroidBuildRequest{
 			SiteID:req.SiteId, SiteRoot:stageDir, RootDir:rootDir, Stack:plan.Stack,
 			PackageTool:plan.PackageTool, AllowProjectCode:true, Timeout:20*time.Minute, MaxLogBytes:10<<20,
 		})
@@ -816,6 +827,8 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 		}
 	}
 
+	if err := ctx.Err(); err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, err }
+	m.UpdateDeploymentJob(req.SiteId, jobID, "starting", 85, "Activating candidate release")
 	releaseDir := filepath.Join(releasesRoot, commit)
 	if _, statErr := os.Stat(releaseDir); statErr == nil {
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("release %s already exists; refusing to overwrite it", commit)
@@ -871,6 +884,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 		}
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed health check and no previous release was active: %w", startErr)
 	}
+	m.UpdateDeploymentJob(req.SiteId, jobID, "healthy", 100, "Release is healthy")
 	output.WriteString(fmt.Sprintf("\nActivated release %s (pid %d)", commit, pid))
 	return pid, truncateDeployOutput(output.String()), commit, commitDate, nil
 }
