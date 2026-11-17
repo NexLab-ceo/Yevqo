@@ -29,6 +29,7 @@ func (s *Server) handleBackupTransfer(w http.ResponseWriter,r *http.Request){
 	sourceSiteID:=""
 	if resourceType=="site"{target:=strings.SplitN(resourceID,":",2);if len(target)!=2||target[0]!=strconv.FormatInt(sourceDeviceID,10)||!validBackupSiteID(target[1]){apiError(w,shared.ErrBadRequest("invalid source website backup"));return};sourceSiteID=target[1]}
 	if resourceType!="site"&&resourceType!="database"{apiError(w,shared.ErrBadRequest("unsupported backup type"));return}
+	if resourceType=="database"&&(!sourceServerID.Valid||sourceServerID.Int64<1){apiError(w,shared.ErrBadRequest("source database backup server is unavailable"));return}
 	sourceConn,sourceOnline:=s.hub.Get(sourceDeviceID);if !sourceOnline{apiError(w,shared.ErrBadRequest("source device is offline"));return}
 	targetDeviceID:=in.TargetDeviceID;targetSiteID:="";targetServerID:=int64(0);targetFileName:=fileName
 	if resourceType=="site"{
