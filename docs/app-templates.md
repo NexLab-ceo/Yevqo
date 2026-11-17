@@ -11,11 +11,13 @@ a database migration.
 | Static Website | `static` | `index.html` |
 | PHP Website | `php` | `index.php` |
 | Node.js HTTP | `nodejs` | `package.json`, `server.js` |
-| Go Application | `go` | `README.md` |
+| Go HTTP Application | `go` | `go.mod`, `main.go`, compiled `veltrix-app` |
 
 The device's **Добавить сайт** dialog exposes these starter choices. Site ID and port
 validation remain in the existing UI and Agent. The Agent rejects an existing site
-directory instead of overwriting user files.
+directory instead of overwriting user files. The Go starter is a runnable `net/http`
+application that reads `PORT`; the UI invokes the existing Android build provider before
+starting it, so it does not leave the user with an unbuilt README-only placeholder.
 
 ## Lifecycle
 
@@ -29,8 +31,8 @@ directory instead of overwriting user files.
 
 ## Current boundaries
 
-These are local, safe starter skeletons, not framework installers. They do not run
-third-party post-install hooks, clone repositories, install packages, or execute
+These are local, safe runtime starters, not a remote template marketplace. They do not run
+third-party post-install hooks, clone repositories, install package dependencies, or execute
 template-supplied commands. Laravel/Next.js/React starters, Git-based templates,
 template variables, and one-click build/deploy remain future work. The P2 roadmap item
 must remain open until those capabilities and their end-to-end tests are implemented.
