@@ -319,6 +319,9 @@ func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, r
 	}
 	logPath := filepath.Join(logDir, siteID+".log")
 
+	// Rotate old output before opening the next process log.
+	if err := rotateSiteLog(logPath); err != nil { return 0, err }
+
 	// Открываем лог для записи (append).
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
