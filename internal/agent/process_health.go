@@ -30,7 +30,7 @@ func validHealthCheckPath(path string) bool {
  return true
 }
 
-// waitForHTTP requires a successful 2xx/3xx response from the site's local listener.
+// waitForHTTP requires a successful 2xx response from the site's local listener.
 // Redirects are not followed, preventing a site from redirecting the probe off-device.
 func waitForHTTP(port int, path string, timeout time.Duration) error {
  if !validHealthCheckPath(path) { return fmt.Errorf("invalid HTTP health check path") }
@@ -44,7 +44,7 @@ func waitForHTTP(port int, path string, timeout time.Duration) error {
   response, err := client.Do(req)
   if err == nil {
    response.Body.Close()
-   if response.StatusCode >= 200 && response.StatusCode < 400 { return nil }
+   if response.StatusCode >= 200 && response.StatusCode < 300 { return nil }
    lastErr = fmt.Errorf("HTTP health check returned status %d", response.StatusCode)
   } else { lastErr = err }
   time.Sleep(150 * time.Millisecond)
