@@ -66,7 +66,7 @@ func (s *Server) siteGitSettings(ctx context.Context, deviceID int64, siteID str
 	var encrypted []byte
 	err := s.db.conn.QueryRowContext(ctx, `SELECT git_url,git_branch,build_command,root_dir,health_check_path,clone_timeout_seconds,build_timeout_seconds,health_check_timeout_seconds,start_command,git_token_enc,deployed_commit,deployed_at
 		FROM sites WHERE device_id=? AND site_id=?`, deviceID, siteID).Scan(
-		&gitURL, &out.GitBranch, &out.BuildCommand, &out.RootDir, &out.HealthCheckPath, &out.StartCommand, &encrypted, &commit, &out.DeployedAt)
+		&gitURL, &out.GitBranch, &out.BuildCommand, &out.RootDir, &out.HealthCheckPath, &out.CloneTimeoutSeconds, &out.BuildTimeoutSeconds, &out.HealthCheckTimeoutSeconds, &out.StartCommand, &encrypted, &commit, &out.DeployedAt)
 	if err != nil { return nil, err }
 	if gitURL.Valid { out.GitURL = gitURL.String }
 	if commit.Valid { out.Commit = commit.String }
