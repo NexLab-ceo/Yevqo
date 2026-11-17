@@ -1,8 +1,8 @@
 <script>
- import {onMount,onDestroy} from 'svelte';import {listBackups,listSites,listDatabases,createSiteBackup,createDatabaseBackup,createControlPlaneBackup,listBackupSchedules,createBackupSchedule,deleteBackupSchedule,getDatabaseBackupChunk,restoreSiteBackup} from '$lib/api.js';import {notify,user} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';
- let backups=[],sites=[],databases=[],schedules=[],loading=true,busy=false,controlBusy=false,selected='',poller=null,pollBusy=false,scheduleBusy=false,intervalHours=24,retentionCount=10,downloadingId=0,restoringId=0;
+ import {onMount,onDestroy} from 'svelte';import {listBackups,listSites,listDatabases,createSiteBackup,createDatabaseBackup,createControlPlaneBackup,listBackupSchedules,createBackupSchedule,deleteBackupSchedule,getDatabaseBackupChunk,restoreSiteBackup,transferBackup,listDatabaseServers} from '$lib/api.js';import {notify,user} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';
+ let backups=[],sites=[],databases=[],dbServers=[],schedules=[],loading=true,busy=false,controlBusy=false,selected='',poller=null,pollBusy=false,scheduleBusy=false,intervalHours=24,retentionCount=10,downloadingId=0,restoringId=0,transferTargets={},transferBusyId=0;
  function syncPolling(){const pending=backups.some((item)=>item.status==='queued'||item.status==='running');if(pending&&!poller){poller=setInterval(async()=>{if(pollBusy)return;pollBusy=true;const r=await listBackups();if(r.ok){backups=r.data.backups||[];if(!backups.some((item)=>item.status==='queued'||item.status==='running')){clearInterval(poller);poller=null}}pollBusy=false},3000)}else if(!pending&&poller){clearInterval(poller);poller=null}}
- async function load(){const [r,s,d,sc]=await Promise.all([listBackups(),listSites(),listDatabases(),listBackupSchedules()]);if(r.ok)backups=r.data.backups||[];else notify(r.error||'Не удалось загрузить резервные копии','error');if(s.ok)sites=s.data.sites||[];if(d.ok)databases=d.data.databases||[];if(sc.ok)schedules=sc.data.schedules||[];loading=false;syncPolling()}
+ async function load(){const [r,s,d,sc,servers]=await Promise.all([listBackups(),listSites(),listDatabases(),listBackupSchedules(),listDatabaseServers()]);if(r.ok)backups=r.data.backups||[];else notify(r.error||'Не удалось загрузить резервные копии','error');if(s.ok)sites=s.data.sites||[];if(d.ok)databases=d.data.databases||[];if(sc.ok)schedules=sc.data.schedules||[];if(servers.ok)dbServers=servers.data.servers||[];loading=false;syncPolling()}
  onMount(load);
  onDestroy(()=>{if(poller)clearInterval(poller)});
  async function create(){if(!selected)return;busy=true;let r;if(selected.startsWith('db:')){r=await createDatabaseBackup(Number(selected.slice(3)))}else{const parts=selected.slice(5).split(':');r=await createSiteBackup(Number(parts[0]),parts.slice(1).join(':'))}busy=false;if(r.ok){notify(r.data?.backup?.status==='queued'?'Backup queued':'Резервная копия создана','success');backups=[{...r.data.backup,created_at:new Date().toISOString()},...backups];syncPolling()}else notify(r.error||'Не удалось создать backup','error')}
@@ -43,6 +43,22 @@
   const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=backup.file_name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   notify('Архив скачан','success');
  }
+ async function transferBackupToTarget(backup){
+  if(transferBusyId)return;
+  const choice=transferTargets[backup.id]||'';
+  let target={};
+  if(backup.resource_type==='site'){
+   const parts=choice.split(':');if(parts.length<2||!parts[0]||!parts.slice(1).join(':')){notify('Выберите целевой сайт','warning');return}
+   target={target_device_id:Number(parts[0]),target_site_id:parts.slice(1).join(':')};
+  }else{
+   const serverId=Number(choice);if(!serverId){notify('Выберите целевой PostgreSQL сервер','warning');return}
+   target={target_server_id:serverId};
+  }
+  transferBusyId=backup.id;const r=await transferBackup(backup.id,target);transferBusyId=0;
+  if(!r.ok){notify(r.error||'Не удалось перенести резервную копию','error');return}
+  notify('Перенос запущен. Проверка архива выполняется на целевом устройстве.','success');
+  await load();
+ }
  async function restoreBackup(backup){
   if(restoringId||backup.resource_type!=='site'||backup.status!=='completed')return;
   if(!confirm('Restore '+backup.file_name+' over the current website files? The website will be stopped.'))return;
@@ -68,12 +84,20 @@
  {:else}<p class="muted">Расписаний пока нет.</p>{/if}
 </section>
 {#if loading}<div class="empty">Загрузка резервных копий…</div>{:else if !backups.length}<div class="empty"><strong>Резервных копий пока нет</strong><p>Выберите сайт или базу данных выше, чтобы создать первый архив.</p></div>{:else}
-<div class="backup-list">{#each backups as b}<div class="backup-row"><span class="backup-icon">⤓</span><span class="backup-copy"><strong>{b.file_name}</strong><small>{b.resource_type} · {b.resource_id} · {new Date(b.created_at).toLocaleString()}</small></span><span class="size">{size(b.size_bytes)}</span><span class="status">{b.status}</span>{#if (b.resource_type==='site'&&b.status==='completed')||(b.resource_type==='database'&&b.status==='verified')}<Button size="sm" disabled={!!downloadingId} loading={downloadingId===b.id} on:click={()=>downloadBackup(b)}>Download</Button>{#if b.resource_type==='site'}<Button size="sm" variant="danger" disabled={!!restoringId} loading={restoringId===b.id} on:click={()=>restoreBackup(b)}>Restore</Button>{/if}{/if}</div>{/each}</div>
+<div class="backup-list">{#each backups as b}<div class="backup-row"><span class="backup-icon">⤓</span><span class="backup-copy"><strong>{b.file_name}</strong><small>{b.resource_type} · {b.resource_id} · {new Date(b.created_at).toLocaleString()}</small></span><span class="size">{size(b.size_bytes)}</span><span class="status">{b.status}</span>{#if (b.resource_type==='site'&&b.status==='completed')||(b.resource_type==='database'&&b.status==='verified')}
+ <Button size="sm" disabled={!!downloadingId} loading={downloadingId===b.id} on:click={()=>downloadBackup(b)}>Download</Button>
+ {#if b.resource_type==='site'}<Button size="sm" variant="danger" disabled={!!restoringId} loading={restoringId===b.id} on:click={()=>restoreBackup(b)}>Restore</Button>{/if}
+ <select class="transfer-select" bind:value={transferTargets[b.id]}><option value="">Transfer to…</option>
+ {#if b.resource_type==='site'}{#each sites as target}<option value={target.device_id+':'+target.site.site_id}>{target.device_name} / {target.site.site_id}</option>{/each}
+ {:else}{#each dbServers.filter(server=>server.engine==='postgresql'&&server.status==='ready') as server}<option value={server.id}>{server.name} · {server.hostname||('Device '+server.device_id)}</option>{/each}{/if}
+ </select>
+ <Button size="sm" disabled={!transferTargets[b.id]||!!transferBusyId} loading={transferBusyId===b.id} on:click={()=>transferBackupToTarget(b)}>Transfer</Button>
+{/if}</div>{/each}</div>
 {/if}
-<div class="notice">Архивы хранятся локально на Android-устройстве и не удаляются вместе с сайтом. Задания обновляются автоматически, пока архив создаётся. Готовые архивы можно скачать по блокам. Website restore заменяет файлы сайта на исходном устройстве атомарной заменой каталога и оставляет процесс остановленным; проверьте файлы перед запуском.</div>
+<div class="notice">Архивы хранятся локально на Android-устройстве и не удаляются вместе с сайтом. Задания обновляются автоматически, пока архив создаётся. Готовые архивы можно скачать по блокам. Website restore заменяет файлы на выбранном устройстве атомарной заменой каталога и оставляет процесс остановленным. Transfer копирует архив между устройствами и проверяет его целостность на получателе.</div>
 <style>
 .schedule-panel{display:grid;gap:10px;padding:14px;background:#101727;border:1px solid #253149;border-radius:11px;margin-bottom:13px}.schedule-heading{display:flex;justify-content:space-between}.schedule-heading>div{display:grid;gap:4px}.schedule-heading strong{font-size:11px}.schedule-heading small,.schedule-row small{font-size:9px;color:#64748b;line-height:1.5}.schedule-controls{display:flex;gap:8px;flex-wrap:wrap}.schedule-controls .input{min-width:130px}.schedule-list{display:grid;gap:6px}.schedule-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px;border:1px solid #253149;border-radius:8px}.schedule-row>div{display:grid;gap:3px}.schedule-row strong{font-size:10px}.schedule-row .failed{color:#f87171}
 
-.header-actions{display:flex;gap:8px;flex-wrap:wrap}.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}.create-backup{display:flex;justify-content:space-between;align-items:center;gap:13px;padding:14px;background:#101727;border:1px solid #253149;border-radius:11px;margin-bottom:13px}.create-backup>div:first-child{display:grid;gap:4px}.create-backup strong{font-size:11px}.create-backup small{font-size:9px;color:#64748b;max-width:420px;line-height:1.5}.create-controls{display:flex;gap:7px;min-width:360px}.create-controls select{min-width:0;flex:1}.backup-list{border:1px solid #253149;border-radius:11px;overflow:hidden;background:#101727}.backup-row{display:flex;align-items:center;gap:11px;padding:12px;border-bottom:1px solid #1e293b}.backup-row:last-child{border:0}.backup-icon{width:30px;height:30px;display:grid;place-items:center;background:#172136;color:#a5b4fc;border-radius:8px}.backup-copy{display:grid;gap:3px;min-width:0;flex:1}.backup-copy strong{font-size:10px}.backup-copy small,.size,.status{font-size:9px;color:#64748b}.size,.status{white-space:nowrap}.notice{margin-top:13px;padding:12px;border:1px solid #334155;border-radius:9px;background:#101727;color:#94a3b8;font-size:10px;line-height:1.6}
+.header-actions{display:flex;gap:8px;flex-wrap:wrap}.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}.create-backup{display:flex;justify-content:space-between;align-items:center;gap:13px;padding:14px;background:#101727;border:1px solid #253149;border-radius:11px;margin-bottom:13px}.create-backup>div:first-child{display:grid;gap:4px}.create-backup strong{font-size:11px}.create-backup small{font-size:9px;color:#64748b;max-width:420px;line-height:1.5}.create-controls{display:flex;gap:7px;min-width:360px}.create-controls select{min-width:0;flex:1}.backup-list{border:1px solid #253149;border-radius:11px;overflow:hidden;background:#101727}.backup-row{display:flex;align-items:center;gap:11px;padding:12px;border-bottom:1px solid #1e293b}.backup-row:last-child{border:0}.transfer-select{max-width:180px;min-width:120px;background:#0b1220;border:1px solid #334155;border-radius:7px;color:#cbd5e1;padding:6px;font-size:9px}.backup-icon{width:30px;height:30px;display:grid;place-items:center;background:#172136;color:#a5b4fc;border-radius:8px}.backup-copy{display:grid;gap:3px;min-width:0;flex:1}.backup-copy strong{font-size:10px}.backup-copy small,.size,.status{font-size:9px;color:#64748b}.size,.status{white-space:nowrap}.notice{margin-top:13px;padding:12px;border:1px solid #334155;border-radius:9px;background:#101727;color:#94a3b8;font-size:10px;line-height:1.6}
 @media(max-width:700px){.create-backup{align-items:stretch;flex-direction:column}.create-controls{min-width:0}.backup-row{flex-wrap:wrap}}
 </style>
