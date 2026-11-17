@@ -211,8 +211,6 @@ func TestKillProcessGroupStopsTermIgnoringDescendants(t *testing.T) {
  cmd.SysProcAttr = procAttr()
  if err := cmd.Start(); err != nil { t.Fatal(err) }
  pid := cmd.Process.Pid
- token, err := processStartToken(pid)
- if err != nil { _ = cmd.Process.Kill(); _ = cmd.Wait(); t.Fatal(err) }
  if err := killProcessGroup(pid, pid); err != nil { _ = cmd.Process.Kill(); _ = cmd.Wait(); t.Fatalf("kill process group: %v", err) }
  if processGroupAlive(pid) { t.Fatal("process group is still alive after forced shutdown") }
  _ = cmd.Wait()
