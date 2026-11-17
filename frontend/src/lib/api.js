@@ -256,3 +256,5 @@ export async function deleteCloudflareDNS(recordId) { return request('DELETE', '
 export async function restoreSiteBackup(backupId) { return request('POST', '/api/backups/restore-site', { backup_id: backupId }); }
 
 export async function transferBackup(backupId, target) { return request('POST', `/api/backups/${backupId}/transfer`, target); }
+
+export async function getSiteMetrics(deviceId, siteId) { return request('GET', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/metrics`); }
