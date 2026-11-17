@@ -25,7 +25,7 @@ func (s *Server) handleBackupTransfer(w http.ResponseWriter,r *http.Request){
 	var sourceDeviceID int64;var sourceServerID sql.NullInt64;var fileName,status,resourceType,resourceID string;var size int64
 	err=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,database_server_id,file_name,status,resource_type,resource_id,size_bytes FROM backups WHERE id=? AND user_id=?`,backupID,u.ID).Scan(&sourceDeviceID,&sourceServerID,&fileName,&status,&resourceType,&resourceID,&size)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("backup not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load source backup"));return}
-	if size<1||((resourceType=="site"&&status!="completed")||(resourceType=="database"&&status!="verified")){apiError(w,shared.ErrBadRequest("only completed or verified backups can be transferred"));return}
+	if size<1||size>2<<30||((resourceType=="site"&&status!="completed")||(resourceType=="database"&&status!="verified")){apiError(w,shared.ErrBadRequest("only completed or verified backups can be transferred"));return}
 	sourceSiteID:=""
 	if resourceType=="site"{target:=strings.SplitN(resourceID,":",2);if len(target)!=2||target[0]!=strconv.FormatInt(sourceDeviceID,10)||!validBackupSiteID(target[1]){apiError(w,shared.ErrBadRequest("invalid source website backup"));return};sourceSiteID=target[1]}
 	if resourceType!="site"&&resourceType!="database"{apiError(w,shared.ErrBadRequest("unsupported backup type"));return}
@@ -34,6 +34,7 @@ func (s *Server) handleBackupTransfer(w http.ResponseWriter,r *http.Request){
 	if resourceType=="site"{
 		targetSiteID=strings.TrimSpace(in.TargetSiteID)
 		if targetDeviceID<1||!validBackupSiteID(targetSiteID)||in.TargetServerID!=0{apiError(w,shared.ErrBadRequest("choose a target website"));return}
+		if targetDeviceID==sourceDeviceID&&targetSiteID==sourceSiteID{apiError(w,shared.ErrBadRequest("source and target website are the same"));return}
 		var owned int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,targetDeviceID,targetSiteID,u.ID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("target website not found"));return}
 		suffix:=strings.TrimPrefix(fileName,sourceSiteID+"-");if suffix==fileName{apiError(w,shared.ErrBadRequest("invalid source archive name"));return}
@@ -73,7 +74,7 @@ func (s *Server) runBackupTransfer(sourceID,targetID,userID int64,sourceConn,tar
 		cancel()
 		if err!=nil||readResult==nil||!readResult.Ok{s.abortBackupTransfer(targetConn,transferID,resourceType,targetSite,targetServer,targetFile);s.failBackupTransfer(targetID,userID,"source backup read failed");return}
 		var chunk shared.DatabaseBackupChunk
-		if err:=shared.Unmarshal(readResult.Payload,&chunk);err!=nil||chunk.Offset!=offset||chunk.TotalSize!=total||len(chunk.Data)==0||len(chunk.Data)>length||offset+int64(len(chunk.Data))>total{s.abortBackupTransfer(targetConn,transferID,resourceType,targetSite,targetServer,targetFile);s.failBackupTransfer(targetID,userID,"source backup chunk validation failed");return}
+		if err:=shared.Unmarshal(readResult.Payload,&chunk);err!=nil||chunk.Offset!=offset||chunk.TotalSize!=total||len(chunk.Data)==0||len(chunk.Data)>length||offset+int64(len(chunk.Data))>total||chunk.EOF!=(offset+int64(len(chunk.Data))==total){s.abortBackupTransfer(targetConn,transferID,resourceType,targetSite,targetServer,targetFile);s.failBackupTransfer(targetID,userID,"source backup chunk validation failed");return}
 		final:=offset+int64(len(chunk.Data))==total
 		writeReq:=&shared.WriteBackupChunk{TransferID:transferID,ResourceType:resourceType,SiteId:targetSite,ServerID:targetServer,FileName:targetFile,Offset:offset,TotalSize:total,Data:chunk.Data,Final:final}
 		ctx,cancel=context.WithTimeout(context.Background(),45*time.Second)
