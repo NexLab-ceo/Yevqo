@@ -283,6 +283,11 @@ func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 			cancel()
 			if dbErr != nil { log.Printf("store pushed metrics: %v", dbErr) }
 		}
+	case "deployment_job":
+		var job shared.DeploymentJobEvent
+		if err := shared.Unmarshal(ev.Payload, &job); err == nil && c.Device != nil && validLogSiteID(job.SiteId) {
+			if srv.logStreams != nil { srv.logStreams.publishDeployment(c.Device.UserID, c.Device.ID, job) }
+		}
 	case "status":
 		var se shared.StatusEvent
 		if err := shared.Unmarshal(ev.Payload, &se); err == nil {
