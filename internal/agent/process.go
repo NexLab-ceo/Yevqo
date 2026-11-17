@@ -1074,7 +1074,7 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 	tx := deploymentTransaction{Version:1, SiteID:siteID, State:"activating", CandidateCommit:commit, HadPrevious:hadPrevious, Previous:previous}
 	pid, startErr := m.activateBlueGreenRelease(context.Background(), tx, runPath, port, runtime, nil, startCommand, "")
 	if startErr != nil { return 0, fmt.Errorf("could not activate release %s: %w", commit, startErr) }
-
+	return pid, nil
 }
 
 // BuildSite runs the Android-native local provider for a site. Project code is
