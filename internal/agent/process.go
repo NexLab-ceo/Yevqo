@@ -637,8 +637,9 @@ func parsePID(s string) (int, error) {
 func (m *ProcessManager) RestartSite(siteID, path string, port int, runtime string) (int, error) {
 	m.operationMu.Lock()
 	defer m.operationMu.Unlock()
-	if err := m.stopSiteLocked(siteID); err != nil && !strings.Contains(err.Error(), "is not running") { return 0, err }
-	previous, hadPrevious := m.registry.Get(siteID)
+	var previous ProcessRecord
+	hadPrevious := false
+	if m.registry != nil { previous, hadPrevious = m.registry.Get(siteID) }
 	if err := m.stopSiteLocked(siteID); err != nil && !strings.Contains(err.Error(), "is not running") { return 0, err }
 	startCommand := ""; if hadPrevious { startCommand = previous.StartCommand }
 	return m.startSiteWithCommandLocked(siteID, path, port, runtime, nil, startCommand)
@@ -975,7 +976,7 @@ func (m *ProcessManager) ListSiteReleases(siteID, runtime string) ([]shared.Site
 
 // RollbackSiteRelease switches to an existing immutable release without
 // rebuilding it. If activation fails, the previously running process is restored.
-func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime string, port int) (int, error) {
+func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime string, port int, startCommand string) (int, error) {
 	m.operationMu.Lock()
 	defer m.operationMu.Unlock()
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
