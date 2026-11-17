@@ -680,6 +680,23 @@ func (m *ProcessManager) RestartSiteWithEnv(siteID, path string, port int, runti
 	if m.registry != nil { previous, hadPrevious = m.registry.Get(siteID) }
 	if err := m.stopSiteLocked(siteID); err != nil && !strings.Contains(err.Error(), "is not running") { return 0, err }
 	startCommand := ""; if hadPrevious { startCommand = previous.StartCommand }
+	if hadPrevious && previous.BackendPort > 0 {
+		pid, err := m.startSiteWithCommandLocked(siteID, path, previous.BackendPort, runtime, extraEnv, startCommand)
+		if err != nil { return 0, err }
+		record, ok := m.registry.Get(siteID)
+		if !ok { return 0, fmt.Errorf("restarted process record is missing") }
+		record.Port = previous.Port
+		record.BackendPort = previous.BackendPort
+		if err := m.registry.Save(record); err != nil { return 0, fmt.Errorf("persist restarted backend identity: %w", err) }
+		m.mu.Lock()
+		if process := m.procs[siteID]; process != nil && process.PID == pid { process.Port = record.Port }
+		m.mu.Unlock()
+		if err := m.ensureDeploymentProxy(siteID, record.Port, record.BackendPort); err != nil {
+			_ = m.stopSiteLocked(siteID)
+			return 0, fmt.Errorf("restore stable listener after restart: %w", err)
+		}
+		return pid, nil
+	}
 	return m.startSiteWithCommandLocked(siteID, path, port, runtime, extraEnv, startCommand)
 }
 
