@@ -102,7 +102,7 @@ func TestInterruptedDeploymentWithoutPreviousStopsCandidate(t *testing.T) {
 	}
 	// Constructing a fresh manager simulates Agent startup after a hard crash.
 	restarted := NewProcessManager(root)
-	if _, exists := registry.Get("demo"); exists {
+	if _, exists := restarted.registry.Get("demo"); exists {
 		t.Fatal("candidate process record remained after interrupted deployment recovery")
 	}
 	if _, exists, err := restarted.readDeploymentTransaction("demo"); err != nil || exists {
