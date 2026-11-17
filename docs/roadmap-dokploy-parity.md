@@ -28,14 +28,31 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 
 ## P1 — Deployment UX and recovery
 
-- [ ] Environment editor with encrypted storage and scoped injection.
+- [x] Per-site environment editor with AES-GCM encryption in Control Plane storage, masked readback, reserved-key validation and scoped injection.
+- [x] Agent-side encrypted environment persistence so crash recovery and Agent restart can re-inject secrets without plaintext process-registry storage.
 - [x] Release history with commit, runtime, timestamp and active status.
 - [x] Rollback to a previous immutable release without rebuilding.
-- [ ] GitHub webhook deployment and branch/commit selection.
-- [ ] Scheduled tasks and deployment notifications.
-- [ ] Resource telemetry per app (CPU/RAM where Android exposes it; no fake container metrics).
-- [ ] Cloudflare API for DNS/Public Hostname automation.
-- [ ] Website backup restore UI, database backup scheduling and cross-device transfer.
+- [x] Signed GitHub push webhooks (HMAC-SHA256), delivery replay protection, branch filtering and exact commit checkout.
+- [x] Manual branch and full commit SHA-1/SHA-256 selection for deployments.
+- [x] Persistent per-site scheduled commands with fixed intervals (15 minutes–30 days), pause/resume, bounded runtime and task output history.
+- [x] In-app notifications for manual and webhook deployments, scheduled tasks, scheduled backups and transfer outcomes.
+- [x] Per-site main-process CPU and RSS telemetry from Linux /proc; the UI explicitly does not claim container/cgroup or child-process aggregate metrics.
+- [x] Cloudflare API token verification and encrypted storage; scoped zone DNS CNAME create/update/list/delete for Cloudflare Tunnel hostnames.
+- [x] Website backup download, safe archive restore with atomic directory swap, and preservation of target-device environment secrets.
+- [x] Scheduled website and PostgreSQL backups with configurable interval and on-device retention pruning.
+- [x] Chunked database and website backup downloads plus cross-device transfer with destination-side archive verification.
+- [x] PostgreSQL backup restore into a new database, including transferred backups.
+
+### P1 implementation notes
+
+- Environment values are masked on read. They are encrypted at rest in the Control Plane and again on the Agent; they are never included in website backup archives or copied to another device.
+- GitHub webhook enablement requires explicit consent to execute repository code. The endpoint verifies the raw request body signature and ignores duplicate delivery IDs. Agent-offline deliveries return a retryable error before the delivery ID is committed.
+- Scheduled tasks use fixed intervals rather than arbitrary cron expressions. Commands execute as the Termux Agent user in the site's directory, with that site's protected environment and a 30-minute hard timeout.
+- CPU/RSS telemetry samples the managed main PID from /proc; Android may not expose all process/cgroup accounting. Child processes are not aggregated.
+- Cloudflare automation manages proxied CNAME records pointing to a tunnel UUID hostname. It does not create or provision Cloudflare Tunnels, issue certificates, or configure Public Hostname origins.
+- Backup transfer is streamed through the Control Plane in 256 KiB chunks and is currently limited to 2 GiB per archive. Both source and destination Agents must be online; database transfers require a ready PostgreSQL server on the destination.
+- Website restore replaces the target site's files and leaves its process stopped. Review the restored files before starting it.
+- Backup archives exclude Agent deployment metadata and encrypted environment files. Restore preserves the target Agent's existing encrypted environment rather than importing secrets from another device.
 
 ## P2 — Platform capabilities
 
