@@ -180,7 +180,7 @@ func (h *CommandHandler) handleStartSite(cmd *shared.Command) *shared.Result {
 		return errorResult(cmd.Id, "invalid start_site payload")
 	}
 
-	pid, err := h.processes.StartSiteWithEnv(req.SiteId, req.Path, int(req.Port), req.Runtime, req.Env)
+	pid, err := h.processes.StartSiteWithEnvAndCommand(req.SiteId, req.Path, int(req.Port), req.Runtime, req.Env, req.StartCommand)
 	if err != nil {
 		return errorResult(cmd.Id, err.Error())
 	}
