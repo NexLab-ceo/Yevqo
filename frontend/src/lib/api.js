@@ -196,6 +196,9 @@ export async function getReports() { return request('GET', '/api/reports'); }
 export async function listBackups() { return request('GET', '/api/backups'); }
 export async function createControlPlaneBackup() { return request('POST', '/admin/api/backups/control-plane', {}); }
 export async function getDatabaseBackupChunk(id, offset, length = 262144) { return request('GET', `/api/backups/${id}/chunk?offset=${offset}&length=${length}`); }
+export async function listBackupSchedules() { return request('GET', '/api/backup-schedules'); }
+export async function createBackupSchedule(input) { return request('POST', '/api/backup-schedules', input); }
+export async function deleteBackupSchedule(id) { return request('DELETE', `/api/backup-schedules/${id}`); }
 
 export async function deleteSite(deviceId, siteId) { return request('DELETE', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}`); }
 
