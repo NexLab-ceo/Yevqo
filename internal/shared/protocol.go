@@ -201,6 +201,8 @@ type StopSite struct {
 	SiteId string `json:"site_id"`
 }
 
+type GetSiteRestartPolicy struct { SiteId string `json:"site_id"` }
+
 type SetSiteRestartPolicy struct {
 	SiteId string `json:"site_id"`
 	Policy string `json:"policy"`
