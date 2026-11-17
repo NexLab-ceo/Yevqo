@@ -256,7 +256,7 @@ func (h *CommandHandler) handleListSiteReleases(cmd *shared.Command) *shared.Res
 func (h *CommandHandler) handleRollbackSiteRelease(cmd *shared.Command) *shared.Result {
 	var req shared.RollbackSiteRelease
 	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid rollback_site_release payload") }
-	pid, err := h.processes.RollbackSiteRelease(req.SiteId, req.Commit, req.RootDir, req.Runtime, int(req.Port))
+	pid, err := h.processes.RollbackSiteRelease(req.SiteId, req.Commit, req.RootDir, req.Runtime, int(req.Port), req.StartCommand)
 	if err != nil { return errorResult(cmd.Id, err.Error()) }
 	payload, _ := shared.Marshal(&shared.StartSiteResult{Pid:uint32(pid), Port:req.Port, CommitHash:req.Commit})
 	return &shared.Result{Id:cmd.Id, Ok:true, Message:fmt.Sprintf("rollback completed: release %s is active (pid %d)", req.Commit, pid), Payload:payload}
