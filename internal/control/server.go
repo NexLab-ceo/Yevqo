@@ -155,6 +155,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/monitoring", s.RequireAuth(s.handleMonitoring))
 	s.mux.HandleFunc("/api/integrations", s.RequireAuth(s.handleIntegrations))
 	s.mux.HandleFunc("/api/integrations/", s.RequireAuth(func(w http.ResponseWriter, r *http.Request) { if strings.HasSuffix(r.URL.Path, "/repositories") { s.handleIntegrationRepositories(w, r); return }; s.handleIntegrationByID(w, r) }))
+	s.mux.HandleFunc("/api/cloudflare", s.RequireAuth(s.handleCloudflareConfig))
+	s.mux.HandleFunc("/api/cloudflare/dns", s.RequireAuth(s.handleCloudflareDNS))
 
 	// --- API для админа ---
 	s.mux.HandleFunc("/admin/api/users", s.RequireAdmin(s.handleAdminUsers))
