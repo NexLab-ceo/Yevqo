@@ -508,6 +508,12 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 
 	rest := strings.TrimPrefix(r.URL.Path, "/api/sites/")
 	parts := strings.Split(rest, "/")
+	if len(parts) == 3 && parts[2] == "webhook" {
+		deviceID, err := parseSiteGitRouteID(parts[0])
+		if err != nil { apiError(w, err); return }
+		s.handleSiteWebhookSettings(w, r, user, deviceID, parts[1])
+		return
+	}
 	if len(parts) == 3 && parts[2] == "env" {
 		deviceID, err := parseSiteGitRouteID(parts[0])
 		if err != nil { apiError(w, err); return }
