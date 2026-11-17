@@ -67,7 +67,7 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 - [ ] Preview deployments and staging environments.
 - [ ] Build plugins/providers.
 - [ ] Remote Linux build executor for Dockerfile/Nixpacks/Railpack.
-- [ ] Multi-device orchestration and per-device capabilities. Account registration is already quota-aware: Free is strictly limited to one phone, while commercial allowances are configurable. Device registration is serialized per account in MySQL so concurrent Agent connections cannot exceed the quota; existing paired devices can reconnect without consuming another slot.
+- [ ] Multi-device orchestration and per-device capabilities. Account registration is quota-aware: Free is strictly limited to one phone (referral bonuses do not bypass the cap), while commercial allowances are configurable. Device registration is serialized per account in MySQL so concurrent Agent connections cannot exceed the quota; existing paired devices can reconnect without consuming another slot. Agent handshakes report OS, architecture and detected local runtimes/tools; the Control Plane persists and displays these per-device capabilities. Unpairing closes the live Agent socket.
 - [ ] Granular team permissions, audit log and API/CLI polish.
 
 ## Process model (Termux)
