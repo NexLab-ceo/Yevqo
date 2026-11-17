@@ -26,6 +26,9 @@ type AuthRequest struct {
 	Hostname     string
 	TailscaleIp  string
 	AgentVersion string
+	Platform string
+	Architecture string
+	Capabilities []string
 }
 
 type AuthResponse struct {
