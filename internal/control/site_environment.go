@@ -1,6 +1,7 @@
 package control
 
 import (
+	"context"
 	"net/http"
 	"regexp"
 	"strconv"
