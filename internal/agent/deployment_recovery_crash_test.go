@@ -109,7 +109,7 @@ func TestDeploymentRecoveryCrashBoundaries(t *testing.T) {
 				t.Fatalf("recovery journal should be finalized: exists=%v err=%v",exists,err)
 			}
 			if point == "commit-recorded-before-journal-cleanup" {
-				if !verifyProcessRecord(got) || !waitForTCP(candidatePort, time.Second) { t.Fatal("committed candidate process is not healthy") }
+				if !verifyProcessRecord(got) || waitForTCP(candidatePort, time.Second) != nil { t.Fatal("committed candidate process is not healthy") }
 				if err := restarted.StopSite("demo"); err != nil { t.Fatal(err) }
 			}
 		})
