@@ -58,7 +58,12 @@ type ProcessManager struct {
 func NewProcessManager(dataRoot string) *ProcessManager {
  m := &ProcessManager{DataRoot:dataRoot, BuildRunner:NewAndroidBuildRunner(dataRoot), procs:make(map[string]*Process), restartAttempts:make(map[string]int), intentionalStops:make(map[string]bool)}
  m.registry, m.registryErr = NewProcessRegistry(dataRoot)
- if m.registryErr == nil { m.restoreProcesses(); go m.watchProcesses() }
+ if m.registryErr == nil {
+  // Reconcile interrupted release activation before adopting process records.
+  m.recoverDeploymentTransactions()
+  m.restoreProcesses()
+  go m.watchProcesses()
+ }
  return m
 }
 
