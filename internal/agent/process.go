@@ -853,6 +853,8 @@ func validReleaseCommit(commit string) bool {
 // ListSiteReleases reads immutable release directories and marks the release
 // currently referenced by the durable process registry.
 func (m *ProcessManager) ListSiteReleases(siteID, runtime string) ([]shared.SiteRelease, error) {
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
 	if !validSiteID(siteID) { return nil, fmt.Errorf("invalid site id") }
 	root, err := safeSiteDirectory(m.DataRoot, siteID)
 	if err != nil { return nil, err }
