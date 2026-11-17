@@ -256,6 +256,9 @@ type SiteAction struct {
 	GitURL string `json:"git_url,omitempty"`
 	GitBranch string `json:"git_branch,omitempty"`
 	HealthCheckPath string `json:"health_check_path,omitempty"`
+	CloneTimeoutSeconds int `json:"clone_timeout_seconds,omitempty"`
+	BuildTimeoutSeconds int `json:"build_timeout_seconds,omitempty"`
+	HealthCheckTimeoutSeconds int `json:"health_check_timeout_seconds,omitempty"`
 	StartCommand string `json:"start_command,omitempty"`
 	BuildCommand string `json:"build_command,omitempty"`
 	RootDir string `json:"root_dir,omitempty"`
