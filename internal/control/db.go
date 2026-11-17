@@ -233,17 +233,13 @@ func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Devic
 		return nil, shared.ErrForbidden("device limit reached: your current plan allows " + strconv.Itoa(limit) + " connected phone(s); disconnect a phone or upgrade your plan")
 	}
 
-	_, err = tx.ExecContext(ctx, `
+	insertResult, err := tx.ExecContext(ctx, `
 		INSERT INTO devices (user_id, device_id, hostname, tailscale_ip, agent_version, status, last_seen)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		d.UserID, d.DeviceID, d.Hostname, d.TailscaleIP, d.AgentVersion, shared.DeviceOnline, now)
 	if err != nil { return nil, fmt.Errorf("insert device: %w", err) }
-	id, err := tx.ExecContext(ctx, "SELECT LAST_INSERT_ID()")
+	d.ID, err = insertResult.LastInsertId()
 	if err != nil { return nil, fmt.Errorf("read registered device id: %w", err) }
-	_ = id
-	if err := tx.QueryRowContext(ctx, "SELECT id FROM devices WHERE device_id = ?", d.DeviceID).Scan(&d.ID); err != nil {
-		return nil, fmt.Errorf("read registered device: %w", err)
-	}
 	d.Status, d.CreatedAt, d.LastSeen = shared.DeviceOnline, now, &now
 	if err := tx.Commit(); err != nil { return nil, fmt.Errorf("commit device registration: %w", err) }
 	return d, nil
