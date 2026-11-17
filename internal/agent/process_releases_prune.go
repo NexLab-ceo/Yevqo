@@ -13,8 +13,8 @@ import (
 // active release. It is deliberately explicit: deployments never delete
 // rollback targets automatically.
 func (m *ProcessManager) PruneSiteReleases(siteID string, keep int) ([]string, error) {
-	m.deployMu.Lock()
-	defer m.deployMu.Unlock()
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
 
 	if !validSiteID(siteID) {
 		return nil, fmt.Errorf("invalid site id")
