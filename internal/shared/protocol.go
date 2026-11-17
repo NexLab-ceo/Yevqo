@@ -114,6 +114,11 @@ type ManageDatabaseRole struct {
 	Password string `json:"password,omitempty"`
 }
 
+type RestoreSiteBackup struct {
+	SiteId string `json:"site_id"`
+	FileName string `json:"file_name"`
+}
+
 type ReadSiteBackupChunk struct {
 	SiteId string `json:"site_id"`
 	FileName string `json:"file_name"`
