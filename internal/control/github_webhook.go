@@ -93,11 +93,10 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	var sitePath, runtime string
 	var port int
 	if err := s.db.conn.QueryRowContext(r.Context(), `SELECT d.user_id,st.path,st.port,st.runtime FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=?`, deviceID, parts[1]).Scan(&userID, &sitePath, &port, &runtime); err != nil {
-		_, _ = s.db.conn.ExecContext(context.Background(), `UPDATE github_webhook_deliveries SET status='failed' WHERE device_id=? AND site_id=? AND delivery_id=?`, deviceID, parts[1], delivery)
 		http.NotFound(w, r); return
 	}
 	conn, online := s.hub.Get(deviceID)
-	if !online { _, _ = s.db.conn.ExecContext(r.Context(), `UPDATE github_webhook_deliveries SET status='failed' WHERE device_id=? AND site_id=? AND delivery_id=?`, deviceID, parts[1], delivery); http.Error(w, "Agent is offline", http.StatusServiceUnavailable); return }
+	if !online { http.Error(w, "Agent is offline", http.StatusServiceUnavailable); return }
 	gitCfg, err := s.siteGitSettings(r.Context(), deviceID, parts[1])
 	if err != nil { http.Error(w, "Git settings unavailable", http.StatusInternalServerError); return }
 	env, err := s.siteRuntimeEnvironment(r.Context(), userID, deviceID, parts[1])
