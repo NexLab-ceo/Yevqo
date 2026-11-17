@@ -34,7 +34,11 @@ PostgreSQL installation, database creation, application-role provisioning, encry
 - Site IDs and paths are validated on the Agent. Site log files are private to the Termux account.
 - Removing a website from the panel removes its metadata only; its device files are deliberately preserved.
 - Domains can be assigned as metadata to a site. DNS and reverse-proxy / tunnel routing are not reported as active until verified separately.
-- Deployment history records site create/start/stop and Git Pull actions without storing command payloads or credentials.
+- Git deployments check out into a private staging directory, build before activation and publish immutable commit-addressed releases under `.yevqo/releases`. A failed activation restores the previously running release.
+- Release history exposes commit IDs, dates and the active release. Rollback activates an existing release without rebuilding it.
+- Release cleanup is explicit (1–50 newest releases to retain); it always preserves the active release and rejects symlinked metadata/release paths. No automatic cleanup deletes rollback targets.
+- Site mutations (create, build, Git pull, start, stop, deploy, rollback and release cleanup) share an Agent lifecycle lock so commands cannot interleave midway through a deployment. This currently serializes mutations across sites on the same Agent.
+- Deployment history records successful and failed deploy/rebuild/rollback attempts without storing command payloads or credentials.
 - Monitoring currently reports device heartbeat, agent version and site/server counts. CPU, RAM and temperature require a future telemetry event from the Agent.
 
 
