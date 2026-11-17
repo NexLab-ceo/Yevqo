@@ -50,6 +50,7 @@ func newDeploymentProxy(publicPort, backendPort int) (*deploymentProxy, error) {
 		}
 		defer backend.inflight.Done()
 		w.Header().Set("X-Yevqo-Backend", backend.target.Host)
+		w.Header().Set("X-Yevqo-Proxy", fmt.Sprintf("%p", proxy))
 		backend.reverse.ServeHTTP(w, r)
 	})
 	proxy.server = &http.Server{
