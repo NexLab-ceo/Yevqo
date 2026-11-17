@@ -493,23 +493,7 @@ func (m *ProcessManager) stopSiteLocked(siteID string) error {
 
 // GetLogs возвращает последние N строк лога сайта.
 func (m *ProcessManager) GetLogs(siteID string, lines int) (string, error) {
-	if !validSiteID(siteID) { return "", fmt.Errorf("invalid site id") }
-	logPath := filepath.Join(m.DataRoot, "logs", siteID+".log")
-	if _, err := os.Stat(logPath); err != nil {
-		return "", fmt.Errorf("log not found: %s", logPath)
-	}
-
-	if lines <= 0 {
-		lines = 50
-	}
-
-	cmd := exec.Command("tail", "-n", strconv.Itoa(lines), logPath)
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("tail: %w", err)
-	}
-
-	return string(out), nil
+ return readSiteLogs(m.DataRoot, siteID, lines)
 }
 
 // ============================================================
