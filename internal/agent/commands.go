@@ -80,6 +80,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleListSiteReleases(cmd)
 	case "rollback_site_release":
 		return h.handleRollbackSiteRelease(cmd)
+	case "prune_site_releases":
+		return h.handlePruneSiteReleases(cmd)
 	case "git_pull":
 		return h.handleGitPull(cmd)
 	case "get_logs":
@@ -391,4 +393,20 @@ func (h *CommandHandler) handleInstallCloudflared(cmd *shared.Command) *shared.R
  if err!=nil{return errorResult(cmd.Id,err.Error())}
  payload,_:=shared.Marshal(map[string]string{"path":path})
  return &shared.Result{Id:cmd.Id,Ok:true,Message:"cloudflared installed for Termux user",Payload:payload}
+}
+
+func (h *CommandHandler) handlePruneSiteReleases(cmd *shared.Command) *shared.Result {
+	var req shared.PruneSiteReleases
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
+		return errorResult(cmd.Id, "invalid prune_site_releases payload")
+	}
+	removed, err := h.processes.PruneSiteReleases(req.SiteId, req.Keep)
+	if err != nil {
+		return errorResult(cmd.Id, err.Error())
+	}
+	payload, err := shared.Marshal(&shared.PruneSiteReleasesResult{Removed: removed})
+	if err != nil {
+		return errorResult(cmd.Id, "could not encode release pruning result")
+	}
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: fmt.Sprintf("removed %d old release(s)", len(removed)), Payload: payload}
 }
