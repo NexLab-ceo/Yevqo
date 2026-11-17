@@ -661,7 +661,7 @@
                 <label>Branch<input class="input" bind:value={gitForm.branch} placeholder="main" /></label>
                 <label class="wide">Build Command<input class="input" bind:value={gitForm.build_command} placeholder="npm run build или composer install" /></label>
                 <label class="wide">Root Directory<input class="input" bind:value={gitForm.root_directory} placeholder="." /></label>
-                <label class="wide">HTTP Health Check Path (optional)<input class="input" bind:value={gitForm.health_check_path} placeholder="/health" /><small>После запуска релиза Agent ждёт HTTP 2xx/3xx на локальном адресе. Пустое поле использует TCP readiness.</small></label>
+                <label class="wide">HTTP Health Check Path (optional)<input class="input" bind:value={gitForm.health_check_path} placeholder="/health" /><small>После запуска релиза Agent ждёт HTTP 2xx на локальном адресе. Пустое поле использует TCP readiness.</small></label>
                 <label class="wide">GitHub Token<input class="input" type="password" bind:value={gitForm.github_token} autocomplete="new-password" placeholder={git.has_token ? 'Токен сохранён — пустое поле оставит его без изменений' : 'Только для приватного репозитория'} />{#if git.has_token}<small>Токен сохранён с AES-GCM шифрованием.</small>{/if}</label>
             </div>
             <p class="security-note">Build Command выполняется на устройстве от имени пользователя Termux. Используйте только доверенные команды.</p>
