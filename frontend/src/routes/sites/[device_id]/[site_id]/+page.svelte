@@ -267,7 +267,8 @@
         busyAction = '';
         if (action === 'deploy' || action === 'rebuild') deploymentJobBusy = false;
         if (!res.ok || !res.data?.ok) {
-            notify(res.error || res.data?.message || 'Команда завершилась ошибкой', 'error');
+            const failure = res.data?.error_code ? `[${res.data.error_code}] ${res.data.message || res.error || 'Команда завершилась ошибкой'}${res.data.retryable ? ' · можно повторить' : ''}` : (res.error || res.data?.message || 'Команда завершилась ошибкой');
+            notify(failure, 'error');
             await refresh();
             return;
         }
