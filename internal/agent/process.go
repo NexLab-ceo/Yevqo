@@ -928,16 +928,16 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	if plan.Stack != expectedStack && !(req.Runtime == "php" && plan.Stack == "unknown") {
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("detected stack %q does not match configured runtime %q", plan.Stack, req.Runtime)
 	}
-	if req.BuildCommand != "" {
-		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("custom shell build commands are disabled; use a supported detected stack")
-	}
 	if req.Runtime == "php" && plan.Stack == "unknown" {
 		// Plain PHP sites without Composer have no dependency/build phase.
 	} else {
 		if m.BuildRunner == nil { m.BuildRunner = NewAndroidBuildRunner(m.DataRoot) }
+		installCommand := ""
+		if req.BuildCommand != "" { installCommand = plan.Install }
 		build := m.BuildRunner.Run(ctx, AndroidBuildRequest{
 			SiteID:req.SiteId, SiteRoot:stageDir, RootDir:rootDir, Stack:plan.Stack,
-			PackageTool:plan.PackageTool, AllowProjectCode:true, Timeout:buildTimeout, MaxLogBytes:10<<20,
+			PackageTool:plan.PackageTool, InstallCommand:installCommand, BuildCommand:req.BuildCommand,
+			AllowProjectCode:true, Timeout:buildTimeout, MaxLogBytes:10<<20,
 			OnStep:func(name string, index, total int) {
 				progress := 40
 				if total > 0 { progress += index * 25 / total }
