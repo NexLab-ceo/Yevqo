@@ -28,5 +28,5 @@ func readSiteBackupChunk(req shared.ReadSiteBackupChunk) (*shared.DatabaseBackup
 	n,readErr:=file.ReadAt(buf,req.Offset)
 	if readErr!=nil && readErr!=io.EOF{return nil,readErr}
 	buf=buf[:n]
-	return &shared.DatabaseBackupChunk{Data:buf,Offset:req.Offset,TotalSize:info.Size(),Done:req.Offset+int64(n)>=info.Size()},nil
+	return &shared.DatabaseBackupChunk{Data:buf,Offset:req.Offset,TotalSize:info.Size(),EOF:req.Offset+int64(n)>=info.Size()},nil
 }
