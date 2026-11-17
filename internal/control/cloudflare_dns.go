@@ -16,6 +16,7 @@ import (
 
 const cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
 var cloudflareZoneIDPattern = regexp.MustCompile("^[a-fA-F0-9]{32}$")
+var cloudflareDNSRecordIDPattern = regexp.MustCompile("^[a-fA-F0-9]{32}$")
 var cloudflareTunnelIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type cloudflareAPIEnvelope struct {
@@ -44,6 +45,7 @@ func cloudflareAPIRequest(ctx context.Context, token, method, endpoint string, b
 
 func validCloudflareZoneID(value string) bool { return cloudflareZoneIDPattern.MatchString(value) }
 func validCloudflareTunnelID(value string) bool { return cloudflareTunnelIDPattern.MatchString(value) }
+func validCloudflareDNSRecordID(value string) bool { return cloudflareDNSRecordIDPattern.MatchString(value) }
 func hostnameBelongsToZone(hostname, zone string) bool {
 	hostname=strings.ToLower(strings.TrimSuffix(strings.TrimSpace(hostname),"."))
 	zone=strings.ToLower(strings.TrimSuffix(strings.TrimSpace(zone),"."))
@@ -122,16 +124,27 @@ func (s *Server) handleCloudflareDNS(w http.ResponseWriter,r *http.Request){
 		if err!=nil{apiError(w,shared.ErrBadRequest("could not check existing DNS record"));return}
 		payload:=map[string]interface{}{"type":"CNAME","name":in.Hostname,"content":strings.ToLower(in.TunnelID)+".cfargotunnel.com","proxied":true,"ttl":1}
 		method,endpoint:=http.MethodPost,"/zones/"+zoneID+"/dns_records"
-		if len(existing)>0 {
-			if existing[0].Type!="CNAME"||!strings.HasSuffix(strings.ToLower(existing[0].Content),".cfargotunnel.com"){apiError(w,shared.ErrBadRequest("a non-tunnel DNS record already uses this hostname; refusing to overwrite it"));return}
+		if len(existing)>1 {
+			apiError(w,shared.ErrConflict("multiple DNS records already use this hostname; resolve the duplicate records manually"))
+			return
+		}
+		if len(existing)==1 {
+			if existing[0].Type!="CNAME"||!strings.HasSuffix(strings.ToLower(existing[0].Content),".cfargotunnel.com")||!validCloudflareDNSRecordID(existing[0].ID) {
+				apiError(w,shared.ErrBadRequest("an unmanaged DNS record already uses this hostname; refusing to overwrite it"))
+				return
+			}
 			method=http.MethodPut;endpoint+="/"+existing[0].ID
 		}
 		var record cloudflareDNSRecord
 		if err:=cloudflareAPIRequest(ctx,token,method,endpoint,payload,&record);err!=nil{apiError(w,shared.ErrBadRequest("Cloudflare could not create the tunnel DNS record"));return}
+		if !validCloudflareDNSRecordID(record.ID)||record.Name!=in.Hostname||record.Type!="CNAME"||!strings.EqualFold(record.Content,payload["content"].(string)) {
+			apiError(w,shared.ErrInternal("Cloudflare returned an unexpected DNS record"))
+			return
+		}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"record":record})
 	case http.MethodDelete:
 		var in struct{RecordID string `json:"record_id"`}
-		if err:=decodeJSON(r,&in);err!=nil||len(in.RecordID)<10||len(in.RecordID)>64{apiError(w,shared.ErrBadRequest("invalid DNS record id"));return}
+		if err:=decodeJSON(r,&in);err!=nil||!validCloudflareDNSRecordID(in.RecordID){apiError(w,shared.ErrBadRequest("invalid DNS record id"));return}
 		var record cloudflareDNSRecord
 		if err:=cloudflareAPIRequest(ctx,token,http.MethodGet,"/zones/"+zoneID+"/dns_records/"+in.RecordID,nil,&record);err!=nil||record.ID!=in.RecordID||record.Type!="CNAME"||!strings.HasSuffix(strings.ToLower(record.Content),".cfargotunnel.com")||!hostnameBelongsToZone(record.Name,zoneName){apiError(w,shared.ErrNotFound("DNS record not found in configured zone"));return}
 		if err:=cloudflareAPIRequest(ctx,token,http.MethodDelete,"/zones/"+zoneID+"/dns_records/"+in.RecordID,nil,nil);err!=nil{apiError(w,shared.ErrBadRequest("could not delete DNS record"));return}
