@@ -95,6 +95,10 @@ func (m *ProcessManager) streamLogFile(siteID, logPath string, offset int64, pid
 	defer ticker.Stop()
 	pending := make([]byte, 0, 4096)
 	for {
+		if info, statErr := file.Stat(); statErr == nil && info.Size() < offset {
+			offset = 0
+			pending = pending[:0]
+		}
 		buffer := make([]byte, 4096)
 		n, readErr := file.ReadAt(buffer, offset)
 		if n > 0 {
@@ -460,6 +464,7 @@ func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, r
 	emitLog := m.logEmitter
 	m.mu.RUnlock()
 	go m.streamLogFile(siteID, logPath, logStartOffset, pid, emitLog)
+	go m.watchLogRotation(siteID, logPath, pid)
 	return pid, nil
 }
 
