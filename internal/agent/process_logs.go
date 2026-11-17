@@ -84,3 +84,17 @@ func rotateActiveSiteLog(path string) error {
  if err != nil { return err }
  return active.Close()
 }
+
+
+func (m *ProcessManager) watchLogRotation(siteID, logPath string, pid int) {
+ ticker := time.NewTicker(5*time.Second)
+ defer ticker.Stop()
+ for range ticker.C {
+  m.mu.RLock()
+  process, ok := m.procs[siteID]
+  managed := ok && process.PID == pid
+  m.mu.RUnlock()
+  if !managed || !isAlive(pid) { return }
+  if err := rotateActiveSiteLog(logPath); err != nil { m.emitProcessLog(siteID, "log rotation failed: "+err.Error()) }
+ }
+}
