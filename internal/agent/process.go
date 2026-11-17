@@ -929,16 +929,24 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	if m.registry != nil {
 		previous, hadPrevious = m.registry.Get(req.SiteId)
 	}
-	if hadPrevious && verifyProcessRecord(previous) {
-		if err := m.stopSiteLocked(req.SiteId); err != nil {
-			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("stop previous release: %w", err)
-		}
-	} else if hadPrevious {
+	if hadPrevious && !verifyProcessRecord(previous) {
 		_ = m.registry.Delete(req.SiteId)
 		m.mu.Lock()
 		delete(m.procs, req.SiteId)
 		m.mu.Unlock()
 		hadPrevious = false
+	}
+	tx := deploymentTransaction{Version: 1, SiteID: req.SiteId, State: "activating", CandidateCommit: commit, HadPrevious: hadPrevious, Previous: previous}
+	if err := m.persistDeploymentTransaction(tx); err != nil {
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("persist deployment recovery journal: %w", err)
+	}
+	if hadPrevious {
+		if err := m.stopSiteLocked(req.SiteId); err != nil {
+			if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr == nil {
+				_ = m.removeDeploymentTransaction(req.SiteId)
+			}
+			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("stop previous release: %w", err)
+		}
 	}
 
 	runPath := filepath.Join("sites", req.SiteId, ".yevqo", "releases", commit)
@@ -951,24 +959,26 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 		}
 	}
 	if startErr != nil {
+		if rollbackErr := m.rollbackDeploymentTransaction(tx); rollbackErr != nil {
+			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("candidate release failed (%v); crash-recovery journal retained because rollback failed (%v)", startErr, rollbackErr)
+		}
+		if cleanupErr := m.removeDeploymentTransaction(req.SiteId); cleanupErr != nil {
+			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("candidate release failed (%v); previous release restored but recovery journal cleanup failed (%v)", startErr, cleanupErr)
+		}
 		if hadPrevious {
-			oldRunPath := previous.RunPath
-			if oldRunPath == "" {
-				rel, relErr := filepath.Rel(siteRoot, previous.WorkingDir)
-				if relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-					oldRunPath = filepath.Join("sites", req.SiteId, rel)
-				}
-			}
-			if oldRunPath == "" {
-				return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed to start (%v); rollback also failed (previous release path is unavailable)", startErr)
-			}
-			if _, rollbackErr := m.startSiteWithCommandLocked(req.SiteId, oldRunPath, previous.Port, previous.Runtime, nil, previous.StartCommand); rollbackErr != nil {
-				return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed to start (%v); rollback also failed (%v)", startErr, rollbackErr)
-			}
 			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed health check; previous release was restored: %w", startErr)
 		}
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed health check and no previous release was active: %w", startErr)
 	}
+	tx.State = "committed"
+	if err := m.persistDeploymentTransaction(tx); err != nil {
+		if rollbackErr := m.rollbackDeploymentTransaction(tx); rollbackErr != nil {
+			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("release became healthy but commit journal failed (%v); recovery rollback also failed (%v)", err, rollbackErr)
+		}
+		_ = m.removeDeploymentTransaction(req.SiteId)
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("release became healthy but could not commit deployment journal; previous release restored: %w", err)
+	}
+	_ = m.removeDeploymentTransaction(req.SiteId)
 	m.UpdateDeploymentJob(req.SiteId, jobID, "healthy", 100, "Release is healthy")
 	output.WriteString(fmt.Sprintf("\nActivated release %s (pid %d)", commit, pid))
 	return pid, truncateDeployOutput(output.String()), commit, commitDate, nil
