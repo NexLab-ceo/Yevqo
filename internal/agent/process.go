@@ -720,6 +720,12 @@ func runGitPull(path string) (string, error) {
 
 
 // validDeployBranch rejects option-like and path-traversal branch names before invoking Git.
+func validGitCommit(commit string) bool {
+	if len(commit) != 40 && len(commit) != 64 { return false }
+	for _, r := range commit { if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) { return false } }
+	return true
+}
+
 func validDeployBranch(branch string) bool {
 	if branch == "" || len(branch) > 128 || strings.HasPrefix(branch, "-") ||
 		strings.Contains(branch, "..") || strings.Contains(branch, "//") ||
@@ -779,6 +785,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	if branch == "" { branch = "main" }
 	if !validDeployBranch(branch) { return 0, "", "", "", fmt.Errorf("invalid Git branch") }
 	if !validHealthCheckPath(req.HealthCheckPath) { return 0, "", "", "", fmt.Errorf("invalid HTTP health check path") }
+	if req.GitCommit != "" && !validGitCommit(req.GitCommit) { return 0, "", "", "", fmt.Errorf("invalid Git commit target") }
 	if req.Runtime != "php" && req.Runtime != "go" && req.Runtime != "static" && req.Runtime != "nodejs" {
 		return 0, "", "", "", fmt.Errorf("runtime %q cannot be launched by this Agent yet; supported runtimes are php, go, static and nodejs", req.Runtime)
 	}
@@ -824,6 +831,17 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 		return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout failed: %w", cloneErr)
 	}
 
+	if req.GitCommit != "" {
+		fetch := exec.CommandContext(cloneCtx, "git", "-C", stageDir, "fetch", "--depth", "1", "origin", req.GitCommit)
+		fetch.Env = gitEnv
+		fetchOutput, fetchErr := fetch.CombinedOutput()
+		output.Write(fetchOutput)
+		if fetchErr != nil { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("fetch requested commit: %w", fetchErr) }
+		checkout := exec.CommandContext(cloneCtx, "git", "-C", stageDir, "checkout", "--detach", "FETCH_HEAD")
+		checkoutOutput, checkoutErr := checkout.CombinedOutput()
+		output.Write(checkoutOutput)
+		if checkoutErr != nil { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("checkout requested commit: %w", checkoutErr) }
+	}
 	commitBytes, err := exec.Command("git", "-C", stageDir, "rev-parse", "HEAD").Output()
 	if err != nil { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("read checked-out commit: %w", err) }
 	commit := strings.TrimSpace(string(commitBytes))
