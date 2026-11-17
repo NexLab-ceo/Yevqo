@@ -306,6 +306,17 @@ type LogEvent struct {
 	Line   string
 }
 
+type DeploymentJobEvent struct {
+ SiteId string `json:"site_id"`
+ JobId string `json:"job_id"`
+ State string `json:"state"`
+ Progress int `json:"progress"`
+ Message string `json:"message,omitempty"`
+ Timestamp time.Time `json:"timestamp"`
+}
+
+type DeploymentJobAction struct { SiteId string `json:"site_id"`; JobId string `json:"job_id"` }
+
 type StatusEvent struct {
 	SiteId string
 	Status string
