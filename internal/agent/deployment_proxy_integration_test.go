@@ -52,16 +52,20 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 	readBody := func(want string) {
 		t.Helper()
 		deadline := time.Now().Add(5*time.Second)
+		last := "no response"
 		for time.Now().Before(deadline) {
 			resp, requestErr := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", publicPort))
-			if requestErr == nil {
+			if requestErr != nil {
+				last = requestErr.Error()
+			} else {
 				body, readErr := io.ReadAll(resp.Body)
 				_ = resp.Body.Close()
+				last = fmt.Sprintf("status=%d body=%q read_error=%v", resp.StatusCode, strings.TrimSpace(string(body)), readErr)
 				if readErr == nil && resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == want { return }
 			}
 			time.Sleep(30*time.Millisecond)
 		}
-		t.Fatalf("stable listener did not serve release body %q", want)
+		t.Fatalf("stable listener did not serve release body %q; last response: %s", want, last)
 	}
 
 	firstCommit := strings.Repeat("a", 40)
