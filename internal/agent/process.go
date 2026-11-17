@@ -860,7 +860,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
 	pid, startErr := m.startSiteWithEnvLocked(req.SiteId, runPath, int(req.Port), req.Runtime, nil)
 	if startErr == nil && req.HealthCheckPath != "" {
-		if healthErr := waitForHTTP(int(req.Port), req.HealthCheckPath, 15*time.Second); healthErr != nil {
+		if healthErr := waitForHTTPContext(ctx, int(req.Port), req.HealthCheckPath, 15*time.Second); healthErr != nil {
 			_ = m.stopSiteLocked(req.SiteId)
 			startErr = healthErr
 		}
