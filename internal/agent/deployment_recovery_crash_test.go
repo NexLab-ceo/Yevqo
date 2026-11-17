@@ -39,8 +39,8 @@ func TestDeploymentRecoveryCrashBoundaries(t *testing.T) {
 			registry, err := NewProcessRegistry(root)
 			if err != nil { t.Fatal(err) }
 
-			startHelper := func() (*exec.Cmd, ProcessRecord) {
-				cmd := exec.Command("sh", "-c", "sleep 60")
+			startHelper := func(command string, args ...string) (*exec.Cmd, ProcessRecord) {
+				cmd := exec.Command(command, args...)
 				cmd.SysProcAttr = procAttr()
 				if err := cmd.Start(); err != nil { t.Fatalf("start helper process: %v", err) }
 				token, err := processStartToken(cmd.Process.Pid)
@@ -52,9 +52,9 @@ func TestDeploymentRecoveryCrashBoundaries(t *testing.T) {
 					StartCommand:fmt.Sprintf("python3 -m http.server %d --bind 127.0.0.1",port)}
 			}
 
-			previousCmd, previous := startHelper()
+			previousCmd, previous := startHelper("python3", "-m", "http.server", fmt.Sprint(port), "--bind", "127.0.0.1")
 			defer func(){ if previousCmd.Process != nil { _ = previousCmd.Process.Kill(); _ = previousCmd.Wait() } }()
-			candidateCmd, candidate := startHelper()
+			candidateCmd, candidate := startHelper("sh", "-c", "sleep 60")
 			defer func(){ if candidateCmd.Process != nil { _ = candidateCmd.Process.Kill(); _ = candidateCmd.Wait() } }()
 
 			tx := deploymentTransaction{Version:1, SiteID:"demo", State:"activating",
