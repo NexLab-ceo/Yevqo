@@ -114,6 +114,13 @@ type ManageDatabaseRole struct {
 	Password string `json:"password,omitempty"`
 }
 
+type PruneBackups struct {
+	SiteId string `json:"site_id,omitempty"`
+	ServerID int64 `json:"server_id,omitempty"`
+	Keep int `json:"keep"`
+}
+type PruneBackupsResult struct { Removed []string `json:"removed"` }
+
 type CreateSiteBackup struct { SiteId string }
 
 type CreateDatabaseBackup struct {
