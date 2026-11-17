@@ -108,7 +108,7 @@ func (m *ProcessManager) recoverSite(record ProcessRecord) {
 			}
 			runPath = filepath.Join("sites", record.SiteID, rel)
 		}
-		if _, err := m.StartSite(record.SiteID, runPath, record.Port, record.Runtime); err != nil {
+		if _, err := m.StartSiteWithCommand(record.SiteID, runPath, record.Port, record.Runtime, record.StartCommand); err != nil {
 			m.emitProcessLog(record.SiteID, fmt.Sprintf("automatic restart %d failed: %v", attempt, err))
 		 continue
 		}
