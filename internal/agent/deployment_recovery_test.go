@@ -22,8 +22,13 @@ func TestDeploymentTransactionPersistsAndReloads(t *testing.T) {
 			LogPath: filepath.Join(root, "logs", "demo.log"), StartToken: "12345",
 		},
 	}
-	if err := manager.persistDeploymentTransaction(tx); err != nil {
+	if err := manager.createDeploymentTransaction(tx); err != nil {
 		t.Fatal(err)
+	}
+	duplicate := tx
+	duplicate.CandidateCommit = "cccccccccccccccccccccccccccccccccccccccc"
+	if err := manager.createDeploymentTransaction(duplicate); err == nil {
+		t.Fatal("expected unresolved transaction to be protected from overwrite")
 	}
 	got, exists, err := manager.readDeploymentTransaction("demo")
 	if err != nil {
