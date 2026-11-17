@@ -15,57 +15,7 @@ import (
 )
 
 const cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
-var cloudflareZoneIDPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}package control
-
-import (
-	"context"
-	"database/sql"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"regexp"
-	"strings"
-	"time"
-
-	"veltrix/internal/shared"
-)
-
-const cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
-var cloudflareZoneIDPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}package control
-
-import (
-	"context"
-	"database/sql"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"regexp"
-	"strings"
-	"time"
-
-	"veltrix/internal/shared"
-)
-
-const cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
-var cloudflareZoneIDPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}package control
-
-import (
-	"context"
-	"database/sql"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"regexp"
-	"strings"
-	"time"
-
-	"veltrix/internal/shared"
-)
-
-)
+var cloudflareZoneIDPattern = regexp.MustCompile("^[a-fA-F0-9]{32}$")
 var cloudflareTunnelIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type cloudflareAPIEnvelope struct {
