@@ -98,6 +98,9 @@ type Device struct {
 	Hostname     string     `json:"hostname"`
 	TailscaleIP  string     `json:"tailscale_ip"`
 	AgentVersion string     `json:"agent_version"`
+	Platform     string     `json:"platform,omitempty"`
+	Architecture string     `json:"architecture,omitempty"`
+	Capabilities []string   `json:"capabilities,omitempty"`
 	Status       string     `json:"status"`
 
 	CreatedAt    time.Time  `json:"created_at"`
