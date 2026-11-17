@@ -595,14 +595,14 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				if strings.TrimSpace(gitCfg.GitURL) == "" { apiError(w, shared.ErrBadRequest("connect a Git repository before deploying")); return }
 				payload = &shared.SiteAction{SiteId: st.SiteID, Path: st.Path, Port: uint32(st.Port), Runtime: st.Runtime,
 					GitURL: gitCfg.GitURL, GitBranch: gitCfg.GitBranch, BuildCommand: gitCfg.BuildCommand,
-					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, HealthCheckPath: gitCfg.HealthCheckPath, AllowProjectCode: in.AllowProjectCode}
+					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, HealthCheckPath: gitCfg.HealthCheckPath, StartCommand: gitCfg.StartCommand, AllowProjectCode: in.AllowProjectCode}
 			}
 			if in.Action == "rollback" {
 				if !releaseCommitPattern.MatchString(in.ReleaseCommit) { apiError(w, shared.ErrBadRequest("invalid release commit")); return }
 				agentAction = "rollback_site_release"
 				gitCfg, cfgErr := s.siteGitSettings(r.Context(), deviceID, siteID)
 				if cfgErr != nil { apiError(w, shared.ErrInternal("could not load site Git settings")); return }
-				payload = &shared.RollbackSiteRelease{SiteId:st.SiteID, Commit:in.ReleaseCommit, RootDir:gitCfg.RootDir, Runtime:st.Runtime, Port:uint32(st.Port)}
+				payload = &shared.RollbackSiteRelease{SiteId:st.SiteID, Commit:in.ReleaseCommit, RootDir:gitCfg.RootDir, Runtime:st.Runtime, Port:uint32(st.Port), StartCommand:gitCfg.StartCommand}
 			}
 			if in.Action == "stop" {
 				agentAction = "stop_site"
