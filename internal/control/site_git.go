@@ -21,6 +21,9 @@ type siteGitSettings struct {
 	BuildCommand string
 	RootDir      string
 	HealthCheckPath string
+	CloneTimeoutSeconds int
+	BuildTimeoutSeconds int
+	HealthCheckTimeoutSeconds int
 	StartCommand string
 	GitToken     string
 	Commit       string
@@ -33,6 +36,9 @@ type siteGitInput struct {
 	BuildCommand  string `json:"build_command"`
 	RootDirectory string `json:"root_directory"`
 	HealthCheckPath string `json:"health_check_path"`
+	CloneTimeoutSeconds int `json:"clone_timeout_seconds"`
+	BuildTimeoutSeconds int `json:"build_timeout_seconds"`
+	HealthCheckTimeoutSeconds int `json:"health_check_timeout_seconds"`
 	StartCommand string `json:"start_command"`
 	GitHubToken   string `json:"github_token"`
 }
@@ -58,7 +64,7 @@ func (s *Server) siteGitSettings(ctx context.Context, deviceID int64, siteID str
 	var out siteGitSettings
 	var gitURL, commit sql.NullString
 	var encrypted []byte
-	err := s.db.conn.QueryRowContext(ctx, `SELECT git_url,git_branch,build_command,root_dir,health_check_path,start_command,git_token_enc,deployed_commit,deployed_at
+	err := s.db.conn.QueryRowContext(ctx, `SELECT git_url,git_branch,build_command,root_dir,health_check_path,clone_timeout_seconds,build_timeout_seconds,health_check_timeout_seconds,start_command,git_token_enc,deployed_commit,deployed_at
 		FROM sites WHERE device_id=? AND site_id=?`, deviceID, siteID).Scan(
 		&gitURL, &out.GitBranch, &out.BuildCommand, &out.RootDir, &out.HealthCheckPath, &out.StartCommand, &encrypted, &commit, &out.DeployedAt)
 	if err != nil { return nil, err }
@@ -86,7 +92,8 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 		if err != nil { apiError(w, shared.ErrInternal("could not load Git settings")); return }
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"ok": true, "repository_url": cfg.GitURL, "branch": cfg.GitBranch,
-			"build_command": cfg.BuildCommand, "root_directory": cfg.RootDir, "health_check_path": cfg.HealthCheckPath, "start_command": cfg.StartCommand,
+			"build_command": cfg.BuildCommand, "root_directory": cfg.RootDir, "health_check_path": cfg.HealthCheckPath,
+			"clone_timeout_seconds": cfg.CloneTimeoutSeconds, "build_timeout_seconds": cfg.BuildTimeoutSeconds, "health_check_timeout_seconds": cfg.HealthCheckTimeoutSeconds, "start_command": cfg.StartCommand,
 			"has_token": len(cfg.GitToken)>0, "commit": cfg.Commit,
 			"deployed_at": func() interface{} { if cfg.DeployedAt.Valid { return cfg.DeployedAt.Time }; return nil }(),
 		})
@@ -109,6 +116,12 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 		if !ok { apiError(w, shared.ErrBadRequest("root directory must be inside the site directory")); return }
 		startCommand := strings.TrimSpace(in.StartCommand)
 		if len(startCommand) > 512 || strings.ContainsAny(startCommand, ";|&`$><\r\n\x00") { apiError(w, shared.ErrBadRequest("start command is too long or contains control characters")); return }
+		if in.CloneTimeoutSeconds == 0 { in.CloneTimeoutSeconds = 600 }
+		if in.CloneTimeoutSeconds < 30 || in.CloneTimeoutSeconds > 1800 { apiError(w, shared.ErrBadRequest("clone timeout must be between 30 and 1800 seconds")); return }
+		if in.BuildTimeoutSeconds == 0 { in.BuildTimeoutSeconds = 1200 }
+		if in.BuildTimeoutSeconds < 60 || in.BuildTimeoutSeconds > 7200 { apiError(w, shared.ErrBadRequest("build timeout must be between 60 and 7200 seconds")); return }
+		if in.HealthCheckTimeoutSeconds == 0 { in.HealthCheckTimeoutSeconds = 15 }
+		if in.HealthCheckTimeoutSeconds < 3 || in.HealthCheckTimeoutSeconds > 300 { apiError(w, shared.ErrBadRequest("health check timeout must be between 3 and 300 seconds")); return }
 		healthPath := strings.TrimSpace(in.HealthCheckPath)
 		if healthPath != "" && (len(healthPath) > 255 || !strings.HasPrefix(healthPath, "/") || strings.HasPrefix(healthPath, "//") || strings.ContainsAny(healthPath, "\r\n\x00") || strings.Contains(healthPath, "..")) {
 			apiError(w, shared.ErrBadRequest("health check path must be a safe local URL path")); return
@@ -120,9 +133,9 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 			if err != nil { apiError(w, shared.ErrInternal("could not encrypt GitHub token")); return }
 			encrypted = append(nonce, ciphertext...)
 		}
-		_, err = s.db.conn.ExecContext(r.Context(), `UPDATE sites SET git_url=?,git_branch=?,build_command=?,root_dir=?,health_check_path=?,start_command=?,
+		_, err = s.db.conn.ExecContext(r.Context(), `UPDATE sites SET git_url=?,git_branch=?,build_command=?,root_dir=?,health_check_path=?,clone_timeout_seconds=?,build_timeout_seconds=?,health_check_timeout_seconds=?,start_command=?,
 			git_token_enc=COALESCE(?,git_token_enc) WHERE device_id=? AND site_id=?`,
-			nullableString(in.RepositoryURL), in.Branch, strings.TrimSpace(in.BuildCommand), rootDir, healthPath, startCommand, encrypted, deviceID, siteID)
+			nullableString(in.RepositoryURL), in.Branch, strings.TrimSpace(in.BuildCommand), rootDir, healthPath, in.CloneTimeoutSeconds, in.BuildTimeoutSeconds, in.HealthCheckTimeoutSeconds, startCommand, encrypted, deviceID, siteID)
 		if err != nil { apiError(w, shared.ErrInternal("could not save Git settings")); return }
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"message":"Git settings saved","has_token":in.GitHubToken!=""})
 	default:
