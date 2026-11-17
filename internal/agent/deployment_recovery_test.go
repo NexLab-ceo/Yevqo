@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"net"
 	"testing"
 	"time"
 )
@@ -138,4 +139,47 @@ func TestInterruptedDeploymentKeepsStillRunningPreviousProcess(t *testing.T) {
 	}
 	_ = candidateCmd.Wait()
 	if isAlive(candidate.PID) { t.Fatal("unconfirmed candidate process remained alive") }
+}
+
+
+func TestInterruptedDeploymentRestartsPreviousReleaseAfterAgentCrash(t *testing.T) {
+	if _, err := exec.LookPath("python3"); err != nil { t.Skip("python3 is not installed") }
+	root := t.TempDir()
+	siteRoot := filepath.Join(root, "sites", "demo")
+	oldRelease := filepath.Join(siteRoot, ".yevqo", "releases", "old")
+	if err := os.MkdirAll(oldRelease, 0o700); err != nil { t.Fatal(err) }
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil { t.Fatal(err) }
+	port := listener.Addr().(*net.TCPAddr).Port
+	_ = listener.Close()
+	registry, err := NewProcessRegistry(root)
+	if err != nil { t.Fatal(err) }
+	candidateCmd := exec.Command("sh", "-c", "sleep 30")
+	candidateCmd.SysProcAttr = procAttr()
+	if err := candidateCmd.Start(); err != nil { t.Skipf("cannot start candidate helper: %v", err) }
+	candidatePID := candidateCmd.Process.Pid
+	candidateToken, err := processStartToken(candidatePID)
+	if err != nil { _ = candidateCmd.Process.Kill(); _ = candidateCmd.Wait(); t.Fatal(err) }
+	candidate := ProcessRecord{SiteID:"demo", PID:candidatePID, ProcessGroup:candidatePID, Port:port, Runtime:"static", WorkingDir:siteRoot, LogPath:filepath.Join(root,"demo.log"), StartedAt:time.Now().UTC(), StartToken:candidateToken, RunPath:filepath.Join("sites","demo",".yevqo","releases","candidate")}
+	if err := registry.Save(candidate); err != nil { _ = candidateCmd.Process.Kill(); _ = candidateCmd.Wait(); t.Fatal(err) }
+	previous := ProcessRecord{
+		SiteID:"demo", PID:99999999, ProcessGroup:99999999, Port:port, Runtime:"static",
+		WorkingDir:oldRelease, LogPath:filepath.Join(root,"demo.log"), StartedAt:time.Now().Add(-time.Minute),
+		StartToken:"stale-process-identity", RunPath:filepath.Join("sites","demo",".yevqo","releases","old"),
+		StartCommand:fmt.Sprintf("python3 -m http.server %d --bind 127.0.0.1", port),
+	}
+	manager := &ProcessManager{DataRoot:root, registry:registry, procs:map[string]*Process{"demo":{SiteID:"demo",PID:candidatePID}}, intentionalStops:make(map[string]bool), restartAttempts:make(map[string]int)}
+	tx := deploymentTransaction{Version:1, SiteID:"demo", State:"activating", CandidateCommit:"dddddddddddddddddddddddddddddddddddddddd", HadPrevious:true, Previous:previous}
+	if err := manager.rollbackDeploymentTransaction(tx); err != nil { _ = candidateCmd.Process.Kill(); _ = candidateCmd.Wait(); t.Fatal(err) }
+	restored, ok := registry.Get("demo")
+	if !ok || restored.PID == candidatePID || restored.RunPath != previous.RunPath {
+		_ = candidateCmd.Process.Kill(); _ = candidateCmd.Wait()
+		t.Fatalf("previous release was not restarted: %#v (exists=%v)", restored, ok)
+	}
+	if !verifyProcessRecord(restored) || !manager.IsSiteHealthy("demo") {
+		_ = manager.StopSite("demo"); _ = candidateCmd.Wait()
+		t.Fatal("restored previous release is not healthy")
+	}
+	if err := manager.StopSite("demo"); err != nil { t.Fatal(err) }
+	_ = candidateCmd.Wait()
 }
