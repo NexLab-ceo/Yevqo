@@ -545,16 +545,33 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 	for _, st := range sites {
 		if st.SiteID != siteID { continue }
 		if len(parts) == 3 && parts[2] == "releases" {
-			if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
 			conn, online := s.hub.Get(deviceID)
 			if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
-			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second); defer cancel()
-			result, err := conn.SendCommand(ctx, "list_site_releases", &shared.ListSiteReleases{SiteId:st.SiteID, Runtime:st.Runtime})
-			if err != nil { apiError(w, shared.ErrInternal("could not load release history: "+err.Error())); return }
-			if !result.Ok { apiError(w, shared.ErrBadRequest(result.Message)); return }
-			var history shared.SiteReleasesResult
-			if err := shared.Unmarshal(result.Payload, &history); err != nil { apiError(w, shared.ErrInternal("invalid release history response")); return }
-			writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true, "releases":history.Releases})
+			if r.Method == http.MethodGet {
+				ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second); defer cancel()
+				result, err := conn.SendCommand(ctx, "list_site_releases", &shared.ListSiteReleases{SiteId:st.SiteID, Runtime:st.Runtime})
+				if err != nil { apiError(w, shared.ErrInternal("could not load release history: "+err.Error())); return }
+				if !result.Ok { apiError(w, shared.ErrBadRequest(result.Message)); return }
+				var history shared.SiteReleasesResult
+				if err := shared.Unmarshal(result.Payload, &history); err != nil { apiError(w, shared.ErrInternal("invalid release history response")); return }
+				writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true, "releases":history.Releases})
+				return
+			}
+			if r.Method == http.MethodPost {
+				var in struct { Keep int `json:"keep"` }
+				if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
+				if in.Keep < 1 || in.Keep > 50 { apiError(w, shared.ErrBadRequest("keep must be between 1 and 50")); return }
+				ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute); defer cancel()
+				result, err := conn.SendCommand(ctx, "prune_site_releases", &shared.PruneSiteReleases{SiteId:st.SiteID, Keep:in.Keep})
+				if err != nil { apiError(w, shared.ErrInternal("release cleanup failed: "+err.Error())); return }
+				if !result.Ok { apiError(w, shared.ErrBadRequest(result.Message)); return }
+				var pruned shared.PruneSiteReleasesResult
+				if err := shared.Unmarshal(result.Payload, &pruned); err != nil { apiError(w, shared.ErrInternal("invalid release cleanup response")); return }
+				_ = s.db.Log(r.Context(), &shared.LogEntry{UserID:shared.PtrInt64(user.ID), DeviceID:shared.PtrInt64(deviceID), Action:"site_release_prune", Details:map[string]interface{}{"site_id":siteID,"keep":in.Keep,"removed":len(pruned.Removed)}, IP:clientIP(r)})
+				writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"removed":pruned.Removed,"message":fmt.Sprintf("Удалено старых релизов: %d",len(pruned.Removed))})
+				return
+			}
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		if len(parts) == 3 && parts[2] == "cmd" {
