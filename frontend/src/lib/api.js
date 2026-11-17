@@ -258,3 +258,8 @@ export async function restoreSiteBackup(backupId) { return request('POST', '/api
 export async function transferBackup(backupId, target) { return request('POST', `/api/backups/${backupId}/transfer`, target); }
 
 export async function getSiteMetrics(deviceId, siteId) { return request('GET', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/metrics`); }
+
+export async function listScheduledTasks(deviceId, siteId) { return request('GET', `/api/scheduled-tasks?device_id=${deviceId}&site_id=${encodeURIComponent(siteId)}`); }
+export async function createScheduledTask(input) { return request('POST', '/api/scheduled-tasks', input); }
+export async function setScheduledTaskEnabled(id, enabled) { return request('PATCH', `/api/scheduled-tasks/${id}`, { enabled }); }
+export async function deleteScheduledTask(id) { return request('DELETE', `/api/scheduled-tasks/${id}`); }
