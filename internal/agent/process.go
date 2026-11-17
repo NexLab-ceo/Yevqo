@@ -48,6 +48,9 @@ type ProcessManager struct {
 	restartMu sync.Mutex
 	restartAttempts map[string]int
 	intentionalStops map[string]bool
+	jobMu sync.Mutex
+	deploymentJobs map[string]*deploymentJob
+	deploymentEmitter func(shared.DeploymentJobEvent)
 }
 
 // NewProcessManager создаёт менеджер.
