@@ -212,38 +212,34 @@ func (h *CommandHandler) handleStopSite(cmd *shared.Command) *shared.Result {
 }
 
 func (h *CommandHandler) handleSiteLifecycle(cmd *shared.Command, action string) *shared.Result {
-	var req shared.SiteAction
-	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid site action payload") }
-	var pid int
-	var output, commitHash, commitDate string
-	var err error
-	switch action {
-	case "restart":
-		pid, err = h.processes.RestartSite(req.SiteId, req.Path, int(req.Port), req.Runtime)
-	case "deploy":
-		pid, output, commitHash, commitDate, err = h.processes.DeployGitSite(req, false)
-	case "rebuild":
-		jobID, jobCtx, jobErr := h.processes.BeginDeploymentJob(req.SiteId)
-		if jobErr != nil { return errorResult(cmd.Id, jobErr.Error()) }
-		pid, output, commitHash, commitDate, err = h.processes.DeployGitSiteWithJob(jobCtx, jobID, req, true)
-		if err != nil {
-			state := "failed"; if errors.Is(jobCtx.Err(), context.Canceled) { state = "cancelled" }
-			h.processes.FinishDeploymentJob(req.SiteId, jobID, state, err.Error())
-		} else { h.processes.FinishDeploymentJob(req.SiteId, jobID, "healthy", "Deployment completed") }
-		return deploymentResult(cmd.Id, action, pid, req.Port, output, commitHash, commitDate, err)
-	case "deploy":
-		jobID, jobCtx, jobErr := h.processes.BeginDeploymentJob(req.SiteId)
-		if jobErr != nil { return errorResult(cmd.Id, jobErr.Error()) }
-		pid, output, commitHash, commitDate, err = h.processes.DeployGitSiteWithJob(jobCtx, jobID, req, false)
-		if err != nil {
-			state := "failed"; if errors.Is(jobCtx.Err(), context.Canceled) { state = "cancelled" }
-			h.processes.FinishDeploymentJob(req.SiteId, jobID, state, err.Error())
-		} else { h.processes.FinishDeploymentJob(req.SiteId, jobID, "healthy", "Deployment completed") }
-		return deploymentResult(cmd.Id, action, pid, req.Port, output, commitHash, commitDate, err)
-	}
-	if err != nil { return errorResult(cmd.Id, err.Error()) }
-	payload, _ := shared.Marshal(&shared.StartSiteResult{Pid: uint32(pid), Port: req.Port, CommitHash: commitHash, CommitDate: commitDate})
-	return &shared.Result{Id: cmd.Id, Ok: true, Message: fmt.Sprintf("%s completed (pid %d): %s", action, pid, output), Payload: payload}
+ var req shared.SiteAction
+ if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid site action payload") }
+ if action == "restart" {
+  pid, err := h.processes.RestartSite(req.SiteId, req.Path, int(req.Port), req.Runtime)
+  if err != nil { return errorResult(cmd.Id, err.Error()) }
+  payload, _ := shared.Marshal(&shared.StartSiteResult{Pid:uint32(pid), Port:req.Port})
+  return &shared.Result{Id:cmd.Id, Ok:true, Message:fmt.Sprintf("restart completed (pid %d)", pid), Payload:payload}
+ }
+ if action != "deploy" && action != "rebuild" { return errorResult(cmd.Id, "unsupported site lifecycle action") }
+ jobID, jobCtx, err := h.processes.BeginDeploymentJob(req.SiteId)
+ if err != nil { return errorResult(cmd.Id, err.Error()) }
+ pid, output, commitHash, commitDate, deployErr := h.processes.DeployGitSiteWithJob(jobCtx, jobID, req, action == "rebuild")
+ if deployErr != nil {
+  state := "failed"
+  if errors.Is(jobCtx.Err(), context.Canceled) { state = "cancelled" }
+  h.processes.FinishDeploymentJob(req.SiteId, jobID, state, deployErr.Error())
+  return errorResult(cmd.Id, deployErr.Error())
+ }
+ h.processes.FinishDeploymentJob(req.SiteId, jobID, "healthy", "Deployment completed")
+ payload, _ := shared.Marshal(&shared.StartSiteResult{Pid:uint32(pid), Port:req.Port, CommitHash:commitHash, CommitDate:commitDate})
+ return &shared.Result{Id:cmd.Id, Ok:true, Message:fmt.Sprintf("%s completed (pid %d): %s", action, pid, output), Payload:payload}
+}
+
+func (h *CommandHandler) handleCancelDeploymentJob(cmd *shared.Command) *shared.Result {
+ var req shared.DeploymentJobAction
+ if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid cancel_deployment_job payload") }
+ if err := h.processes.CancelDeploymentJob(req.SiteId, req.JobId); err != nil { return errorResult(cmd.Id, err.Error()) }
+ return &shared.Result{Id:cmd.Id, Ok:true, Message:"deployment cancellation requested"}
 }
 
 
