@@ -9,12 +9,32 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os/exec"
+	"runtime"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"veltrix/internal/shared"
 )
+
+func detectAgentCapabilities() []string {
+	// Report only capabilities that are actually installed on this device.
+	// Docker is intentionally excluded: Termux is not treated as a Docker host.
+	checks := []struct{ name, binary string }{
+		{"git", "git"}, {"php", "php"}, {"nodejs", "node"},
+		{"npm", "npm"}, {"go", "go"}, {"composer", "composer"},
+		{"python", "python"}, {"python3", "python3"},
+	}
+	capabilities := make([]string, 0, len(checks)+1)
+	capabilities = append(capabilities, "android-local-process")
+	for _, check := range checks {
+		if _, err := exec.LookPath(check.binary); err == nil {
+			capabilities = append(capabilities, check.name)
+		}
+	}
+	return capabilities
+}
 
 const (
 	Version        = "1.0.0"
@@ -147,6 +167,9 @@ func (c *Client) connect(ctx context.Context) error {
 			Hostname:     c.cfg.resolveHostname(),
 			TailscaleIp:  tailscaleIP,
 			AgentVersion: Version,
+			Platform: runtime.GOOS,
+			Architecture: runtime.GOARCH,
+			Capabilities: detectAgentCapabilities(),
 		},
 	}
 
