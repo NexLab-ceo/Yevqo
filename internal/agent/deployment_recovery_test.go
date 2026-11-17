@@ -10,6 +10,7 @@ import (
 
 func TestDeploymentTransactionPersistsAndReloads(t *testing.T) {
 	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "sites", "demo"), 0o700); err != nil { t.Fatal(err) }
 	manager := NewProcessManager(root)
 	tx := deploymentTransaction{
 		Version: 1, SiteID: "demo", State: "activating",
@@ -42,6 +43,7 @@ func TestDeploymentTransactionPersistsAndReloads(t *testing.T) {
 
 func TestDeploymentTransactionRejectsInvalidRecord(t *testing.T) {
 	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "sites", "demo"), 0o700); err != nil { t.Fatal(err) }
 	manager := NewProcessManager(root)
 	path, err := manager.deploymentTransactionPath("demo")
 	if err != nil {
@@ -95,8 +97,8 @@ func TestInterruptedDeploymentWithoutPreviousStopsCandidate(t *testing.T) {
 	if _, exists := registry.Get("demo"); exists {
 		t.Fatal("candidate process record remained after interrupted deployment recovery")
 	}
+	_ = cmd.Wait()
 	if isAlive(pid) {
 		t.Fatal("candidate process remained alive after interrupted deployment recovery")
 	}
-	_ = cmd.Wait()
 }
