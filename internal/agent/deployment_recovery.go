@@ -181,56 +181,71 @@ func (m *ProcessManager) rollbackDeploymentTransaction(tx deploymentTransaction)
 		return fmt.Errorf("process registry unavailable: %v", m.registryErr)
 	}
 	current, hasCurrent := m.registry.Get(tx.SiteID)
-	if hasCurrent {
-		isPrevious := tx.HadPrevious && current.PID == tx.Previous.PID && current.StartToken == tx.Previous.StartToken
-		if !isPrevious {
-			if verifyProcessRecord(current) {
-				if err := m.stopSiteLocked(tx.SiteID); err != nil {
-					return fmt.Errorf("stop unconfirmed candidate process: %w", err)
-				}
-			} else if err := m.registry.Delete(tx.SiteID); err != nil {
-				return fmt.Errorf("remove stale candidate process record: %w", err)
+	isPrevious := hasCurrent && tx.HadPrevious && current.PID == tx.Previous.PID && current.StartToken == tx.Previous.StartToken
+	if hasCurrent && !isPrevious {
+		if verifyProcessRecord(current) {
+			if err := m.stopDeploymentProcess(current); err != nil {
+				return fmt.Errorf("stop unconfirmed candidate process: %w", err)
 			}
+		}
+		m.mu.Lock()
+		if managed := m.procs[tx.SiteID]; managed != nil && managed.PID == current.PID { delete(m.procs, tx.SiteID) }
+		m.mu.Unlock()
+		if err := m.registry.Delete(tx.SiteID); err != nil {
+			return fmt.Errorf("remove candidate process record: %w", err)
 		}
 	}
 	if !tx.HadPrevious {
-		return nil
-	}
-	if current, ok := m.registry.Get(tx.SiteID); ok && current.PID == tx.Previous.PID &&
-		current.StartToken == tx.Previous.StartToken && verifyProcessRecord(current) {
+		if err := m.closeDeploymentProxy(tx.SiteID); err != nil { return err }
 		return nil
 	}
 	if verifyProcessRecord(tx.Previous) {
 		if err := m.registry.Save(tx.Previous); err != nil {
 			return fmt.Errorf("restore previous process record: %w", err)
 		}
+		m.mu.Lock()
+		m.procs[tx.SiteID] = &Process{SiteID:tx.SiteID, PID:tx.Previous.PID, Port:tx.Previous.Port,
+			Runtime:tx.Previous.Runtime, LogPath:tx.Previous.LogPath}
+		m.mu.Unlock()
+		if tx.Previous.BackendPort > 0 {
+			if err := m.ensureDeploymentProxy(tx.SiteID, tx.Previous.Port, tx.Previous.BackendPort); err != nil {
+				return fmt.Errorf("restore previous stable listener: %w", err)
+			}
+		}
 		return nil
 	}
 	runPath := tx.Previous.RunPath
 	if runPath == "" {
 		siteRoot, err := safeSiteDirectory(m.DataRoot, tx.SiteID)
-		if err != nil {
-			return err
-		}
+		if err != nil { return err }
 		rel, err := filepath.Rel(siteRoot, tx.Previous.WorkingDir)
 		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 			return fmt.Errorf("previous process working directory is outside site root")
 		}
 		runPath = filepath.Join("sites", tx.SiteID, rel)
 	}
-	if _, err := m.startSiteWithCommandLocked(tx.SiteID, runPath, tx.Previous.Port,
-		tx.Previous.Runtime, nil, tx.Previous.StartCommand); err != nil {
-		return fmt.Errorf("restart previous release: %w", err)
-	}
+	startPort := tx.Previous.Port
+	if tx.Previous.BackendPort > 0 { startPort = tx.Previous.BackendPort }
+	pid, err := m.startSiteWithCommandLocked(tx.SiteID, runPath, startPort,
+		tx.Previous.Runtime, nil, tx.Previous.StartCommand)
+	if err != nil { return fmt.Errorf("restart previous release: %w", err) }
 	restored, ok := m.registry.Get(tx.SiteID)
-	if !ok {
-		return fmt.Errorf("previous release started but its process record is missing")
-	}
+	if !ok { return fmt.Errorf("previous release started but its process record is missing") }
+	restored.Port = tx.Previous.Port
+	restored.BackendPort = tx.Previous.BackendPort
 	restored.RestartPolicy = tx.Previous.RestartPolicy
 	restored.RestartCount = tx.Previous.RestartCount
 	restored.LastRestartAt = tx.Previous.LastRestartAt
 	if err := m.registry.Save(restored); err != nil {
-		return fmt.Errorf("persist restored process policy: %w", err)
+		return fmt.Errorf("persist restored release identity: %w", err)
+	}
+	m.mu.Lock()
+	if process := m.procs[tx.SiteID]; process != nil && process.PID == pid { process.Port = restored.Port }
+	m.mu.Unlock()
+	if restored.BackendPort > 0 {
+		if err := m.ensureDeploymentProxy(tx.SiteID, restored.Port, restored.BackendPort); err != nil {
+			return fmt.Errorf("restore previous stable listener: %w", err)
+		}
 	}
 	return nil
 }
