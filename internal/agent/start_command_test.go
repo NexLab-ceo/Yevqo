@@ -19,7 +19,10 @@ func TestParseCustomStartCommandUsesSiteExecutableWithoutShell(t *testing.T) {
 
 func TestParseCustomStartCommandRejectsShellAndTraversal(t *testing.T) {
  root := t.TempDir()
- for _, raw := range []string{"npm run start; touch /tmp/pwned", "sh -c id", "../outside", "/bin/sh -c id", "node server.js | cat"} {
+ outside := filepath.Join(t.TempDir(), "outside")
+ if err := os.WriteFile(outside, []byte("#!/bin/sh\nexit 0\n"), 0700); err != nil { t.Fatal(err) }
+ if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil { t.Fatal(err) }
+ for _, raw := range []string{"npm run start; touch /tmp/pwned", "sh -c id", "../outside", "/bin/sh -c id", "node server.js | cat", "./escape"} {
   if _, err := parseCustomStartCommand(root, raw); err == nil { t.Errorf("expected unsafe command %q to be rejected", raw) }
  }
 }
