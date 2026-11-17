@@ -277,7 +277,7 @@ func (db *DB) GetDeviceByUUID(ctx context.Context, uuid string) (*shared.Device,
 	if err != nil {
 		return nil, fmt.Errorf("scan device: %w", err)
 	}
-	return &d, nil
+	return d, nil
 }
 
 func (db *DB) GetDeviceByID(ctx context.Context, id int64) (*shared.Device, error) {
@@ -293,7 +293,7 @@ func (db *DB) GetDeviceByID(ctx context.Context, id int64) (*shared.Device, erro
 	if err != nil {
 		return nil, fmt.Errorf("scan device: %w", err)
 	}
-	return &d, nil
+	return d, nil
 }
 
 func (db *DB) ListDevicesByUser(ctx context.Context, userID int64) ([]shared.Device, error) {
