@@ -131,6 +131,15 @@ export async function getSiteGit(deviceId, siteId) {
 export async function saveSiteGit(deviceId, siteId, settings) {
     return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/git`, settings);
 }
+export async function listSiteEnvironment(deviceId, siteId) {
+    return request('GET', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/env`);
+}
+export async function saveSiteEnvironment(deviceId, siteId, name, value) {
+    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/env`, { name, value });
+}
+export async function deleteSiteEnvironment(deviceId, siteId, name) {
+    return request('DELETE', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/env?name=${encodeURIComponent(name)}`);
+}
 
 // === Admin ===
 
