@@ -207,6 +207,13 @@
         </div>
     </div>
 
+    <div class="device-capabilities">
+        <span class="device-platform">{device.platform || 'Платформа не определена'} · {device.architecture || 'архитектура неизвестна'}</span>
+        {#each (device.capabilities || []) as capability (capability)}
+            <span class="capability-chip">{capability}</span>
+        {/each}
+    </div>
+
     <!-- Сайты -->
     <div class="section-header">
         <h2 class="section-title">Сайты</h2>
@@ -341,6 +348,7 @@
         color: #94A3B8;
     }
 
+    .device-capabilities{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:-8px 0 22px}.device-platform,.capability-chip{font-size:10px;color:#9aa9c2;background:#111b2d;border:1px solid #253149;border-radius:7px;padding:5px 8px}.capability-chip{color:#a5b4fc}
     .section-header {
         display: flex;
         justify-content: space-between;
