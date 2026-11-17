@@ -199,6 +199,8 @@ func (m *ProcessManager) AnalyzeSiteBuild(siteID, rootDir string) (BuildPlan, er
 }
 
 func (m *ProcessManager) CreateSite(siteID string, port int, runtime string) error {
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
 	if !validSiteID(siteID) { return fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return fmt.Errorf("port must be between 1024 and 65535") }
 	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" { return fmt.Errorf("unsupported runtime: %s", runtime) }
@@ -631,6 +633,16 @@ func (m *ProcessManager) DeploySite(siteID, path string, port int, runtime strin
 	return pid, out, startErr
 }
 
+// GitPullSite serializes legacy in-place updates with deployments and lifecycle changes.
+func (m *ProcessManager) GitPullSite(siteID string) (string, error) {
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
+	if !validSiteID(siteID) { return "", fmt.Errorf("invalid site id") }
+	root, err := safeSiteDirectory(m.DataRoot, siteID)
+	if err != nil { return "", err }
+	return runGitPull(root)
+}
+
 // runGitPull выполняет git pull в папке сайта и возвращает вывод.
 func runGitPull(path string) (string, error) {
 	// Проверяем, что это git-репозиторий.
@@ -957,6 +969,8 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 // BuildSite runs the Android-native local provider for a site. Project code is
 // executed only when the caller explicitly sets AllowProjectCode.
 func (m *ProcessManager) BuildSite(req AndroidBuildRequest) AndroidBuildResult {
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
 	if !validSiteID(req.SiteID) {
 		return AndroidBuildResult{Provider: "android-local", Stack: req.Stack, Error: "invalid site id"}
 	}
