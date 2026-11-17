@@ -16,12 +16,14 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 - [x] One active deployment per site, progress events and cancellation.
 - [x] Supported launch runtimes: PHP, Go, static and Node.js; custom argv start commands are supported without shell interpolation.
 - [x] Immutable staged Git deployment, build-before-activation and restoration of the previous release when candidate activation/health checks fail.
+- [x] Durable write-ahead deployment journal for Git activation and rollback; Agent startup restores the last confirmed process after an interrupted activation, and unresolved recovery records cannot be overwritten.
 - [x] Regression coverage for failed build steps, deployment cancellation races, Agent restart process adoption, process crashes, occupied ports, process-group shutdown and HTTP health-check failures/timeouts.
 
 ### P0 implementation notes
 
 - Restart attempts are intentionally bounded to avoid an endless crash loop. After the automatic retry budget is exhausted, manual intervention is required.
 - A successful TCP readiness check is the default. Configure an HTTP health-check path when the application exposes a health endpoint.
+- Release activation is crash-recoverable, but it still uses a stop/start handoff on the site's port. True zero-downtime switching requires a stable reverse-proxy/blue-green layer and remains open; the Agent does not claim an atomic live traffic swap yet.
 - Logs are local to the device. The live viewer timestamps received lines; timestamps are not injected into the application's original stdout/stderr bytes.
 - Deployment job events are streamed to the Control Plane. The durable job record is retained on the Agent for local recovery/diagnostics; it is not a cross-device job-history database.
 - Android battery optimization, force-stop and OS process reclamation can still terminate workloads outside the Agent's control. Use the supported boot/background setup where appropriate.
