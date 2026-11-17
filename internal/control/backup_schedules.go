@@ -140,7 +140,7 @@ func (s *Server) applyScheduledBackupRetention(item dueBackupSchedule, backupID 
 	if item.ResourceType=="site" { req.SiteId=item.SiteID } else {
 		var serverID int64
 		if err:=s.db.conn.QueryRowContext(context.Background(),`SELECT server_id FROM db_instances WHERE id=? AND user_id=?`,item.DatabaseID,item.UserID).Scan(&serverID);err!=nil{return err}
-		req.SiteId="";req.ServerID=serverID
+		req.SiteId="";req.ServerID=serverID;req.DatabaseID=item.DatabaseID
 		resourceType,resourceID="database",fmt.Sprint(item.DatabaseID)
 	}
 	ctx,cancel:=context.WithTimeout(context.Background(),45*time.Second);defer cancel()
