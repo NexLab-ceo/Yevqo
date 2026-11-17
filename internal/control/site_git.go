@@ -106,7 +106,7 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 		rootDir, ok := validateSiteRootDir(in.RootDirectory)
 		if !ok { apiError(w, shared.ErrBadRequest("root directory must be inside the site directory")); return }
 		healthPath := strings.TrimSpace(in.HealthCheckPath)
-		if healthPath != "" && (len(healthPath) > 255 || !strings.HasPrefix(healthPath, "/") || strings.HasPrefix(healthPath, "//") || strings.ContainsAny(healthPath, "\\r\\n\\x00") || strings.Contains(healthPath, "..")) {
+		if healthPath != "" && (len(healthPath) > 255 || !strings.HasPrefix(healthPath, "/") || strings.HasPrefix(healthPath, "//") || strings.ContainsAny(healthPath, "\r\n\x00") || strings.Contains(healthPath, "..")) {
 			apiError(w, shared.ErrBadRequest("health check path must be a safe local URL path")); return
 		}
 		var encrypted interface{}
