@@ -85,6 +85,12 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 	}
 	readBody("release-two")
 	if verifyProcessRecord(firstRecord) { t.Fatal("previous release process was not stopped after traffic switch") }
+	rollbackPID, err := manager.RollbackSiteRelease(siteID, firstCommit, ".", "static", publicPort, "python3 serve.py")
+	if err != nil { t.Fatalf("rollback to previous immutable release: %v", err) }
+	rolledBack, ok := registry.Get(siteID)
+	if !ok || rolledBack.PID != rollbackPID || rolledBack.BackendPort == 0 { t.Fatalf("rollback did not preserve blue-green process identity: %#v", rolledBack) }
+	readBody("release-one")
+	if verifyProcessRecord(secondRecord) { t.Fatal("superseded release process was not stopped after rollback") }
 	if err := manager.closeDeploymentProxy(siteID); err != nil { t.Fatalf("close proxy before simulated Agent restart: %v", err) }
 	restarted := NewProcessManager(root)
 	if !restarted.IsSiteHealthy(siteID) { t.Fatal("site was not healthy after Agent restarted and restored its stable listener") }
