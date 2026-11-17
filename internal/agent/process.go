@@ -939,49 +939,13 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 		m.mu.Unlock()
 		hadPrevious = false
 	}
-	tx := deploymentTransaction{Version: 1, SiteID: req.SiteId, State: "activating", CandidateCommit: commit, HadPrevious: hadPrevious, Previous: previous}
-	if err := m.createDeploymentTransaction(tx); err != nil {
-		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("persist deployment recovery journal: %w", err)
-	}
-	if hadPrevious {
-		if err := m.stopSiteLocked(req.SiteId); err != nil {
-			if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr == nil {
-				_ = m.removeDeploymentTransaction(req.SiteId)
-			}
-			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("stop previous release: %w", err)
-		}
-	}
-
 	runPath := filepath.Join("sites", req.SiteId, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
-	pid, startErr := m.startSiteWithCommandLocked(req.SiteId, runPath, int(req.Port), req.Runtime, req.Env, req.StartCommand)
-	if startErr == nil && req.HealthCheckPath != "" {
-		if healthErr := waitForHTTPContext(ctx, int(req.Port), req.HealthCheckPath, 15*time.Second); healthErr != nil {
-			_ = m.stopSiteLocked(req.SiteId)
-			startErr = healthErr
-		}
-	}
+	tx := deploymentTransaction{Version:1, SiteID:req.SiteId, State:"activating", CandidateCommit:commit, HadPrevious:hadPrevious, Previous:previous}
+	pid, startErr := m.activateBlueGreenRelease(ctx, tx, runPath, int(req.Port), req.Runtime, req.Env, req.StartCommand, req.HealthCheckPath)
 	if startErr != nil {
-		if rollbackErr := m.rollbackDeploymentTransaction(tx); rollbackErr != nil {
-			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("candidate release failed (%v); crash-recovery journal retained because rollback failed (%v)", startErr, rollbackErr)
-		}
-		if cleanupErr := m.removeDeploymentTransaction(req.SiteId); cleanupErr != nil {
-			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("candidate release failed (%v); previous release restored but recovery journal cleanup failed (%v)", startErr, cleanupErr)
-		}
-		if hadPrevious {
-			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed health check; previous release was restored: %w", startErr)
-		}
-		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed health check and no previous release was active: %w", startErr)
+		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("release activation failed: %w", startErr)
 	}
-	tx.State = "committed"
-	if err := m.persistDeploymentTransaction(tx); err != nil {
-		if rollbackErr := m.rollbackDeploymentTransaction(tx); rollbackErr != nil {
-			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("release became healthy but commit journal failed (%v); recovery rollback also failed (%v)", err, rollbackErr)
-		}
-		_ = m.removeDeploymentTransaction(req.SiteId)
-		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("release became healthy but could not commit deployment journal; previous release restored: %w", err)
-	}
-	_ = m.removeDeploymentTransaction(req.SiteId)
 	m.UpdateDeploymentJob(req.SiteId, jobID, "healthy", 100, "Release is healthy")
 	output.WriteString(fmt.Sprintf("\nActivated release %s (pid %d)", commit, pid))
 	return pid, truncateDeployOutput(output.String()), commit, commitDate, nil
