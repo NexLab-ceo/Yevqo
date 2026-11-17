@@ -44,8 +44,8 @@
     let pruningReleases = false;
     let releaseKeep = 10;
     let rollbackTarget = '';
-    let git = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', health_check_path: '', start_command: '', has_token: false, commit: '', deployed_at: null };
-    let gitForm = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', health_check_path: '', start_command: '', github_token: '' };
+    let git = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', health_check_path: '', clone_timeout_seconds: 600, build_timeout_seconds: 1200, health_check_timeout_seconds: 15, start_command: '', has_token: false, commit: '', deployed_at: null };
+    let gitForm = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', health_check_path: '', clone_timeout_seconds: 600, build_timeout_seconds: 1200, health_check_timeout_seconds: 15, start_command: '', github_token: '' };
     let deployCommit = '';
     let connections = [];
     let envVariables = [];
@@ -114,7 +114,7 @@
             gitForm = {
                 repository_url: git.repository_url || '', branch: git.branch || 'main',
                 build_command: git.build_command || '', root_directory: git.root_directory || '.',
-                health_check_path: git.health_check_path || '', start_command: git.start_command || '', github_token: ''
+                health_check_path: git.health_check_path || '', clone_timeout_seconds: Number(git.clone_timeout_seconds || 600), build_timeout_seconds: Number(git.build_timeout_seconds || 1200), health_check_timeout_seconds: Number(git.health_check_timeout_seconds || 15), start_command: git.start_command || '', github_token: ''
             };
         }
         connections = connectionsRes.ok ? (connectionsRes.data.connections || []) : [];
@@ -877,6 +877,9 @@
                 <label class="wide">Root Directory<input class="input" bind:value={gitForm.root_directory} placeholder="." /></label>
                 <label class="wide">Custom Start Command (optional)<input class="input" bind:value={gitForm.start_command} placeholder="npm run start · node server.js · ./bin/server" /><small>Запускается напрямую без shell. Поддерживаются allowlisted tools или исполняемый файл внутри каталога сайта; shell-операторы запрещены.</small></label>
                 <label class="wide">HTTP Health Check Path (optional)<input class="input" bind:value={gitForm.health_check_path} placeholder="/health" /><small>После запуска релиза Agent ждёт HTTP 2xx на локальном адресе. Пустое поле использует TCP readiness.</small></label>
+                <label>Clone Timeout (seconds)<input class="input" type="number" min="30" max="1800" step="30" bind:value={gitForm.clone_timeout_seconds} /><small>30–1800 сек. По умолчанию 600.</small></label>
+                <label>Build Timeout (seconds)<input class="input" type="number" min="60" max="7200" step="60" bind:value={gitForm.build_timeout_seconds} /><small>60–7200 сек. По умолчанию 1200.</small></label>
+                <label class="wide">HTTP Health Check Timeout (seconds)<input class="input" type="number" min="3" max="300" step="1" bind:value={gitForm.health_check_timeout_seconds} /><small>3–300 сек. По умолчанию 15. Применяется только при заданном Health Check Path.</small></label>
                 <label class="wide">GitHub Token<input class="input" type="password" bind:value={gitForm.github_token} autocomplete="new-password" placeholder={git.has_token ? 'Токен сохранён — пустое поле оставит его без изменений' : 'Только для приватного репозитория'} />{#if git.has_token}<small>Токен сохранён с AES-GCM шифрованием.</small>{/if}</label>
             </div>
             <p class="security-note">Build Command выполняется на устройстве от имени пользователя Termux. Используйте только доверенные команды.</p>
