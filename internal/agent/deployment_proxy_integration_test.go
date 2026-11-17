@@ -70,7 +70,7 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 	firstCommit := strings.Repeat("a", 40)
 	firstPath := writeProxyTestRelease(t, root, siteID, firstCommit, "release-one")
 	firstTx := deploymentTransaction{Version:1, SiteID:siteID, State:"activating", CandidateCommit:firstCommit}
-	firstPID, err := manager.activateBlueGreenRelease(context.Background(), firstTx, firstPath, publicPort, "static", nil, "python3 serve.py", "/")
+	firstPID, err := manager.activateBlueGreenRelease(context.Background(), firstTx, firstPath, publicPort, "static", nil, "python3 serve.py", "/", 15*time.Second)
 	if err != nil { t.Fatalf("activate first release: %v", err) }
 	firstRecord, ok := registry.Get(siteID)
 	if !ok || firstRecord.PID != firstPID || firstRecord.BackendPort == 0 || firstRecord.Port != publicPort {
@@ -81,7 +81,7 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 	secondCommit := strings.Repeat("b", 40)
 	secondPath := writeProxyTestRelease(t, root, siteID, secondCommit, "release-two")
 	secondTx := deploymentTransaction{Version:1, SiteID:siteID, State:"activating", CandidateCommit:secondCommit, HadPrevious:true, Previous:firstRecord}
-	secondPID, err := manager.activateBlueGreenRelease(context.Background(), secondTx, secondPath, publicPort, "static", nil, "python3 serve.py", "/")
+	secondPID, err := manager.activateBlueGreenRelease(context.Background(), secondTx, secondPath, publicPort, "static", nil, "python3 serve.py", "/", 15*time.Second)
 	if err != nil { t.Fatalf("activate second release: %v", err) }
 	secondRecord, ok := registry.Get(siteID)
 	if !ok || secondRecord.PID != secondPID || secondRecord.Port != publicPort || secondRecord.BackendPort == firstRecord.BackendPort {
@@ -167,7 +167,7 @@ HTTPServer(("127.0.0.1", int(os.environ["PORT"])), Handler).serve_forever()
 	commit := strings.Repeat("c", 40)
 	runPath := writeProxyTestRelease(t, root, siteID, commit, "blue-green-release")
 	tx := deploymentTransaction{Version:1, SiteID:siteID, State:"activating", CandidateCommit:commit, HadPrevious:true, Previous:previous}
-	pid, err := manager.activateBlueGreenRelease(context.Background(), tx, runPath, publicPort, "static", nil, "python3 serve.py", "/")
+	pid, err := manager.activateBlueGreenRelease(context.Background(), tx, runPath, publicPort, "static", nil, "python3 serve.py", "/", 15*time.Second)
 	if err != nil { t.Fatalf("migrate legacy site to stable proxy: %v", err) }
 	active, ok := registry.Get(siteID)
 	if !ok || active.PID != pid || active.Port != publicPort || active.BackendPort == 0 {
@@ -191,7 +191,7 @@ func TestBlueGreenCrashAfterSwitchRestoresPreviousRelease(t *testing.T) {
 	firstCommit := strings.Repeat("d", 40)
 	firstPath := writeProxyTestRelease(t, root, siteID, firstCommit, "confirmed-release")
 	firstTx := deploymentTransaction{Version:1, SiteID:siteID, State:"activating", CandidateCommit:firstCommit}
-	if _, err := manager.activateBlueGreenRelease(context.Background(), firstTx, firstPath, publicPort, "static", nil, "python3 serve.py", "/"); err != nil {
+	if _, err := manager.activateBlueGreenRelease(context.Background(), firstTx, firstPath, publicPort, "static", nil, "python3 serve.py", "/", 15*time.Second); err != nil {
 		t.Fatalf("activate confirmed release: %v", err)
 	}
 	previous, ok := registry.Get(siteID)
