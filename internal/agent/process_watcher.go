@@ -47,7 +47,7 @@ func (m *ProcessManager) IsSiteHealthy(siteID string) bool {
 // waitForProcessExit reaps a child and starts bounded recovery only for an
 // unexpected exit. Record identity prevents an old waiter touching a new run.
 func (m *ProcessManager) waitForProcessExit(siteID string, pid int, startToken string, cmd *exec.Cmd) {
-	_ = cmd.Wait()
+	waitErr := cmd.Wait()
 	m.mu.Lock()
 	if current, ok := m.procs[siteID]; ok && current.PID == pid { delete(m.procs, siteID) }
 	m.mu.Unlock()
@@ -60,6 +60,10 @@ func (m *ProcessManager) waitForProcessExit(siteID string, pid int, startToken s
 	m.restartMu.Unlock()
 	_ = m.registry.Delete(siteID)
 	if intentional { return }
+	reason := "process exited unexpectedly"
+	if waitErr != nil { reason = fmt.Sprintf("process exited unexpectedly: %v", waitErr) }
+	m.emitProcessLog(siteID, reason)
+	m.emitProcessStatus(siteID, "error", 0)
 	go m.recoverSite(record)
 }
 
@@ -106,6 +110,7 @@ func (m *ProcessManager) recoverSite(record ProcessRecord) {
 		 continue
 		}
 		m.emitProcessLog(record.SiteID, fmt.Sprintf("site recovered successfully (attempt %d)", attempt))
+		if current, ok := m.registry.Get(record.SiteID); ok { m.emitProcessStatus(record.SiteID, "running", current.PID) }
 		return
 	}
 }
@@ -115,4 +120,11 @@ func (m *ProcessManager) emitProcessLog(siteID, line string) {
 	emit := m.logEmitter
 	m.mu.RUnlock()
 	if emit != nil { emit(siteID, line) }
+}
+
+func (m *ProcessManager) emitProcessStatus(siteID, status string, pid int) {
+	m.mu.RLock()
+	emit := m.statusEmitter
+	m.mu.RUnlock()
+	if emit != nil { emit(siteID, status, pid) }
 }
