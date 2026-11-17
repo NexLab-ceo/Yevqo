@@ -54,6 +54,11 @@ func NewClient(cfg *Config) *Client {
 			log.Printf("stream site status: %v", err)
 		}
 	})
+	client.handler.processes.SetDeploymentEmitter(func(event shared.DeploymentJobEvent) {
+		if err := client.SendEvent("deployment_job", event); err != nil && err.Error() != "not connected" {
+			log.Printf("stream deployment job: %v", err)
+		}
+	})
 	return client
 }
 
