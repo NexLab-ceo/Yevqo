@@ -25,6 +25,7 @@ type ProcessRecord struct {
 	RunPath      string    `json:"run_path,omitempty"`
 	RestartCount int       `json:"restart_count,omitempty"`
 	RestartPolicy string `json:"restart_policy,omitempty"`
+	StartCommand string `json:"start_command,omitempty"`
 	LastRestartAt time.Time `json:"last_restart_at,omitempty"`
 }
 
