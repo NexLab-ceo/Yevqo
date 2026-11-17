@@ -138,6 +138,16 @@ func safeSiteDirectory(dataRoot, siteID string) (string, error) {
 	target := filepath.Join(root, siteID)
 	absRoot, err := filepath.Abs(root); if err != nil { return "", err }
 	absTarget, err := filepath.Abs(target); if err != nil { return "", err }
+	if info, statErr := os.Lstat(absRoot); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("sites directory must not be a symlink")
+	} else if statErr != nil && !os.IsNotExist(statErr) {
+		return "", fmt.Errorf("inspect sites directory: %w", statErr)
+	}
+	if info, statErr := os.Lstat(absTarget); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("site directory must not be a symlink")
+	} else if statErr != nil && !os.IsNotExist(statErr) {
+		return "", fmt.Errorf("inspect site directory: %w", statErr)
+	}
 	rel, err := filepath.Rel(absRoot, absTarget)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("site path is outside the sites directory")
