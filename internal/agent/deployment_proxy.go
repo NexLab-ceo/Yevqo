@@ -202,7 +202,7 @@ func (m *ProcessManager) stopDeploymentProcess(record ProcessRecord) error {
 // then atomically changes the stable listener. Legacy direct-port sites are
 // migrated on their first deployment; subsequent deployments keep the listener
 // open throughout the switch.
-func (m *ProcessManager) activateBlueGreenRelease(ctx context.Context, tx deploymentTransaction, runPath string, publicPort int, runtime string, env map[string]string, startCommand, healthPath string) (int, error) {
+func (m *ProcessManager) activateBlueGreenRelease(ctx context.Context, tx deploymentTransaction, runPath string, publicPort int, runtime string, env map[string]string, startCommand, healthPath string, healthTimeout time.Duration) (int, error) {
 	if err := m.createDeploymentTransaction(tx); err != nil { return 0, fmt.Errorf("persist deployment recovery journal: %w", err) }
 	backendPort, err := allocateDeploymentBackendPort()
 	if err != nil { _ = m.removeDeploymentTransaction(tx.SiteID); return 0, err }
@@ -247,7 +247,8 @@ func (m *ProcessManager) activateBlueGreenRelease(ctx context.Context, tx deploy
 	m.mu.Unlock()
 
 	if healthPath != "" {
-		if err := waitForHTTPContext(ctx, backendPort, healthPath, 15*time.Second); err != nil {
+		if healthTimeout <= 0 { healthTimeout = 15 * time.Second }
+		if err := waitForHTTPContext(ctx, backendPort, healthPath, healthTimeout); err != nil {
 			if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr != nil {
 				return 0, fmt.Errorf("candidate health check failed (%v); previous release recovery failed (%v)", err, recoveryErr)
 			}
