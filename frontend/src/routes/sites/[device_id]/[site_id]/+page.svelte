@@ -2,7 +2,7 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, listLogs, listSiteDatabaseConnections, openSiteLogStream } from '$lib/api.js';
+    import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, openSiteLogStream } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -37,6 +37,8 @@
     let activeTab = 'general';
     let releases = [];
     let releasesLoading = false;
+    let pruningReleases = false;
+    let releaseKeep = 10;
     let rollbackTarget = '';
     let git = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', has_token: false, commit: '', deployed_at: null };
     let gitForm = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', github_token: '' };
@@ -372,6 +374,20 @@
         releases = res.data.releases || [];
     }
 
+    async function pruneReleases() {
+        if (!online || pruningReleases || !Number.isInteger(Number(releaseKeep)) || Number(releaseKeep) < 1 || Number(releaseKeep) > 50) return;
+        if (!window.confirm(`Удалить все релизы, кроме ${releaseKeep} последних и активного? Это действие нельзя отменить.`)) return;
+        pruningReleases = true;
+        const res = await pruneSiteReleases(deviceId, siteId, Number(releaseKeep));
+        pruningReleases = false;
+        if (!res.ok || !res.data?.ok) {
+            notify(res.error || res.data?.message || 'Не удалось очистить историю релизов', 'error');
+            return;
+        }
+        notify(res.data.message || 'История релизов очищена', 'success');
+        await loadReleases();
+    }
+
     async function rollbackRelease(commit) {
         if (!online || busyAction || !commit) return;
         if (!window.confirm('Откатить сайт на релиз ' + commit.slice(0, 12) + '? Текущая версия останется в истории релизов.')) return;
@@ -577,7 +593,11 @@
         <Card>
             <div class="release-heading">
                 <div><h2 class="details-title">Release history</h2><p class="muted">Неизменяемые версии из .yevqo/releases. Откат не запускает повторную сборку.</p></div>
-                <Button size="sm" on:click={loadReleases} disabled={!online || releasesLoading}>{releasesLoading ? 'Загрузка…' : 'Обновить'}</Button>
+                <div class="release-tools">
+                    <label class="release-keep">Оставить <input type="number" min="1" max="50" bind:value={releaseKeep} disabled={!online || pruningReleases} /> релизов</label>
+                    <Button size="sm" variant="danger" on:click={pruneReleases} disabled={!online || pruningReleases || releases.length <= Number(releaseKeep)} loading={pruningReleases}>Очистить старые</Button>
+                    <Button size="sm" on:click={loadReleases} disabled={!online || releasesLoading}>{releasesLoading ? 'Загрузка…' : 'Обновить'}</Button>
+                </div>
             </div>
             {#if !online}
                 <p class="muted">Подключите Agent, чтобы посмотреть историю релизов.</p>
@@ -664,7 +684,7 @@
     .build-commands{display:grid;gap:8px;margin-top:14px}
     .build-commands code{font-size:12px;color:#D4D4D8;overflow-wrap:anywhere}
     .build-warning{padding:12px;border:1px solid #854D0E;border-radius:8px;color:#FBBF24;font-size:12px;line-height:1.5}
-    .release-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+    .release-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.release-keep{display:flex;align-items:center;gap:6px;color:#a1a1aa;font-size:10px}.release-keep input{width:54px;padding:6px 7px;border:1px solid #3f3f46;border-radius:6px;background:#111113;color:#fafafa;font:inherit}.release-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
     .release-list{display:grid;gap:10px;margin-top:16px}
     .release-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px;border:1px solid #27272A;border-radius:10px;background:#111113}
     .release-title{display:flex;align-items:center;gap:10px;font-weight:600}
