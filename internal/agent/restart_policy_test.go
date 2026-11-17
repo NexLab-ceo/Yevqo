@@ -55,3 +55,11 @@ func TestRestartPolicyPersistsAcrossProcessState(t *testing.T) {
  if err := reloaded.SetRestartPolicy("../escape", "always"); err == nil { t.Fatal("expected invalid site id to be rejected") }
  if err := reloaded.SetRestartPolicy("demo", "sometimes"); err == nil { t.Fatal("expected invalid policy to be rejected") }
 }
+
+
+func TestAgentRestartRecoveryPolicy(t *testing.T) {
+ for _, policy := range []string{"on-failure", "always", ""} {
+  if !shouldRecoverAfterAgentRestart(policy) { t.Errorf("policy %q should recover after Agent downtime", policy) }
+ }
+ if shouldRecoverAfterAgentRestart("never") { t.Fatal("never policy must not recover after Agent downtime") }
+}
