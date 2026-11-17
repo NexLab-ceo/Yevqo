@@ -339,10 +339,12 @@ type StopTunnel struct {
 // ============================================================
 
 type Result struct {
-	Id      string
-	Ok      bool
-	Message string
-	Payload []byte
+	Id         string `json:"id,omitempty"`
+	Ok         bool   `json:"ok"`
+	Message    string `json:"message,omitempty"`
+	ErrorCode  string `json:"error_code,omitempty"`
+	Retryable  bool   `json:"retryable,omitempty"`
+	Payload    []byte `json:"payload,omitempty"`
 }
 
 type StartSiteResult struct {
