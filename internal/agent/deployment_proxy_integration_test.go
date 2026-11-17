@@ -59,7 +59,7 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 			} else {
 				body, readErr := io.ReadAll(resp.Body)
 				_ = resp.Body.Close()
-				last = fmt.Sprintf("status=%d body=%q backend=%q read_error=%v", resp.StatusCode, strings.TrimSpace(string(body)), resp.Header.Get("X-Yevqo-Backend"), readErr)
+				last = fmt.Sprintf("status=%d body=%q backend=%q proxy=%q read_error=%v", resp.StatusCode, strings.TrimSpace(string(body)), resp.Header.Get("X-Yevqo-Backend"), resp.Header.Get("X-Yevqo-Proxy"), readErr)
 				if readErr == nil && resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == want { return }
 			}
 			time.Sleep(30*time.Millisecond)
