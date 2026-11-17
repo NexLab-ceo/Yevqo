@@ -532,7 +532,12 @@ func (m *ProcessManager) stopSiteLocked(siteID string) error {
 	if m.registryErr != nil || m.registry == nil { return fmt.Errorf("process registry unavailable: %v", m.registryErr) }
 	record, exists := m.registry.Get(siteID)
 	if !exists { return fmt.Errorf("site %s is not running", siteID) }
-	if !verifyProcessRecord(record) { _ = m.registry.Delete(siteID); m.mu.Lock(); delete(m.procs,siteID); m.mu.Unlock(); return fmt.Errorf("site %s process identity is stale; refusing to signal PID",siteID) }
+	if !verifyProcessRecord(record) {
+		_ = m.registry.Delete(siteID)
+		m.mu.Lock(); delete(m.procs,siteID); m.mu.Unlock()
+		_ = m.closeDeploymentProxy(siteID)
+		return fmt.Errorf("site %s process identity is stale; refusing to signal PID",siteID)
+	}
 	m.restartMu.Lock(); m.intentionalStops[siteID] = true; m.restartMu.Unlock()
 	if err := killProcessGroup(record.PID, record.ProcessGroup); err != nil { m.restartMu.Lock(); delete(m.intentionalStops, siteID); m.restartMu.Unlock(); return err }
 	proxyErr := m.closeDeploymentProxy(siteID)
