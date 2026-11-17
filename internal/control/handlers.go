@@ -614,6 +614,11 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				agentAction = "stop_site"
 				payload = &shared.StopSite{SiteId: st.SiteID}
 			}
+			if siteAction, ok := payload.(*shared.SiteAction); ok {
+				env, envErr := s.siteRuntimeEnvironment(r.Context(), user.ID, deviceID, siteID)
+				if envErr != nil { apiError(w, shared.ErrInternal("could not prepare protected site environment")); return }
+				siteAction.Env = env
+			}
 			commandTimeout := 2 * time.Minute
 			if in.Action == "deploy" || in.Action == "rebuild" {
 				// Git checkout and the local build provider can legitimately take
