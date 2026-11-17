@@ -99,3 +99,27 @@ func TestDeploymentProxyDrainWaitsForInflightRequests(t *testing.T) {
 	if err := <-responseDone; err != nil { t.Fatalf("old in-flight request failed: %v", err) }
 	if err := <-drained; err != nil { t.Fatalf("old backend did not drain after request completed: %v", err) }
 }
+
+func TestDeploymentProxyPreservesPublicHostAndForwardedProtocol(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, r.Host+"|"+r.Header.Get("X-Forwarded-Host")+"|"+r.Header.Get("X-Forwarded-Proto"))
+	}))
+	defer backend.Close()
+	backendPort := backend.Listener.Addr().(*net.TCPAddr).Port
+	proxy, err := newDeploymentProxy(reserveTestPort(t), backendPort)
+	if err != nil { t.Fatal(err) }
+	defer proxy.close()
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s/", proxy.listener.Addr().String()), nil)
+	if err != nil { t.Fatal(err) }
+	req.Host = "app.example.test"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil { t.Fatal(err) }
+	body, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if readErr != nil { t.Fatal(readErr) }
+	if got, want := string(body), "app.example.test|app.example.test|https"; got != want {
+		t.Fatalf("proxy did not preserve public request identity: got %q want %q", got, want)
+	}
+}
