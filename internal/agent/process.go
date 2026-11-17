@@ -819,11 +819,17 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 		// Plain PHP sites without Composer have no dependency/build phase.
 	} else {
 		if m.BuildRunner == nil { m.BuildRunner = NewAndroidBuildRunner(m.DataRoot) }
-		m.UpdateDeploymentJob(req.SiteId, jobID, "installing", 40, "Installing project dependencies")
-		m.UpdateDeploymentJob(req.SiteId, jobID, "building", 60, "Running build provider")
 		build := m.BuildRunner.Run(ctx, AndroidBuildRequest{
 			SiteID:req.SiteId, SiteRoot:stageDir, RootDir:rootDir, Stack:plan.Stack,
 			PackageTool:plan.PackageTool, AllowProjectCode:true, Timeout:20*time.Minute, MaxLogBytes:10<<20,
+			OnStep:func(name string, index, total int) {
+				progress := 40
+				if total > 0 { progress += index * 25 / total }
+				state := "building"
+				message := "Running build step: " + name
+				if name == "install" { state = "installing"; message = "Installing project dependencies" }
+				m.UpdateDeploymentJob(req.SiteId, jobID, state, progress, message)
+			},
 		})
 		output.WriteString("\n")
 		output.WriteString(build.Output)
