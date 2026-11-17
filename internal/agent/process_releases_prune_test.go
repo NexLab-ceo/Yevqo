@@ -85,3 +85,26 @@ func TestPruneSiteReleasesCommand(t *testing.T) {
 	if err := shared.Unmarshal(result.Payload, &response); err != nil { t.Fatal(err) }
 	if len(response.Removed) != 1 { t.Fatalf("expected one removed release, got %#v", response.Removed) }
 }
+
+func TestGitPullSiteUsesLifecycleLock(t *testing.T) {
+	manager := &ProcessManager{DataRoot: t.TempDir()}
+	manager.operationMu.Lock()
+	done := make(chan error, 1)
+	go func() {
+		_, err := manager.GitPullSite("../invalid")
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		manager.operationMu.Unlock()
+		t.Fatalf("Git pull bypassed lifecycle lock: %v", err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	manager.operationMu.Unlock()
+	select {
+	case err := <-done:
+		if err == nil { t.Fatal("expected invalid site id error") }
+	case <-time.After(time.Second):
+		t.Fatal("Git pull remained blocked after lifecycle lock was released")
+	}
+}
