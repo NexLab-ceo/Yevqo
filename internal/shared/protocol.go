@@ -220,6 +220,7 @@ type SiteAction struct {
 	Runtime string `json:"runtime"`
 	GitURL string `json:"git_url,omitempty"`
 	GitBranch string `json:"git_branch,omitempty"`
+	HealthCheckPath string `json:"health_check_path,omitempty"`
 	BuildCommand string `json:"build_command,omitempty"`
 	RootDir string `json:"root_dir,omitempty"`
 	GitToken string `json:"git_token,omitempty"`
