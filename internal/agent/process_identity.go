@@ -31,6 +31,11 @@ func (m *ProcessManager) restoreProcesses() {
    if shouldRecoverAfterAgentRestart(r.RestartPolicy) { go m.recoverSite(r) }
    continue
   }
+  if r.BackendPort > 0 {
+   if err := m.ensureDeploymentProxy(r.SiteID, r.Port, r.BackendPort); err != nil {
+    m.emitProcessLog(r.SiteID, fmt.Sprintf("could not restore stable deployment proxy: %v", err))
+   }
+  }
   m.procs[r.SiteID]=&Process{SiteID:r.SiteID,PID:r.PID,Port:r.Port,Runtime:r.Runtime,LogPath:r.LogPath}
   go m.watchRestoredProcess(r)
  }
