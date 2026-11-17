@@ -63,6 +63,7 @@ type AndroidBuildRequest struct {
  MinAvailableMemoryBytes uint64 `json:"min_available_memory_bytes,omitempty"`
  MinFreeDiskBytes uint64 `json:"min_free_disk_bytes,omitempty"`
  AllowProjectCode bool `json:"allow_project_code"`
+ OnStep func(name string, index, total int) `json:"-"`
 }
 type AndroidBuildResult struct {
  Success bool `json:"success"`
@@ -96,7 +97,7 @@ func(r *AndroidBuildRunner)Run(parent context.Context,req AndroidBuildRequest)An
  timeout:=req.Timeout;if timeout<=0{timeout=20*time.Minute};if timeout>2*time.Hour{timeout=2*time.Hour}
  ctx,cancel:=context.WithTimeout(parent,timeout);defer cancel()
  maxLog:=req.MaxLogBytes;if maxLog<=0{maxLog=10<<20};if maxLog>50<<20{maxLog=50<<20};log:=&boundedBuildLog{limit:maxLog}
- for _,s:=range steps{if err:=ctx.Err();err!=nil{return finish(err,log)};if _,err:=exec.LookPath(s.exe);err!=nil{return finish(fmt.Errorf("required Termux tool %q is not installed",s.exe),log)}
+ for index,s:=range steps{if req.OnStep != nil { req.OnStep(s.name, index, len(steps)) }; if err:=ctx.Err();err!=nil{return finish(err,log)};if _,err:=exec.LookPath(s.exe);err!=nil{return finish(fmt.Errorf("required Termux tool %q is not installed",s.exe),log)}
   fmt.Fprintf(log,"$ %s %s\n",s.exe,strings.Join(s.args," "))
   cmd:=exec.CommandContext(ctx,s.exe,s.args...);cmd.Dir=root;cmd.Env=androidBuildEnv();cmd.Stdout=log;cmd.Stderr=log
   if err:=cmd.Run();err!=nil{if ctx.Err()!=nil{return finish(ctx.Err(),log)};return finish(fmt.Errorf("%s failed: %w",s.name,err),log)}
