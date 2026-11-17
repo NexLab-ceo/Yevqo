@@ -64,6 +64,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleTestDatabaseConnection(cmd)
 	case "get_metrics":
 		return h.handleGetMetrics(cmd)
+	case "get_site_metrics":
+		return h.handleGetSiteMetrics(cmd)
 	case "create_site":
 		return h.handleCreateSite(cmd)
 	case "analyze_site_build":
@@ -286,6 +288,15 @@ func (h *CommandHandler) handleGitPull(cmd *shared.Command) *shared.Result {
 	}
 
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: out}
+}
+
+func (h *CommandHandler) handleGetSiteMetrics(cmd *shared.Command) *shared.Result {
+	var req shared.GetSiteMetrics
+	if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid get_site_metrics payload")}
+	metrics,err:=h.processes.GetSiteMetrics(req.SiteId)
+	if err!=nil{return errorResult(cmd.Id,err.Error())}
+	payload,err:=shared.Marshal(metrics);if err!=nil{return errorResult(cmd.Id,"could not encode site metrics")}
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:"site process metrics collected",Payload:payload}
 }
 
 func (h *CommandHandler) handleGetLogs(cmd *shared.Command) *shared.Result {
