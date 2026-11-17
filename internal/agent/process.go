@@ -736,6 +736,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 	branch := req.GitBranch
 	if branch == "" { branch = "main" }
 	if !validDeployBranch(branch) { return 0, "", "", "", fmt.Errorf("invalid Git branch") }
+	if !validHealthCheckPath(req.HealthCheckPath) { return 0, "", "", "", fmt.Errorf("invalid HTTP health check path") }
 	if req.Runtime != "php" && req.Runtime != "go" && req.Runtime != "static" && req.Runtime != "nodejs" {
 		return 0, "", "", "", fmt.Errorf("runtime %q cannot be launched by this Agent yet; supported runtimes are php, go, static and nodejs", req.Runtime)
 	}
@@ -855,6 +856,12 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 	runPath := filepath.Join("sites", req.SiteId, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
 	pid, startErr := m.startSiteWithEnvLocked(req.SiteId, runPath, int(req.Port), req.Runtime, nil)
+	if startErr == nil && req.HealthCheckPath != "" {
+		if healthErr := waitForHTTP(int(req.Port), req.HealthCheckPath, 15*time.Second); healthErr != nil {
+			_ = m.stopSiteLocked(req.SiteId)
+			startErr = healthErr
+		}
+	}
 	if startErr != nil {
 		if hadPrevious {
 			oldRunPath := previous.RunPath
