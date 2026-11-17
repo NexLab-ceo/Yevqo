@@ -448,15 +448,3 @@ func (h *CommandHandler) handleGetSiteRestartPolicy(cmd *shared.Command) *shared
 }
 
 
-func deploymentResult(cmdID, action string, pid int, port uint32, output, commitHash, commitDate string, err error) *shared.Result {
- if err != nil { return errorResult(cmdID, err.Error()) }
- payload, _ := shared.Marshal(&shared.StartSiteResult{Pid:uint32(pid), Port:port, CommitHash:commitHash, CommitDate:commitDate})
- return &shared.Result{Id:cmdID, Ok:true, Message:fmt.Sprintf("%s completed (pid %d): %s", action, pid, output), Payload:payload}
-}
-
-func (h *CommandHandler) handleCancelDeploymentJob(cmd *shared.Command) *shared.Result {
- var req shared.DeploymentJobAction
- if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid cancel_deployment_job payload") }
- if err := h.processes.CancelDeploymentJob(req.SiteId, req.JobId); err != nil { return errorResult(cmd.Id, err.Error()) }
- return &shared.Result{Id:cmd.Id, Ok:true, Message:"deployment cancellation requested"}
-}
