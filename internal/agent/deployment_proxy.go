@@ -148,11 +148,20 @@ func (m *ProcessManager) activateBlueGreenRelease(ctx context.Context, tx deploy
 	}
 
 	candidate, ok := m.registry.Get(tx.SiteID)
-	if !ok { return 0, fmt.Errorf("candidate process record disappeared") }
+	if !ok {
+		if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr != nil {
+			return 0, fmt.Errorf("candidate process record disappeared; recovery failed: %w", recoveryErr)
+		}
+		_ = m.removeDeploymentTransaction(tx.SiteID)
+		return 0, fmt.Errorf("candidate process record disappeared")
+	}
 	candidate.Port = publicPort
 	candidate.BackendPort = backendPort
 	if err := m.registry.Save(candidate); err != nil {
-		_ = m.stopDeploymentProcess(candidate)
+		if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr != nil {
+			return 0, fmt.Errorf("persist candidate backend identity failed (%v); recovery failed (%v)", err, recoveryErr)
+		}
+		_ = m.removeDeploymentTransaction(tx.SiteID)
 		return 0, fmt.Errorf("persist candidate backend identity: %w", err)
 	}
 	m.mu.Lock()
