@@ -248,7 +248,32 @@ func (m *ProcessManager) CreateSite(siteID string, port int, runtime string) err
 	}
 	fileName, body := "index.php", "<?php\n// Your Yevqo website starts here.\necho 'Hello from Yevqo';\n"
 	if runtime == "static" { fileName, body = "index.html", "<!doctype html>\n<html lang=\"en\"><meta charset=\"utf-8\"><title>Yevqo site</title><h1>Your site is ready</h1></html>\n" }
-	if runtime == "go" { fileName, body = "README.md", "# Go site\n\nBuild your application as ./site before starting this site.\n" }
+	if runtime == "go" {
+		goMod := "module yevqo-site\n\ngo 1.22\n"
+		mainGo := `package main
+
+import (
+	"log"
+	"net/http"
+	"os"
+)
+
+func main() {
+	port := os.Getenv("PORT")
+	if port == "" { port = "8000" }
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte("<!doctype html><html lang='en'><meta charset='utf-8'><title>Yevqo Go app</title><h1>Hello from Yevqo + Go</h1></html>"))
+	})
+	log.Printf("listening on 127.0.0.1:%s", port)
+	log.Fatal(http.ListenAndServe("127.0.0.1:"+port, mux))
+}
+`
+		if err := os.WriteFile(filepath.Join(target, "go.mod"), []byte(goMod), 0o640); err != nil { _ = os.RemoveAll(target); return fmt.Errorf("create Go module: %w", err) }
+		if err := os.WriteFile(filepath.Join(target, "main.go"), []byte(mainGo), 0o640); err != nil { _ = os.RemoveAll(target); return fmt.Errorf("create Go starter application: %w", err) }
+		return nil
+	}
 	if runtime == "nodejs" {
 		packageJSON := "{\n  \"name\": \"yevqo-site\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"scripts\": { \"start\": \"node server.js\" }\n}\n"
 		if err := os.WriteFile(filepath.Join(target, "package.json"), []byte(packageJSON), 0o640); err != nil { _ = os.RemoveAll(target); return fmt.Errorf("create Node.js package manifest: %w", err) }
