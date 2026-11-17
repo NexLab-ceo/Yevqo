@@ -36,6 +36,7 @@ type Process struct {
 type ProcessManager struct {
 	// operationMu prevents lifecycle, build and release mutations from interleaving.
 	operationMu sync.Mutex
+	envMu sync.Mutex
 	
 	mu sync.RWMutex
 	DataRoot string
@@ -401,6 +402,15 @@ func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port in
 	}
 	}
 
+	// Keep secrets encrypted on the Agent so a crash-loop restart or Agent
+	// restart can re-inject them without storing plaintext in the process registry.
+	if extraEnv == nil {
+		var envErr error
+		extraEnv, envErr = m.loadSiteEnvironment(siteID)
+		if envErr != nil { logFile.Close(); return 0, fmt.Errorf("load protected site environment: %w", envErr) }
+	} else {
+		if envErr := m.saveSiteEnvironment(siteID, extraEnv); envErr != nil { logFile.Close(); return 0, fmt.Errorf("persist protected site environment: %w", envErr) }
+	}
 	// Environment values are injected into this site's process only; no .env file is modified.
 	env := append([]string{}, os.Environ()...)
 	for key, value := range extraEnv {
