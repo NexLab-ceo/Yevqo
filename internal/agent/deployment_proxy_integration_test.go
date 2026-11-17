@@ -94,7 +94,12 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 				select { case requestErrors <- requestErr: default: }
 				return
 			}
+			_, bodyErr := io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
+			if bodyErr != nil {
+				select { case requestErrors <- bodyErr: default: }
+				return
+			}
 			if resp.StatusCode != http.StatusOK {
 				select { case requestErrors <- fmt.Errorf("stable listener returned HTTP %d during switch", resp.StatusCode): default: }
 				return
