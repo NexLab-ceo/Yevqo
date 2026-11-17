@@ -827,6 +827,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	}
 	buildDir, err := safeAndroidBuildRoot(stageDir, rootDir)
 	if err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("resolve deployment root: %w", err) }
+	if req.StartCommand != "" { if _, commandErr := parseCustomStartCommand(buildDir, req.StartCommand); commandErr != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, commandErr } }
 
 	plan, err := AnalyzeProject(buildDir)
 	if err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, err }
@@ -1011,6 +1012,7 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 	if err != nil || !releaseInfo.IsDir() { return 0, fmt.Errorf("release is not a directory") }
 	resolvedRoot, err := filepath.EvalSymlinks(filepath.Join(resolvedRelease, rootDir))
 	if err != nil { return 0, fmt.Errorf("release root directory not found: %w", err) }
+	if startCommand != "" { if _, commandErr := parseCustomStartCommand(resolvedRoot, startCommand); commandErr != nil { return 0, commandErr } }
 	rel, err := filepath.Rel(resolvedRelease, resolvedRoot)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return 0, fmt.Errorf("release root resolves outside release directory") }
 	if m.registry == nil || m.registryErr != nil { return 0, fmt.Errorf("process registry unavailable: %v", m.registryErr) }
