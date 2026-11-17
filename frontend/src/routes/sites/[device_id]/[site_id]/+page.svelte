@@ -16,6 +16,8 @@
     let online = false;
     let loading = true;
     let busyAction = '';
+    let restartPolicy = 'on-failure';
+    let savingRestartPolicy = false;
     let showTerminal = false;
     let terminalLoading = false;
     let terminalText = '';
@@ -89,6 +91,24 @@
             };
         }
         connections = envRes.ok ? (envRes.data.connections || []) : [];
+        if (online) {
+            const policyRes = await sendCommand(deviceId, 'get_site_restart_policy', { site_id: siteId });
+            if (policyRes.ok && policyRes.data?.ok && policyRes.data.payload) {
+                try { restartPolicy = JSON.parse(decodeLogs(policyRes.data.payload)).policy || 'on-failure'; } catch { /* keep safe default */ }
+            }
+        }
+    }
+
+    async function saveRestartPolicy() {
+        if (!online || savingRestartPolicy) return;
+        savingRestartPolicy = true;
+        const res = await sendCommand(deviceId, 'set_site_restart_policy', { site_id: siteId, policy: restartPolicy });
+        savingRestartPolicy = false;
+        if (!res.ok || !res.data?.ok) {
+            notify(res.error || res.data?.message || 'Не удалось сохранить политику перезапуска', 'error');
+            return;
+        }
+        notify('Политика перезапуска сохранена', 'success');
     }
 
     async function runAction(action) {
@@ -492,6 +512,16 @@
                     <div><span>Directory</span><strong>{site.path}</strong></div>
                     <div><span>Domain</span><strong>{site.domain || 'Не привязан'}</strong></div>
                     <div><span>Device</span><strong>{device?.hostname || deviceId}</strong></div>
+                    <div class="restart-policy">
+                        <span>Restart policy</span>
+                        <select bind:value={restartPolicy} disabled={!online || savingRestartPolicy}>
+                            <option value="never">Never</option>
+                            <option value="on-failure">On failure</option>
+                            <option value="always">Always</option>
+                        </select>
+                        <Button size="sm" disabled={!online || savingRestartPolicy} loading={savingRestartPolicy} on:click={saveRestartPolicy}>Save policy</Button>
+                        <p class="muted">Автоперезапуск после неожиданного завершения. Повторные попытки ограничены: 2, 4 и 8 секунд, максимум 3 раза.</p>
+                    </div>
                 </div>
                 <Button variant="primary" disabled={!site.domain && !device?.tailscale_ip} on:click={openSite}>Открыть сайт ↗</Button>
             </Card>
