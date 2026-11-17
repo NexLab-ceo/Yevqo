@@ -691,9 +691,10 @@
                     <div class="process-metrics">
                         <div><span>CPU</span><strong>{Number(processMetrics.cpu_percent || 0).toFixed(1)}%</strong></div>
                         <div><span>RSS memory</span><strong>{formatBytes(processMetrics.rss_bytes)}</strong></div>
-                        <div><span>PID</span><strong>{processMetrics.pid}</strong></div>
+                        <div><span>Processes</span><strong>{processMetrics.process_count || 1}</strong></div>
+                        <div><span>Main PID</span><strong>{processMetrics.pid}</strong></div>
                     </div>
-                    <p class="muted">Метрики главного процесса сайта из /proc. Дочерние процессы не суммируются; это не контейнерные лимиты или cgroup-метрики.</p>
+                    <p class="muted">CPU и RSS суммируются по выделенной process group сайта, включая дочерние процессы и workers. Это метрики ОС, не контейнерные лимиты или cgroup-метрики.</p>
                 {:else}<p class="muted">Нет активного управляемого процесса для сбора метрик.</p>{/if}
             </Card>
             <Card>
