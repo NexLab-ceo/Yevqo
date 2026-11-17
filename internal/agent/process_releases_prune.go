@@ -30,7 +30,18 @@ func (m *ProcessManager) PruneSiteReleases(siteID string, keep int) ([]string, e
 	if err != nil {
 		return nil, err
 	}
-	releasesRoot := filepath.Join(siteRoot, ".yevqo", "releases")
+	metadataRoot := filepath.Join(siteRoot, ".yevqo")
+	metadataInfo, err := os.Lstat(metadataRoot)
+	if os.IsNotExist(err) {
+		return []string{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("inspect deployment metadata: %w", err)
+	}
+	if !metadataInfo.IsDir() || metadataInfo.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("deployment metadata must be a real directory")
+	}
+	releasesRoot := filepath.Join(metadataRoot, "releases")
 	rootInfo, err := os.Lstat(releasesRoot)
 	if os.IsNotExist(err) {
 		return []string{}, nil
