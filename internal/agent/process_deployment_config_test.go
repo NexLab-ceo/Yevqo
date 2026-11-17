@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"errors"
 	"testing"
 	"time"
 )
@@ -22,5 +21,4 @@ func TestConfiguredDeploymentTimeout(t *testing.T) {
 	if _, err := configuredDeploymentTimeout(301, 15*time.Second, 3, 300, "health check"); err == nil {
 		t.Fatal("expected timeout above maximum to be rejected")
 	}
-	if errors.Is(nil, context.Canceled) { t.Fatal("unreachable") }
 }
