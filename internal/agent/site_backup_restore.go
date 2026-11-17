@@ -31,6 +31,9 @@ func (m *ProcessManager) RestoreSiteBackup(req shared.RestoreSiteBackup) error {
 	stageReady:=false
 	defer func(){if !stageReady{_ = os.RemoveAll(stageDir)}}()
 	if err:=extractSiteArchive(backupPath,stageDir);err!=nil{return err}
+	// Keep the target device's encrypted environment variables; backup archives
+	// intentionally exclude .yevqo metadata and never transfer secrets cross-device.
+	if err:=preserveSiteEnvironment(siteRoot,stageDir);err!=nil{return err}
 	oldPath:=filepath.Join(sitesRoot,".restore-old-"+req.SiteId+"-"+fmt.Sprint(time.Now().UnixNano()))
 	if err:=os.Rename(siteRoot,oldPath);err!=nil{return fmt.Errorf("stage current site before restore: %w",err)}
 	if err:=os.Rename(stageDir,siteRoot);err!=nil{
@@ -77,3 +80,19 @@ func extractSiteArchive(archivePath,destination string) error {
 	if total==0{return fmt.Errorf("site archive contains no file data")}
 	return nil
 }
+
+func preserveSiteEnvironment(currentSite, restoredSite string) error {
+	sourceMeta:=filepath.Join(currentSite,".yevqo")
+	source:=filepath.Join(sourceMeta,"environment.enc")
+	info,err:=os.Lstat(source)
+	if os.IsNotExist(err){return nil};if err!=nil{return err}
+	if !info.Mode().IsRegular()||info.Mode()&os.ModeSymlink!=0{return fmt.Errorf("existing site environment is not a regular file")}
+	targetMeta,err:=ensureSafeSubdirectory(restoredSite,".yevqo",0700);if err!=nil{return err}
+	data,err:=os.ReadFile(source);if err!=nil{return err}
+	target:=filepath.Join(targetMeta,"environment.enc")
+	file,err:=os.OpenFile(target,os.O_CREATE|os.O_EXCL|os.O_WRONLY,0600);if err!=nil{return err}
+	if _,err:=file.Write(data);err!=nil{_ = file.Close();return err}
+	if err:=file.Sync();err!=nil{_ = file.Close();return err}
+	return file.Close()
+}
+
