@@ -173,3 +173,47 @@ func TestSafeSiteDirectoryRejectsInternalSiteSymlink(t *testing.T) {
 		t.Fatal("expected internal site symlink to be rejected")
 	}
 }
+
+
+func TestStartSiteRejectsOccupiedPort(t *testing.T) {
+ listener, err := net.Listen("tcp", "127.0.0.1:0")
+ if err != nil { t.Fatal(err) }
+ defer listener.Close()
+ port := listener.Addr().(*net.TCPAddr).Port
+ root := t.TempDir()
+ manager := NewProcessManager(root)
+ if err := manager.CreateSite("occupied", port, "static"); err != nil { t.Fatal(err) }
+ _, err = manager.StartSite("occupied", filepath.Join("sites", "occupied"), port, "static")
+ if err == nil || !strings.Contains(err.Error(), "already in use") { t.Fatalf("expected occupied port error, got %v", err) }
+}
+
+func TestWaitForProcessExitEmitsCrashStatusWhenRestartDisabled(t *testing.T) {
+ root := t.TempDir()
+ registry, err := NewProcessRegistry(root)
+ if err != nil { t.Fatal(err) }
+ cmd := exec.Command("sh", "-c", "sleep 0.1; exit 1")
+ cmd.SysProcAttr = procAttr()
+ if err := cmd.Start(); err != nil { t.Fatal(err) }
+ pid := cmd.Process.Pid
+ token, err := processStartToken(pid)
+ if err != nil { _ = cmd.Process.Kill(); _ = cmd.Wait(); t.Fatal(err) }
+ record := ProcessRecord{SiteID:"crash", PID:pid, ProcessGroup:pid, Port:3000, Runtime:"static", WorkingDir:root, LogPath:filepath.Join(root,"crash.log"), StartedAt:time.Now(), StartToken:token, RestartPolicy:"never"}
+ if err := registry.Save(record); err != nil { _ = cmd.Process.Kill(); _ = cmd.Wait(); t.Fatal(err) }
+ var status string
+ manager := &ProcessManager{DataRoot:root, registry:registry, procs:map[string]*Process{"crash":{SiteID:"crash",PID:pid}}, statusEmitter:func(_ string, value string, _ int){ status=value }}
+ manager.waitForProcessExit("crash", pid, token, cmd)
+ if status != "error" { t.Fatalf("crash status = %q, want error", status) }
+ if _, ok := registry.Get("crash"); ok { t.Fatal("crashed process record was not removed") }
+}
+
+func TestKillProcessGroupStopsTermIgnoringDescendants(t *testing.T) {
+ cmd := exec.Command("sh", "-c", "trap '' TERM; sleep 30")
+ cmd.SysProcAttr = procAttr()
+ if err := cmd.Start(); err != nil { t.Fatal(err) }
+ pid := cmd.Process.Pid
+ token, err := processStartToken(pid)
+ if err != nil { _ = cmd.Process.Kill(); _ = cmd.Wait(); t.Fatal(err) }
+ if err := killProcessGroup(pid, pid); err != nil { _ = cmd.Process.Kill(); _ = cmd.Wait(); t.Fatalf("kill process group: %v", err) }
+ if processGroupAlive(pid) { t.Fatal("process group is still alive after forced shutdown") }
+ _ = cmd.Wait()
+}
