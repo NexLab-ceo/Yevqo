@@ -17,7 +17,8 @@ import (
 var backupTransferIDPattern=regexp.MustCompile(`^[a-f0-9]{32}$`)
 
 func writeBackupChunk(req shared.WriteBackupChunk)(*shared.WriteBackupChunkResult,error){
-	if !backupTransferIDPattern.MatchString(req.TransferID)||req.Offset<0||req.TotalSize<1||req.TotalSize>2<<30||len(req.Data)>256*1024||req.Offset+int64(len(req.Data))>req.TotalSize{return nil,fmt.Errorf("invalid backup transfer chunk")}
+	if !backupTransferIDPattern.MatchString(req.TransferID)||req.Offset<0||len(req.Data)>256*1024{return nil,fmt.Errorf("invalid backup transfer chunk")}
+	if !req.Abort&&(req.TotalSize<1||req.TotalSize>2<<30||req.Offset+int64(len(req.Data))>req.TotalSize){return nil,fmt.Errorf("invalid backup transfer size")}
 	prefix:=os.Getenv("PREFIX");if prefix==""{return nil,fmt.Errorf("Termux PREFIX is not set")}
 	var dir,finalName string
 	switch req.ResourceType{
