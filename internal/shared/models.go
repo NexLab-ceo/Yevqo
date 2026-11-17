@@ -185,6 +185,10 @@ func ErrNotFound(msg string) *APIError {
 	return &APIError{Code: 404, Message: msg}
 }
 
+func ErrConflict(msg string) *APIError {
+	return &APIError{Code: 409, Message: msg}
+}
+
 func ErrInternal(msg string) *APIError {
 	return &APIError{Code: 500, Message: msg}
 }
