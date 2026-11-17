@@ -254,3 +254,5 @@ export async function createCloudflareTunnelDNS(hostname, tunnelId) { return req
 export async function deleteCloudflareDNS(recordId) { return request('DELETE', '/api/cloudflare/dns', { record_id: recordId }); }
 
 export async function restoreSiteBackup(backupId) { return request('POST', '/api/backups/restore-site', { backup_id: backupId }); }
+
+export async function transferBackup(backupId, target) { return request('POST', `/api/backups/${backupId}/transfer`, target); }
