@@ -1,6 +1,6 @@
 <script>
- import {onMount,onDestroy} from 'svelte';import {listBackups,listSites,listDatabases,createSiteBackup,createDatabaseBackup,createControlPlaneBackup,listBackupSchedules,createBackupSchedule,deleteBackupSchedule} from '$lib/api.js';import {notify,user} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';
- let backups=[],sites=[],databases=[],schedules=[],loading=true,busy=false,controlBusy=false,selected='',poller=null,pollBusy=false,scheduleBusy=false,intervalHours=24,retentionCount=10;
+ import {onMount,onDestroy} from 'svelte';import {listBackups,listSites,listDatabases,createSiteBackup,createDatabaseBackup,createControlPlaneBackup,listBackupSchedules,createBackupSchedule,deleteBackupSchedule,getDatabaseBackupChunk} from '$lib/api.js';import {notify,user} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';
+ let backups=[],sites=[],databases=[],schedules=[],loading=true,busy=false,controlBusy=false,selected='',poller=null,pollBusy=false,scheduleBusy=false,intervalHours=24,retentionCount=10,downloadingId=0;
  function syncPolling(){const pending=backups.some((item)=>item.status==='queued'||item.status==='running');if(pending&&!poller){poller=setInterval(async()=>{if(pollBusy)return;pollBusy=true;const r=await listBackups();if(r.ok){backups=r.data.backups||[];if(!backups.some((item)=>item.status==='queued'||item.status==='running')){clearInterval(poller);poller=null}}pollBusy=false},3000)}else if(!pending&&poller){clearInterval(poller);poller=null}}
  async function load(){const [r,s,d,sc]=await Promise.all([listBackups(),listSites(),listDatabases(),listBackupSchedules()]);if(r.ok)backups=r.data.backups||[];else notify(r.error||'Не удалось загрузить резервные копии','error');if(s.ok)sites=s.data.sites||[];if(d.ok)databases=d.data.databases||[];if(sc.ok)schedules=sc.data.schedules||[];loading=false;syncPolling()}
  onMount(load);
@@ -21,6 +21,28 @@
   const r=await deleteBackupSchedule(id);if(!r.ok){notify(r.error||'Не удалось удалить расписание','error');return}
   schedules=schedules.filter(x=>x.id!==id);notify('Расписание удалено','success');
  }
+ async function downloadBackup(backup){
+  if(downloadingId)return;
+  const total=Number(backup.size_bytes||0);
+  if(!total||total>2*1024*1024*1024){notify('Размер архива не поддерживается браузерной загрузкой (лимит 2 GiB)','error');return}
+  downloadingId=backup.id;
+  const chunks=[];let offset=0;let failed='';
+  while(offset<total){
+   const r=await getDatabaseBackupChunk(backup.id,offset,256*1024);
+   if(!r.ok){failed=r.error||'Не удалось скачать часть архива';break}
+   const encoded=r.data?.data||'';let bytes;
+   try{const raw=atob(encoded);bytes=Uint8Array.from(raw,c=>c.charCodeAt(0))}catch{failed='Получена повреждённая часть архива';break}
+   if(!bytes.length||Number(r.data.offset)!==offset||Number(r.data.total_size)!==total){failed='Нарушена последовательность частей архива';break}
+   chunks.push(bytes);offset+=bytes.length;
+   if(offset>total){failed='Размер архива превышает объявленный';break}
+   if(r.data.eof&&offset!==total){failed='Архив завершился раньше ожидаемого размера';break}
+  }
+  downloadingId=0;
+  if(failed){notify(failed,'error');return}
+  const blob=new Blob(chunks,{type:backup.resource_type==='site'?'application/gzip':'application/octet-stream'});
+  const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=backup.file_name;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  notify('Архив скачан','success');
+ }
  async function createControl(){controlBusy=true;const r=await createControlPlaneBackup();controlBusy=false;if(r.ok){notify('Бэкап Control Plane сохранён: '+r.data.file_name,'success')}else notify(r.error||'Не удалось создать бэкап Control Plane','error')}
  function size(n){if(!n)return '—';const units=['B','KB','MB','GB'];let i=0,v=n;while(v>=1024&&i<3){v/=1024;i++}return v.toFixed(1)+' '+units[i]}
 </script>
@@ -40,9 +62,9 @@
  {:else}<p class="muted">Расписаний пока нет.</p>{/if}
 </section>
 {#if loading}<div class="empty">Загрузка резервных копий…</div>{:else if !backups.length}<div class="empty"><strong>Резервных копий пока нет</strong><p>Выберите сайт или базу данных выше, чтобы создать первый архив.</p></div>{:else}
-<div class="backup-list">{#each backups as b}<div class="backup-row"><span class="backup-icon">⤓</span><span class="backup-copy"><strong>{b.file_name}</strong><small>{b.resource_type} · {b.resource_id} · {new Date(b.created_at).toLocaleString()}</small></span><span class="size">{size(b.size_bytes)}</span><span class="status">{b.status}</span></div>{/each}</div>
+<div class="backup-list">{#each backups as b}<div class="backup-row"><span class="backup-icon">⤓</span><span class="backup-copy"><strong>{b.file_name}</strong><small>{b.resource_type} · {b.resource_id} · {new Date(b.created_at).toLocaleString()}</small></span><span class="size">{size(b.size_bytes)}</span><span class="status">{b.status}</span>{#if (b.resource_type==='site'&&b.status==='completed')||(b.resource_type==='database'&&b.status==='verified')}<Button size="sm" disabled={!!downloadingId} loading={downloadingId===b.id} on:click={()=>downloadBackup(b)}>Download</Button>{/if}</div>{/each}</div>
 {/if}
-<div class="notice">Архивы хранятся локально на Android-устройстве и не удаляются вместе с сайтом. Задания обновляются автоматически, пока архив создаётся. Скачивание и перенос архивов между устройствами пока не поддерживаются.</div>
+<div class="notice">Архивы хранятся локально на Android-устройстве и не удаляются вместе с сайтом. Задания обновляются автоматически, пока архив создаётся. Готовые архивы можно скачать через защищённый потоковый endpoint с проверкой размера и смещения каждого блока.</div>
 <style>
 .schedule-panel{display:grid;gap:10px;padding:14px;background:#101727;border:1px solid #253149;border-radius:11px;margin-bottom:13px}.schedule-heading{display:flex;justify-content:space-between}.schedule-heading>div{display:grid;gap:4px}.schedule-heading strong{font-size:11px}.schedule-heading small,.schedule-row small{font-size:9px;color:#64748b;line-height:1.5}.schedule-controls{display:flex;gap:8px;flex-wrap:wrap}.schedule-controls .input{min-width:130px}.schedule-list{display:grid;gap:6px}.schedule-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px;border:1px solid #253149;border-radius:8px}.schedule-row>div{display:grid;gap:3px}.schedule-row strong{font-size:10px}.schedule-row .failed{color:#f87171}
 
