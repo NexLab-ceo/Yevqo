@@ -63,6 +63,8 @@ func (m *ProcessManager) watchRestoredProcess(record ProcessRecord) {
   if !intentional && shouldRecoverAfterAgentRestart(record.RestartPolicy) {
    m.emitProcessStatus(record.SiteID, "error", 0)
    go m.recoverSite(record)
+  } else if !intentional {
+   _ = m.closeDeploymentProxy(record.SiteID)
   }
   return
  }
