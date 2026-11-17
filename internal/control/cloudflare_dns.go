@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -62,7 +63,7 @@ func (s *Server) handleCloudflareConfig(w http.ResponseWriter,r *http.Request){
 	case http.MethodGet:
 		var zoneID,zoneName string
 		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT zone_id,zone_name FROM cloudflare_accounts WHERE user_id=?`,u.ID).Scan(&zoneID,&zoneName)
-		if err!=nil{writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":false});return}
+		if err==sql.ErrNoRows{writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":false});return};if err!=nil{apiError(w,shared.ErrInternal("could not load Cloudflare configuration"));return}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":true,"zone_id":zoneID,"zone_name":zoneName})
 	case http.MethodPost:
 		var in struct{Token string `json:"token"`;ZoneID string `json:"zone_id"`}
@@ -102,22 +103,22 @@ func (s *Server) handleCloudflareDNS(w http.ResponseWriter,r *http.Request){
 	ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
 	switch r.Method {
 	case http.MethodGet:
-		var result struct{Records []cloudflareDNSRecord `json:"result"`}
-		err:=cloudflareAPIRequest(ctx,token,http.MethodGet,"/zones/"+zoneID+"/dns_records?per_page=100",nil,&result)
+		var records []cloudflareDNSRecord
+		err:=cloudflareAPIRequest(ctx,token,http.MethodGet,"/zones/"+zoneID+"/dns_records?per_page=100",nil,&records)
 		if err!=nil{apiError(w,shared.ErrBadRequest("could not load Cloudflare DNS records"));return}
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"records":result.Records,"zone_name":zoneName})
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"records":records,"zone_name":zoneName})
 	case http.MethodPost:
 		var in struct{Hostname string `json:"hostname"`;TunnelID string `json:"tunnel_id"`}
 		if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid DNS record"));return}
 		in.Hostname=strings.ToLower(strings.TrimSuffix(strings.TrimSpace(in.Hostname),"."))
 		in.TunnelID=strings.TrimSpace(in.TunnelID)
 		if !domainPattern.MatchString(in.Hostname)||!hostnameBelongsToZone(in.Hostname,zoneName)||!validCloudflareTunnelID(in.TunnelID){apiError(w,shared.ErrBadRequest("hostname must belong to the configured zone and tunnel ID must be a UUID"));return}
-		var existing struct{Records []cloudflareDNSRecord `json:"result"`}
+		var existing []cloudflareDNSRecord
 		err:=cloudflareAPIRequest(ctx,token,http.MethodGet,"/zones/"+zoneID+"/dns_records?type=CNAME&name="+in.Hostname,nil,&existing)
 		if err!=nil{apiError(w,shared.ErrBadRequest("could not check existing DNS record"));return}
 		payload:=map[string]interface{}{"type":"CNAME","name":in.Hostname,"content":strings.ToLower(in.TunnelID)+".cfargotunnel.com","proxied":true,"ttl":1}
 		method,endpoint:=http.MethodPost,"/zones/"+zoneID+"/dns_records"
-		if len(existing.Records)>0{method=http.MethodPut;endpoint+="/"+existing.Records[0].ID}
+		if len(existing)>0{method=http.MethodPut;endpoint+="/"+existing[0].ID}
 		var record cloudflareDNSRecord
 		if err:=cloudflareAPIRequest(ctx,token,method,endpoint,payload,&record);err!=nil{apiError(w,shared.ErrBadRequest("Cloudflare could not create the tunnel DNS record"));return}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"record":record})
