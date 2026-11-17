@@ -121,6 +121,9 @@ export async function runSiteCommand(deviceId, siteId, action, allowProjectCode 
 export async function getSiteReleases(deviceId, siteId) {
     return request('GET', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/releases`);
 }
+export async function pruneSiteReleases(deviceId, siteId, keep = 10) {
+    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/releases`, { keep });
+}
 
 export async function getSiteGit(deviceId, siteId) {
     return request('GET', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/git`);
