@@ -114,6 +114,13 @@ type ManageDatabaseRole struct {
 	Password string `json:"password,omitempty"`
 }
 
+type ReadSiteBackupChunk struct {
+	SiteId string `json:"site_id"`
+	FileName string `json:"file_name"`
+	Offset int64 `json:"offset"`
+	Length int `json:"length"`
+}
+
 type PruneBackups struct {
 	SiteId string `json:"site_id,omitempty"`
 	ServerID int64 `json:"server_id,omitempty"`
