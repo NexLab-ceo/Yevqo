@@ -243,3 +243,12 @@ export async function disconnectIntegration(id) { return request('DELETE', `/api
 export async function listIntegrationRepositories(id) { return request('GET', `/api/integrations/${id}/repositories`); }
 
 export async function installCloudflared(deviceId, siteId) { return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/install-cloudflared`, {}); }
+
+
+// === Cloudflare DNS automation ===
+export async function getCloudflareConfig() { return request('GET', '/api/cloudflare'); }
+export async function saveCloudflareConfig(token, zoneId) { return request('POST', '/api/cloudflare', { token, zone_id: zoneId }); }
+export async function disconnectCloudflare() { return request('DELETE', '/api/cloudflare'); }
+export async function listCloudflareDNS() { return request('GET', '/api/cloudflare/dns'); }
+export async function createCloudflareTunnelDNS(hostname, tunnelId) { return request('POST', '/api/cloudflare/dns', { hostname, tunnel_id: tunnelId }); }
+export async function deleteCloudflareDNS(recordId) { return request('DELETE', '/api/cloudflare/dns', { record_id: recordId }); }
