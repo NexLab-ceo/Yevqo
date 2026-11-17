@@ -896,8 +896,8 @@ func (m *ProcessManager) ListSiteReleases(siteID, runtime string) ([]shared.Site
 // RollbackSiteRelease switches to an existing immutable release without
 // rebuilding it. If activation fails, the previously running process is restored.
 func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime string, port int) (int, error) {
-	m.deployMu.Lock()
-	defer m.deployMu.Unlock()
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
 	if !validReleaseCommit(commit) { return 0, fmt.Errorf("invalid release commit") }
 	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
