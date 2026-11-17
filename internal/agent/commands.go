@@ -215,7 +215,7 @@ func (h *CommandHandler) handleSiteLifecycle(cmd *shared.Command, action string)
  var req shared.SiteAction
  if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid site action payload") }
  if action == "restart" {
-  pid, err := h.processes.RestartSite(req.SiteId, req.Path, int(req.Port), req.Runtime)
+  pid, err := h.processes.RestartSiteWithEnv(req.SiteId, req.Path, int(req.Port), req.Runtime, req.Env)
   if err != nil { return errorResult(cmd.Id, err.Error()) }
   payload, _ := shared.Marshal(&shared.StartSiteResult{Pid:uint32(pid), Port:req.Port})
   return &shared.Result{Id:cmd.Id, Ok:true, Message:fmt.Sprintf("restart completed (pid %d)", pid), Payload:payload}
