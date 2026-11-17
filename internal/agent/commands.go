@@ -58,6 +58,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleCreateDatabaseBackup(cmd)
 	case "read_database_backup_chunk":
 		return h.handleReadDatabaseBackupChunk(cmd)
+	case "read_site_backup_chunk":
+		return h.handleReadSiteBackupChunk(cmd)
 	case "restore_database_backup":
 		return h.handleRestoreDatabaseBackup(cmd)
 	case "test_database_connection":
