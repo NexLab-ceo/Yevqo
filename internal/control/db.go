@@ -228,8 +228,7 @@ func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Devic
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM devices WHERE user_id = ?`, d.UserID).Scan(&count); err != nil {
 		return nil, fmt.Errorf("count registered devices: %w", err)
 	}
-	limit := maxDevices + bonusDevices
-	if accountStatus == shared.UserFree || limit < 1 { limit = 1 }
+	limit := shared.DeviceLimitFor(accountStatus, maxDevices, bonusDevices)
 	if count >= limit {
 		return nil, shared.ErrForbidden("device limit reached: your current plan allows " + strconv.Itoa(limit) + " connected phone(s); disconnect a phone or upgrade your plan")
 	}
