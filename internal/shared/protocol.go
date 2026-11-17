@@ -309,6 +309,7 @@ type GetSiteMetrics struct { SiteId string `json:"site_id"` }
 type SiteMetricsResult struct {
 	SiteId string `json:"site_id"`
 	PID int `json:"pid"`
+	ProcessCount int `json:"process_count"`
 	CPUPercent float64 `json:"cpu_percent"`
 	RSSBytes uint64 `json:"rss_bytes"`
 	CapturedAt time.Time `json:"captured_at"`
