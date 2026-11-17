@@ -72,6 +72,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleGetMetrics(cmd)
 	case "get_site_metrics":
 		return h.handleGetSiteMetrics(cmd)
+	case "run_scheduled_task":
+		return h.handleRunScheduledTask(cmd)
 	case "create_site":
 		return h.handleCreateSite(cmd)
 	case "analyze_site_build":
@@ -477,3 +479,12 @@ func (h *CommandHandler) handleGetSiteRestartPolicy(cmd *shared.Command) *shared
 }
 
 
+
+func (h *CommandHandler) handleRunScheduledTask(cmd *shared.Command) *shared.Result {
+	var req shared.RunScheduledTask
+	if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid run_scheduled_task payload")}
+	result,err:=h.processes.RunScheduledTask(req);if err!=nil{return errorResult(cmd.Id,err.Error())}
+	payload,err:=shared.Marshal(result);if err!=nil{return errorResult(cmd.Id,"could not encode scheduled task result")}
+	message:="scheduled task completed";if result.ExitCode!=0{message="scheduled task failed"}
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:message,Payload:payload}
+}
