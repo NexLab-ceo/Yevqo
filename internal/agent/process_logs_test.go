@@ -39,3 +39,21 @@ func TestReadSiteLogsCombinesRotatedFilesAndLimitsLines(t *testing.T) {
  if got != "last" { t.Fatalf("line limit not applied: %q", got) }
  if _, err := readSiteLogs(root, "../escape", 10); err == nil { t.Fatal("expected invalid site id") }
 }
+
+
+func TestRotateActiveSiteLogPreservesOpenWriterInode(t *testing.T) {
+ root := t.TempDir()
+ path := filepath.Join(root, "active.log")
+ original := strings.Repeat("log-line\n", maxSiteLogBytes/9+1)
+ if err := os.WriteFile(path, []byte(original), 0600); err != nil { t.Fatal(err) }
+ writer, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0600)
+ if err != nil { t.Fatal(err) }
+ defer writer.Close()
+ before, err := os.Stat(path); if err != nil { t.Fatal(err) }
+ if err := rotateActiveSiteLog(path); err != nil { t.Fatal(err) }
+ after, err := writer.Stat(); if err != nil { t.Fatal(err) }
+ if !os.SameFile(before, after) { t.Fatal("active log inode changed; running writer would keep writing to rotated file") }
+ if after.Size() != 0 { t.Fatalf("active log size after rotation = %d, want 0", after.Size()) }
+ rotated, err := os.ReadFile(path+".1"); if err != nil { t.Fatal(err) }
+ if len(rotated) != len(original) { t.Fatalf("rotated bytes = %d, want %d", len(rotated), len(original)) }
+}
