@@ -723,11 +723,12 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 	if err != nil { return 0, "", "", "", err }
 	if err := os.MkdirAll(siteRoot, 0o750); err != nil { return 0, "", "", "", fmt.Errorf("create site directory: %w", err) }
 
-	metadataRoot := filepath.Join(siteRoot, ".yevqo")
-	stagingRoot := filepath.Join(metadataRoot, "staging")
-	releasesRoot := filepath.Join(metadataRoot, "releases")
-	if err := os.MkdirAll(stagingRoot, 0o700); err != nil { return 0, "", "", "", err }
-	if err := os.MkdirAll(releasesRoot, 0o700); err != nil { return 0, "", "", "", err }
+	metadataRoot, err := ensureSafeSubdirectory(siteRoot, ".yevqo", 0o700)
+	if err != nil { return 0, "", "", "", fmt.Errorf("prepare deployment metadata: %w", err) }
+	stagingRoot, err := ensureSafeSubdirectory(metadataRoot, "staging", 0o700)
+	if err != nil { return 0, "", "", "", fmt.Errorf("prepare deployment staging: %w", err) }
+	releasesRoot, err := ensureSafeSubdirectory(metadataRoot, "releases", 0o700)
+	if err != nil { return 0, "", "", "", fmt.Errorf("prepare release history: %w", err) }
 	stageDir, err := os.MkdirTemp(stagingRoot, "deploy-*")
 	if err != nil { return 0, "", "", "", fmt.Errorf("create deployment staging directory: %w", err) }
 	defer os.RemoveAll(stageDir)
