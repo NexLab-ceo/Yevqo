@@ -1078,30 +1078,47 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return 0, fmt.Errorf("release root resolves outside release directory") }
 	if m.registry == nil || m.registryErr != nil { return 0, fmt.Errorf("process registry unavailable: %v", m.registryErr) }
 	previous, hadPrevious := m.registry.Get(siteID)
-	if hadPrevious && verifyProcessRecord(previous) {
-		if err := m.stopSiteLocked(siteID); err != nil { return 0, fmt.Errorf("stop current release: %w", err) }
-	} else if hadPrevious {
+	if hadPrevious && !verifyProcessRecord(previous) {
 		_ = m.registry.Delete(siteID)
-		m.mu.Lock(); delete(m.procs, siteID); m.mu.Unlock()
+		m.mu.Lock()
+		delete(m.procs, siteID)
+		m.mu.Unlock()
 		hadPrevious = false
+	}
+	tx := deploymentTransaction{Version: 1, SiteID: siteID, State: "activating", CandidateCommit: commit, HadPrevious: hadPrevious, Previous: previous}
+	if err := m.persistDeploymentTransaction(tx); err != nil {
+		return 0, fmt.Errorf("persist rollback recovery journal: %w", err)
+	}
+	if hadPrevious {
+		if err := m.stopSiteLocked(siteID); err != nil {
+			if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr == nil {
+				_ = m.removeDeploymentTransaction(siteID)
+			}
+			return 0, fmt.Errorf("stop current release: %w", err)
+		}
 	}
 	runPath := filepath.Join("sites", siteID, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
 	pid, startErr := m.startSiteWithCommandLocked(siteID, runPath, port, runtime, nil, startCommand)
-	if startErr == nil { return pid, nil }
-	if hadPrevious {
-		oldPath := previous.RunPath
-		if oldPath == "" {
-			if rel, e := filepath.Rel(siteRoot, previous.WorkingDir); e == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				oldPath = filepath.Join("sites", siteID, rel)
-			}
+	if startErr != nil {
+		if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr != nil {
+			return 0, fmt.Errorf("rollback activation failed (%v); recovery journal retained because restoration failed (%v)", startErr, recoveryErr)
 		}
-		if oldPath == "" { return 0, fmt.Errorf("rollback activation failed (%v); previous process path unavailable", startErr) }
-		if _, restoreErr := m.startSiteWithCommandLocked(siteID, oldPath, previous.Port, previous.Runtime, nil, previous.StartCommand); restoreErr != nil {
-			return 0, fmt.Errorf("rollback activation failed (%v); restoring previous release also failed (%v)", startErr, restoreErr)
+		if cleanupErr := m.removeDeploymentTransaction(siteID); cleanupErr != nil {
+			return 0, fmt.Errorf("rollback activation failed (%v); previous release restored but journal cleanup failed (%v)", startErr, cleanupErr)
 		}
+		return 0, fmt.Errorf("could not activate release %s: %w", commit, startErr)
 	}
-	return 0, fmt.Errorf("could not activate release %s: %w", commit, startErr)
+	tx.State = "committed"
+	if err := m.persistDeploymentTransaction(tx); err != nil {
+		if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr != nil {
+			return 0, fmt.Errorf("rollback started but commit journal failed (%v); recovery also failed (%v)", err, recoveryErr)
+		}
+		_ = m.removeDeploymentTransaction(siteID)
+		return 0, fmt.Errorf("rollback started but could not commit journal; previous release restored: %w", err)
+	}
+	_ = m.removeDeploymentTransaction(siteID)
+	return pid, nil
 }
 
 // BuildSite runs the Android-native local provider for a site. Project code is
