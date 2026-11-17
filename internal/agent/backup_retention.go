@@ -20,9 +20,10 @@ func pruneBackups(req shared.PruneBackups) (*shared.PruneBackupsResult, error) {
 	case req.SiteId != "" && req.ServerID == 0 && validSiteID(req.SiteId):
 		dir = filepath.Join(prefix,"var","lib","veltrix-agent","backups","sites",req.SiteId)
 		match = func(name string) bool { return strings.HasPrefix(name,req.SiteId+"-") && strings.HasSuffix(name,".tar.gz") }
-	case req.SiteId == "" && req.ServerID > 0:
+	case req.SiteId == "" && req.ServerID > 0 && req.DatabaseID > 0:
 		dir = filepath.Join(prefix,"var","lib","veltrix-agent","backups","databases",fmt.Sprint(req.ServerID))
-		match = func(name string) bool { return strings.HasSuffix(name,".dump") }
+		databaseMarker := fmt.Sprintf("-%d-", req.DatabaseID)
+		match = func(name string) bool { return strings.Contains(name,databaseMarker) && strings.HasSuffix(name,".dump") }
 	default:
 		return nil, fmt.Errorf("specify exactly one valid site or database server")
 	}
