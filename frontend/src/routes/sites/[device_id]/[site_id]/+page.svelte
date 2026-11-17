@@ -201,32 +201,6 @@
         if (res.ok) scheduledTasks = res.data.tasks || [];
     }
 
-    async function addScheduledTask() {
-        if (!taskName.trim() || !taskCommand.trim() || taskBusy) return;
-        taskBusy = true;
-        const res = await createScheduledTask({ device_id: Number(deviceId), site_id: siteId, name: taskName.trim(), command: taskCommand.trim(), interval_minutes: Number(taskInterval) });
-        taskBusy = false;
-        if (!res.ok) { notify(res.error || 'Не удалось создать задачу', 'error'); return; }
-        taskName = ''; taskCommand = '';
-        notify('Scheduled task создана', 'success');
-        const refreshed = await listScheduledTasks(deviceId, siteId);
-        if (refreshed.ok) scheduledTasks = refreshed.data.tasks || [];
-    }
-
-    async function toggleScheduledTask(task) {
-        const res = await setScheduledTaskEnabled(task.id, !task.enabled);
-        if (!res.ok) { notify(res.error || 'Не удалось изменить задачу', 'error'); return; }
-        scheduledTasks = scheduledTasks.map(item => item.id === task.id ? { ...item, enabled: !task.enabled } : item);
-    }
-
-    async function removeScheduledTask(task) {
-        if (!confirm('Удалить задачу ' + task.name + '?')) return;
-        const res = await deleteScheduledTask(task.id);
-        if (!res.ok) { notify(res.error || 'Не удалось удалить задачу', 'error'); return; }
-        scheduledTasks = scheduledTasks.filter(item => item.id !== task.id);
-        notify('Задача удалена', 'success');
-    }
-
     async function loadProcessMetrics() {
         if (!online || metricsBusy) return;
         metricsBusy = true;
