@@ -654,7 +654,7 @@ func (m *ProcessManager) RestartSite(siteID, path string, port int, runtime stri
 	return m.RestartSiteWithEnv(siteID, path, port, runtime, nil)
 }
 
-func (m *ProcessManager) RestartSiteWithEnv(siteID, path string, port, runtime string, extraEnv map[string]string) (int, error) {
+func (m *ProcessManager) RestartSiteWithEnv(siteID, path string, port int, runtime string, extraEnv map[string]string) (int, error) {
 	m.operationMu.Lock()
 	defer m.operationMu.Unlock()
 	var previous ProcessRecord
