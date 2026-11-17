@@ -30,18 +30,16 @@ func newDeploymentProxy(publicPort, backendPort int) (*deploymentProxy, error) {
 	}
 	proxy := &deploymentProxy{}
 	proxy.target.Store(target)
-	reverse := httputil.NewSingleHostReverseProxy(target)
-	reverse.Director = func(req *http.Request) {
-		current := proxy.target.Load()
-		if current == nil {
-			return
-		}
-		req.URL.Scheme = current.Scheme
-		req.URL.Host = current.Host
-		req.Host = current.Host
-	}
-	reverse.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
-		http.Error(w, "site backend temporarily unavailable", http.StatusBadGateway)
+	reverse := &httputil.ReverseProxy{
+		Rewrite: func(request *httputil.ProxyRequest) {
+			current := proxy.target.Load()
+			if current == nil { return }
+			request.SetURL(current)
+			request.SetXForwarded()
+		},
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
+			http.Error(w, "site backend temporarily unavailable", http.StatusBadGateway)
+		},
 	}
 	proxy.server = &http.Server{
 		Handler:           reverse,
