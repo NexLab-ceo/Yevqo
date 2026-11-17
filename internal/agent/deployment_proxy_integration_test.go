@@ -177,3 +177,74 @@ HTTPServer(("127.0.0.1", int(os.environ["PORT"])), Handler).serve_forever()
 	if verifyProcessRecord(previous) { t.Fatal("legacy direct process remained alive after migration") }
 	if err := manager.StopSite(siteID); err != nil { t.Fatalf("stop migrated site: %v", err) }
 }
+
+func TestBlueGreenCrashAfterSwitchRestoresPreviousRelease(t *testing.T) {
+	if _, err := execLookPathPython(); err != nil { t.Skip("python3 is required for blue-green crash recovery test") }
+	root := t.TempDir()
+	siteID := "bluegreencrash"
+	if err := os.MkdirAll(filepath.Join(root, "sites", siteID), 0o700); err != nil { t.Fatal(err) }
+	registry, err := NewProcessRegistry(root)
+	if err != nil { t.Fatal(err) }
+	manager := &ProcessManager{DataRoot:root, registry:registry, procs:make(map[string]*Process),
+		proxies:make(map[string]*deploymentProxy), restartAttempts:make(map[string]int), intentionalStops:make(map[string]bool)}
+	publicPort := reserveTestPort(t)
+	firstCommit := strings.Repeat("d", 40)
+	firstPath := writeProxyTestRelease(t, root, siteID, firstCommit, "confirmed-release")
+	firstTx := deploymentTransaction{Version:1, SiteID:siteID, State:"activating", CandidateCommit:firstCommit}
+	if _, err := manager.activateBlueGreenRelease(context.Background(), firstTx, firstPath, publicPort, "static", nil, "python3 serve.py", "/"); err != nil {
+		t.Fatalf("activate confirmed release: %v", err)
+	}
+	previous, ok := registry.Get(siteID)
+	if !ok || previous.BackendPort == 0 { t.Fatalf("confirmed blue-green process missing: %#v", previous) }
+
+	candidateCommit := strings.Repeat("e", 40)
+	candidatePath := writeProxyTestRelease(t, root, siteID, candidateCommit, "uncommitted-candidate")
+	tx := deploymentTransaction{Version:1, SiteID:siteID, State:"activating", CandidateCommit:candidateCommit, HadPrevious:true, Previous:previous}
+	if err := manager.createDeploymentTransaction(tx); err != nil { t.Fatalf("write activation journal: %v", err) }
+	backendPort, err := allocateDeploymentBackendPort()
+	if err != nil { t.Fatal(err) }
+	manager.mu.Lock()
+	delete(manager.procs, siteID)
+	manager.mu.Unlock()
+	candidatePID, err := manager.startSiteWithCommandLocked(siteID, candidatePath, backendPort, "static", nil, "python3 serve.py")
+	if err != nil { t.Fatalf("start uncommitted candidate: %v", err) }
+	candidate, ok := registry.Get(siteID)
+	if !ok || candidate.PID != candidatePID { t.Fatalf("candidate process record missing: %#v", candidate) }
+	candidate.Port = publicPort
+	candidate.BackendPort = backendPort
+	if err := registry.Save(candidate); err != nil { t.Fatal(err) }
+	manager.mu.Lock()
+	if process := manager.procs[siteID]; process != nil { process.Port = publicPort }
+	manager.mu.Unlock()
+	if err := manager.ensureDeploymentProxy(siteID, publicPort, previous.BackendPort); err != nil { t.Fatal(err) }
+	if err := manager.switchDeploymentProxyAndDrain(siteID, backendPort, time.Second); err != nil { t.Fatal(err) }
+
+	requestBody := func(want string) {
+		t.Helper()
+		deadline := time.Now().Add(5*time.Second)
+		for time.Now().Before(deadline) {
+			resp, requestErr := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", publicPort))
+			if requestErr == nil {
+				body, readErr := io.ReadAll(resp.Body)
+				_ = resp.Body.Close()
+				if readErr == nil && resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == want { return }
+			}
+			time.Sleep(25*time.Millisecond)
+		}
+		t.Fatalf("stable listener did not serve expected body %q", want)
+	}
+	requestBody("uncommitted-candidate")
+	if err := manager.closeDeploymentProxy(siteID); err != nil { t.Fatal(err) }
+
+	restarted := NewProcessManager(root)
+	restored, ok := restarted.registry.Get(siteID)
+	if !ok || restored.PID != previous.PID || restored.BackendPort != previous.BackendPort {
+		t.Fatalf("startup recovery did not restore confirmed release: %#v", restored)
+	}
+	if verifyProcessRecord(candidate) { t.Fatal("uncommitted candidate survived Agent crash recovery") }
+	requestBody("confirmed-release")
+	if _, exists, err := restarted.readDeploymentTransaction(siteID); err != nil || exists {
+		t.Fatalf("uncommitted journal was not finalized: exists=%v err=%v", exists, err)
+	}
+	if err := restarted.StopSite(siteID); err != nil { t.Fatalf("stop recovered site: %v", err) }
+}
