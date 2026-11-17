@@ -4,6 +4,8 @@ package control
 
 import (
 	"context"
+
+	"github.com/gorilla/websocket"
 	"fmt"
 	"encoding/json"
 	"net/http"
@@ -335,6 +337,15 @@ func (s *Server) handleGetDevice(w http.ResponseWriter, r *http.Request, dev *sh
 }
 
 func (s *Server) handleDeleteDevice(w http.ResponseWriter, r *http.Request, dev *shared.Device) {
+	// Unpairing must also terminate the live Agent socket. Otherwise a deleted
+	// phone could keep receiving commands until its connection drops naturally.
+	if conn, online := s.hub.Get(dev.ID); online {
+		s.hub.RemoveConn(conn)
+		_ = conn.ws.WriteControl(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, "device unpaired"),
+			time.Now().Add(2*time.Second))
+		_ = conn.ws.Close()
+	}
 	if err := s.db.DeleteDevice(r.Context(), dev.ID); err != nil {
 		apiError(w, err)
 		return
