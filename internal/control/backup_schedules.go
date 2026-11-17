@@ -82,7 +82,9 @@ func (s *Server) backupSchedulerLoop() {
 	for {
 		select {
 		case <-s.schedulerStop: return
-		case <-ticker.C: s.runDueBackupSchedules()
+		case <-ticker.C:
+			s.runDueBackupSchedules()
+			s.runDueScheduledTasks()
 		}
 	}
 }
