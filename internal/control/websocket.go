@@ -290,7 +290,10 @@ func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 		}
 	case "status":
 		var se shared.StatusEvent
-		if err := shared.Unmarshal(ev.Payload, &se); err == nil {
+		if err := shared.Unmarshal(ev.Payload, &se); err == nil && c.Device != nil && validLogSiteID(se.SiteId) {
+			// Agent status events are asynchronous and may arrive while a connection
+			// is being torn down. Never dereference an unauthenticated/disconnected
+			// device context, and reject malformed site identifiers before DB writes.
 			_ = srv.db.UpdateSiteStatus(
 				context.Background(), c.Device.ID, se.SiteId, se.Status, int(se.Pid),
 			)
