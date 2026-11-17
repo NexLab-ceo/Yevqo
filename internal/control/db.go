@@ -179,6 +179,23 @@ func (db *DB) AddBonusDevice(ctx context.Context, userID int64, n int) error {
 // DEVICES
 // ============================================================
 
+type deviceRowScanner interface { Scan(dest ...any) error }
+
+func scanDevice(scanner deviceRowScanner) (*shared.Device, error) {
+	var d shared.Device
+	var capabilitiesJSON []byte
+	err := scanner.Scan(&d.ID, &d.UserID, &d.DeviceID, &d.Hostname, &d.TailscaleIP,
+		&d.AgentVersion, &d.Platform, &d.Architecture, &capabilitiesJSON,
+		&d.Status, &d.CreatedAt, &d.LastSeen)
+	if err != nil { return nil, err }
+	if len(capabilitiesJSON) > 0 {
+		if err := json.Unmarshal(capabilitiesJSON, &d.Capabilities); err != nil {
+			return nil, fmt.Errorf("decode device capabilities: %w", err)
+		}
+	}
+	return &d, nil
+}
+
 func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Device, error) {
 	// Serialize registrations per account. Locking the user row prevents two
 	// simultaneous first-time Agent connections from both passing the limit.
@@ -195,33 +212,35 @@ func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Devic
 		return nil, fmt.Errorf("lock device owner: %w", err)
 	}
 
-	var existing shared.Device
-	err = tx.QueryRowContext(ctx, `
-		SELECT id, user_id, device_id, hostname, tailscale_ip,
-		       agent_version, status, created_at, last_seen
-		FROM devices WHERE device_id = ? FOR UPDATE`, d.DeviceID,
-	).Scan(&existing.ID, &existing.UserID, &existing.DeviceID, &existing.Hostname,
-		&existing.TailscaleIP, &existing.AgentVersion, &existing.Status,
-		&existing.CreatedAt, &existing.LastSeen)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("lookup registered device: %w", err)
+	existing, lookupErr := scanDevice(tx.QueryRowContext(ctx, `
+		SELECT id, user_id, device_id, hostname, tailscale_ip, agent_version,
+		       platform, architecture, capabilities, status, created_at, last_seen
+		FROM devices WHERE device_id = ? FOR UPDATE`, d.DeviceID))
+	if lookupErr != nil && !errors.Is(lookupErr, sql.ErrNoRows) {
+		return nil, fmt.Errorf("lookup registered device: %w", lookupErr)
 	}
 
 	now := shared.Now()
-	if err == nil {
+	capabilitiesJSON, err := json.Marshal(d.Capabilities)
+	if err != nil { return nil, fmt.Errorf("encode device capabilities: %w", err) }
+	if len(d.Capabilities) == 0 { capabilitiesJSON = nil }
+	if lookupErr == nil {
 		// Device UUIDs are globally unique and cannot be rebound across accounts.
 		if existing.UserID != d.UserID {
 			return nil, shared.ErrForbidden("device is already paired to another account")
 		}
 		_, err = tx.ExecContext(ctx, `
 			UPDATE devices SET tailscale_ip = ?, hostname = ?, agent_version = ?,
-				status = ?, last_seen = ? WHERE id = ?`,
-			d.TailscaleIP, d.Hostname, d.AgentVersion, shared.DeviceOnline, now, existing.ID)
+				platform = ?, architecture = ?, capabilities = ?, status = ?, last_seen = ?
+			WHERE id = ?`,
+			d.TailscaleIP, d.Hostname, d.AgentVersion, d.Platform, d.Architecture,
+			capabilitiesJSON, shared.DeviceOnline, now, existing.ID)
 		if err != nil { return nil, fmt.Errorf("update device: %w", err) }
 		existing.TailscaleIP, existing.Hostname = d.TailscaleIP, d.Hostname
-		existing.AgentVersion, existing.Status, existing.LastSeen = d.AgentVersion, shared.DeviceOnline, &now
+		existing.AgentVersion, existing.Platform, existing.Architecture = d.AgentVersion, d.Platform, d.Architecture
+		existing.Capabilities, existing.Status, existing.LastSeen = d.Capabilities, shared.DeviceOnline, &now
 		if err := tx.Commit(); err != nil { return nil, fmt.Errorf("commit device heartbeat: %w", err) }
-		return &existing, nil
+		return existing, nil
 	}
 
 	count := 0
@@ -234,9 +253,9 @@ func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Devic
 	}
 
 	insertResult, err := tx.ExecContext(ctx, `
-		INSERT INTO devices (user_id, device_id, hostname, tailscale_ip, agent_version, status, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		d.UserID, d.DeviceID, d.Hostname, d.TailscaleIP, d.AgentVersion, shared.DeviceOnline, now)
+		INSERT INTO devices (user_id, device_id, hostname, tailscale_ip, agent_version, platform, architecture, capabilities, status, last_seen)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		d.UserID, d.DeviceID, d.Hostname, d.TailscaleIP, d.AgentVersion, d.Platform, d.Architecture, capabilitiesJSON, shared.DeviceOnline, now)
 	if err != nil { return nil, fmt.Errorf("insert device: %w", err) }
 	d.ID, err = insertResult.LastInsertId()
 	if err != nil { return nil, fmt.Errorf("read registered device id: %w", err) }
@@ -247,15 +266,11 @@ func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Devic
 
 func (db *DB) GetDeviceByUUID(ctx context.Context, uuid string) (*shared.Device, error) {
 	query := `
-		SELECT id, user_id, device_id, hostname, tailscale_ip,
-		       agent_version, status, created_at, last_seen
+		SELECT id, user_id, device_id, hostname, tailscale_ip, agent_version,
+		       platform, architecture, capabilities, status, created_at, last_seen
 		FROM devices WHERE device_id = ?`
 
-	var d shared.Device
-	err := db.conn.QueryRowContext(ctx, query, uuid).Scan(
-		&d.ID, &d.UserID, &d.DeviceID, &d.Hostname, &d.TailscaleIP,
-		&d.AgentVersion, &d.Status, &d.CreatedAt, &d.LastSeen,
-	)
+	d, err := scanDevice(db.conn.QueryRowContext(ctx, query, uuid))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, shared.ErrNotFound("device not found")
 	}
@@ -267,15 +282,11 @@ func (db *DB) GetDeviceByUUID(ctx context.Context, uuid string) (*shared.Device,
 
 func (db *DB) GetDeviceByID(ctx context.Context, id int64) (*shared.Device, error) {
 	query := `
-		SELECT id, user_id, device_id, hostname, tailscale_ip,
-		       agent_version, status, created_at, last_seen
+		SELECT id, user_id, device_id, hostname, tailscale_ip, agent_version,
+		       platform, architecture, capabilities, status, created_at, last_seen
 		FROM devices WHERE id = ?`
 
-	var d shared.Device
-	err := db.conn.QueryRowContext(ctx, query, id).Scan(
-		&d.ID, &d.UserID, &d.DeviceID, &d.Hostname, &d.TailscaleIP,
-		&d.AgentVersion, &d.Status, &d.CreatedAt, &d.LastSeen,
-	)
+	d, err := scanDevice(db.conn.QueryRowContext(ctx, query, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, shared.ErrNotFound("device not found")
 	}
@@ -287,8 +298,8 @@ func (db *DB) GetDeviceByID(ctx context.Context, id int64) (*shared.Device, erro
 
 func (db *DB) ListDevicesByUser(ctx context.Context, userID int64) ([]shared.Device, error) {
 	query := `
-		SELECT id, user_id, device_id, hostname, tailscale_ip,
-		       agent_version, status, created_at, last_seen
+		SELECT id, user_id, device_id, hostname, tailscale_ip, agent_version,
+		       platform, architecture, capabilities, status, created_at, last_seen
 		FROM devices WHERE user_id = ?
 		ORDER BY created_at DESC`
 
@@ -300,14 +311,9 @@ func (db *DB) ListDevicesByUser(ctx context.Context, userID int64) ([]shared.Dev
 
 	var out []shared.Device
 	for rows.Next() {
-		var d shared.Device
-		if err := rows.Scan(
-			&d.ID, &d.UserID, &d.DeviceID, &d.Hostname, &d.TailscaleIP,
-			&d.AgentVersion, &d.Status, &d.CreatedAt, &d.LastSeen,
-		); err != nil {
-			return nil, fmt.Errorf("scan device: %w", err)
-		}
-		out = append(out, d)
+		d, err := scanDevice(rows)
+		if err != nil { return nil, fmt.Errorf("scan device: %w", err) }
+		out = append(out, *d)
 	}
 	return out, rows.Err()
 }
