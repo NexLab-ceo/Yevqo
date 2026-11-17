@@ -72,6 +72,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleStopSite(cmd)
 	case "set_site_restart_policy":
 		return h.handleSetSiteRestartPolicy(cmd)
+	case "get_site_restart_policy":
+		return h.handleGetSiteRestartPolicy(cmd)
 	case "restart":
 		return h.handleSiteLifecycle(cmd, "restart")
 	case "deploy":
@@ -416,4 +418,15 @@ func (h *CommandHandler) handleSetSiteRestartPolicy(cmd *shared.Command) *shared
  if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid set_site_restart_policy payload") }
  if err := h.processes.SetRestartPolicy(req.SiteId, req.Policy); err != nil { return errorResult(cmd.Id, err.Error()) }
  return &shared.Result{Id: cmd.Id, Ok: true, Message: "restart policy saved: " + req.Policy}
+}
+
+
+func (h *CommandHandler) handleGetSiteRestartPolicy(cmd *shared.Command) *shared.Result {
+ var req shared.GetSiteRestartPolicy
+ if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid get_site_restart_policy payload") }
+ policy, err := h.processes.GetRestartPolicy(req.SiteId)
+ if err != nil { return errorResult(cmd.Id, err.Error()) }
+ payload, err := shared.Marshal(map[string]string{"policy": policy})
+ if err != nil { return errorResult(cmd.Id, "could not encode restart policy") }
+ return &shared.Result{Id: cmd.Id, Ok: true, Message: "restart policy loaded", Payload: payload}
 }
