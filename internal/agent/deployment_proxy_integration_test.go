@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -74,6 +75,27 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 	}
 	readBody("release-one")
 
+	stopRequests := make(chan struct{})
+	requestErrors := make(chan error, 1)
+	var stopOnce sync.Once
+	stopRequestLoop := func() { stopOnce.Do(func() { close(stopRequests) }) }
+	defer stopRequestLoop()
+	go func() {
+		for {
+			select { case <-stopRequests: return; default: }
+			resp, requestErr := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", publicPort))
+			if requestErr != nil {
+				select { case requestErrors <- requestErr: default: }
+				return
+			}
+			_ = resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				select { case requestErrors <- fmt.Errorf("stable listener returned HTTP %d during switch", resp.StatusCode): default: }
+				return
+			}
+		}
+	}()
+
 	secondCommit := strings.Repeat("b", 40)
 	secondPath := writeProxyTestRelease(t, root, siteID, secondCommit, "release-two")
 	secondTx := deploymentTransaction{Version:1, SiteID:siteID, State:"activating", CandidateCommit:secondCommit, HadPrevious:true, Previous:firstRecord}
@@ -83,6 +105,8 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 	if !ok || secondRecord.PID != secondPID || secondRecord.Port != publicPort || secondRecord.BackendPort == firstRecord.BackendPort {
 		t.Fatalf("second release did not switch backend: %#v", secondRecord)
 	}
+	stopRequestLoop()
+	select { case requestErr := <-requestErrors: t.Fatalf("zero-downtime traffic check failed: %v", requestErr); default: }
 	readBody("release-two")
 	if verifyProcessRecord(firstRecord) { t.Fatal("previous release process was not stopped after traffic switch") }
 	rollbackPID, err := manager.RollbackSiteRelease(siteID, firstCommit, ".", "static", publicPort, "python3 serve.py")
