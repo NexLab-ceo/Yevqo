@@ -12,6 +12,7 @@ type deploymentJob struct {
  id string
  ctx context.Context
  cancel context.CancelFunc
+ state string
 }
 
 // SetDeploymentEmitter installs the Agent-to-Control-Plane progress callback.
@@ -40,7 +41,7 @@ func (m *ProcessManager) BeginDeploymentJob(siteID string) (string, context.Cont
  }
  id := fmt.Sprintf("job-%x", time.Now().UnixNano())
  ctx, cancel := context.WithCancel(context.Background())
- m.deploymentJobs[siteID] = &deploymentJob{id:id, ctx:ctx, cancel:cancel}
+ m.deploymentJobs[siteID] = &deploymentJob{id:id, ctx:ctx, cancel:cancel, state:"queued"}
  m.jobMu.Unlock()
  m.emitDeploymentJob(siteID, id, "queued", 0, "Deployment queued")
  return id, ctx, nil
@@ -56,6 +57,7 @@ func (m *ProcessManager) CancelDeploymentJob(siteID, jobID string) error {
   return fmt.Errorf("deployment job not found")
  }
  job.cancel()
+ job.state = "cancelled"
  m.jobMu.Unlock()
  m.emitDeploymentJob(siteID, jobID, "cancelled", 0, "Deployment cancellation requested")
  return nil
@@ -65,7 +67,8 @@ func (m *ProcessManager) UpdateDeploymentJob(siteID, jobID, state string, progre
  if progress < 0 { progress = 0 }; if progress > 100 { progress = 100 }
  m.jobMu.Lock()
  job, exists := m.deploymentJobs[siteID]
- active := exists && job.id == jobID && job.ctx.Err() == nil
+ active := exists && job.id == jobID && job.ctx.Err() == nil && canTransitionDeploymentJob(job.state, state)
+ if active { job.state = state }
  m.jobMu.Unlock()
  if active { m.emitDeploymentJob(siteID, jobID, state, progress, message) }
 }
@@ -74,6 +77,7 @@ func (m *ProcessManager) FinishDeploymentJob(siteID, jobID, state, message strin
  m.jobMu.Lock()
  job, exists := m.deploymentJobs[siteID]
  if exists && job.id == jobID {
+  if canTransitionDeploymentJob(job.state, state) { job.state = state }
   delete(m.deploymentJobs, siteID)
   job.cancel()
  }
@@ -81,4 +85,20 @@ func (m *ProcessManager) FinishDeploymentJob(siteID, jobID, state, message strin
  progress := 100
  if state == "failed" || state == "cancelled" { progress = 0 }
  m.emitDeploymentJob(siteID, jobID, state, progress, message)
+}
+
+
+func canTransitionDeploymentJob(current, next string) bool {
+ if current == next { return true }
+ if next == "failed" || next == "cancelled" { return current != "healthy" && current != "failed" && current != "cancelled" }
+ allowed := map[string][]string{
+  "queued":{"preparing"},
+  "preparing":{"cloning"},
+  "cloning":{"installing","starting"},
+  "installing":{"building"},
+  "building":{"starting"},
+  "starting":{"healthy"},
+ }
+ for _, candidate := range allowed[current] { if candidate == next { return true } }
+ return false
 }
