@@ -33,6 +33,8 @@ type Server struct {
 	logStreams    *logStreamHub
 	adminUsername string
 	credentialKey []byte
+	schedulerStop chan struct{}
+	schedulerDone chan struct{}
 	mux           *http.ServeMux
 }
 
@@ -95,11 +97,18 @@ func NewServer(cfg Config) (*Server, error) {
 		mux:           http.NewServeMux(),
 	}
 
+	srv.schedulerStop = make(chan struct{})
+	srv.schedulerDone = make(chan struct{})
 	srv.registerRoutes()
+	go srv.backupSchedulerLoop()
 	return srv, nil
 }
 // Close закрывает ресурсы.
 func (s *Server) Close() error {
+	if s.schedulerStop != nil {
+		close(s.schedulerStop)
+		<-s.schedulerDone
+	}
 	return s.db.Close()
 }
 
@@ -137,6 +146,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/settings", s.RequireAuth(s.handleSettings))
 	s.mux.HandleFunc("/api/reports", s.RequireAuth(s.handleReports))
 	s.mux.HandleFunc("/api/backups", s.RequireAuth(s.handleBackups))
+	s.mux.HandleFunc("/api/backup-schedules", s.RequireAuth(s.handleBackupSchedules))
+	s.mux.HandleFunc("/api/backup-schedules/", s.RequireAuth(s.handleBackupSchedules))
 	s.mux.HandleFunc("/api/backups/", s.RequireAuth(s.handleDatabaseBackupChunk))
 	s.mux.HandleFunc("/api/backups/restore", s.RequireAuth(s.handleRestoreDatabaseBackup))
 	s.mux.HandleFunc("/api/domains", s.RequireAuth(s.handleDomains))
