@@ -17,6 +17,7 @@ type ProcessRecord struct {
 	PID          int       `json:"pid"`
 	ProcessGroup int       `json:"process_group"`
 	Port         int       `json:"port"`
+	BackendPort  int       `json:"backend_port,omitempty"`
 	Runtime      string    `json:"runtime"`
 	WorkingDir   string    `json:"working_dir"`
 	LogPath      string    `json:"log_path"`
