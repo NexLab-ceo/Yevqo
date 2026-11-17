@@ -69,3 +69,18 @@ func TestNodeBuildSkipsMissingBuildScript(t *testing.T) {
 	if err!=nil{t.Fatal(err)}
 	if len(steps)!=2||steps[1].name!="build"{t.Fatalf("expected install and build steps, got %#v",steps)}
 }
+
+
+func TestAndroidBuildReportsFailedProviderStep(t *testing.T) {
+ root := t.TempDir()
+ bin := t.TempDir()
+ fakeNPM := filepath.Join(bin, "npm")
+ if err := os.WriteFile(fakeNPM, []byte("#!/bin/sh\nexit 7\n"), 0700); err != nil { t.Fatal(err) }
+ t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+ result := NewAndroidBuildRunner(t.TempDir()).Run(context.Background(), AndroidBuildRequest{
+  SiteID:"failed-build", SiteRoot:root, Stack:"custom", InstallCommand:"npm install",
+  AllowProjectCode:true, Timeout:time.Second, MaxLogBytes:1024,
+ })
+ if result.Success { t.Fatalf("expected failed provider step, got success: %+v", result) }
+ if !strings.Contains(result.Error, "install failed") { t.Fatalf("unexpected build error: %q", result.Error) }
+}
