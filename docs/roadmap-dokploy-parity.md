@@ -16,7 +16,7 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 - [x] One active deployment per site, progress events and cancellation.
 - [x] Supported launch runtimes: PHP, Go, static and Node.js; custom argv start commands are supported without shell interpolation.
 - [x] Immutable staged Git deployment, build-before-activation and restoration of the previous release when candidate activation/health checks fail.
-- [ ] Complete failure-injection coverage for failed builds, cancellation at every deployment phase, Agent restart during recovery, occupied ports and stop timeouts.
+- [x] Regression coverage for failed build steps, deployment cancellation races, Agent restart process adoption, process crashes, occupied ports, process-group shutdown and HTTP health-check failures/timeouts.
 
 ### P0 implementation notes
 
