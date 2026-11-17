@@ -271,6 +271,20 @@ func nodeStartCommand(root string) (*exec.Cmd, error) {
 	return exec.Command("npm", "run", "start"), nil
 }
 
+func validManagedEnvironmentKey(key string) bool {
+	if key == "" || len(key) > 64 { return false }
+	for i, r := range key {
+		if !((r >= 'A' && r <= 'Z') || r == '_' || (i > 0 && r >= '0' && r <= '9')) { return false }
+	}
+	switch key {
+	case "DB_CONNECTION", "DB_HOST", "DB_PORT", "DB_SSLMODE", "DB_DATABASE", "DB_USERNAME", "DB_PASSWORD", "VELTRIX_DATABASES":
+		return true
+	case "PATH", "HOME", "PREFIX", "TMPDIR", "LD_PRELOAD", "LD_LIBRARY_PATH", "PORT", "HOST":
+		return false
+	}
+	return !strings.HasPrefix(key, "DB_") && !strings.HasPrefix(key, "VELTRIX_")
+}
+
 func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string) (int, error) {
 	return m.StartSiteWithEnv(siteID, path, port, runtime, nil)
 }
@@ -390,7 +404,7 @@ func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port in
 	// Environment values are injected into this site's process only; no .env file is modified.
 	env := append([]string{}, os.Environ()...)
 	for key, value := range extraEnv {
-		if key != "DB_CONNECTION" && key != "DB_HOST" && key != "DB_PORT" && key != "DB_SSLMODE" && key != "DB_DATABASE" && key != "DB_USERNAME" && key != "DB_PASSWORD" && key != "VELTRIX_DATABASES" {
+		if !validManagedEnvironmentKey(key) {
 			logFile.Close()
 			return 0, fmt.Errorf("unsupported managed environment key: %s", key)
 		}
@@ -637,6 +651,10 @@ func parsePID(s string) (int, error) {
 }
 // RestartSite restarts a site without pulling source changes.
 func (m *ProcessManager) RestartSite(siteID, path string, port int, runtime string) (int, error) {
+	return m.RestartSiteWithEnv(siteID, path, port, runtime, nil)
+}
+
+func (m *ProcessManager) RestartSiteWithEnv(siteID, path string, port, runtime string, extraEnv map[string]string) (int, error) {
 	m.operationMu.Lock()
 	defer m.operationMu.Unlock()
 	var previous ProcessRecord
@@ -644,7 +662,7 @@ func (m *ProcessManager) RestartSite(siteID, path string, port int, runtime stri
 	if m.registry != nil { previous, hadPrevious = m.registry.Get(siteID) }
 	if err := m.stopSiteLocked(siteID); err != nil && !strings.Contains(err.Error(), "is not running") { return 0, err }
 	startCommand := ""; if hadPrevious { startCommand = previous.StartCommand }
-	return m.startSiteWithCommandLocked(siteID, path, port, runtime, nil, startCommand)
+	return m.startSiteWithCommandLocked(siteID, path, port, runtime, extraEnv, startCommand)
 }
 
 // DeploySite pulls the fast-forwardable Git revision, optionally rebuilds Go,
@@ -892,7 +910,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 
 	runPath := filepath.Join("sites", req.SiteId, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
-	pid, startErr := m.startSiteWithCommandLocked(req.SiteId, runPath, int(req.Port), req.Runtime, nil, req.StartCommand)
+	pid, startErr := m.startSiteWithCommandLocked(req.SiteId, runPath, int(req.Port), req.Runtime, req.Env, req.StartCommand)
 	if startErr == nil && req.HealthCheckPath != "" {
 		if healthErr := waitForHTTPContext(ctx, int(req.Port), req.HealthCheckPath, 15*time.Second); healthErr != nil {
 			_ = m.stopSiteLocked(req.SiteId)
