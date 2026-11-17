@@ -725,6 +725,7 @@
     .deploy-consent label{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#FDE68A;line-height:1.5}
     .deploy-consent input{accent-color:#F59E0B;margin:2px 0 0}
     .deploy-consent small{font-size:11px;color:#A1A1AA;margin-left:22px;line-height:1.5}
+    .deployment-job{display:flex;align-items:center;gap:16px;justify-content:space-between}.deployment-job p{margin:4px 0 0}.deployment-progress{height:6px;background:#27272A;border-radius:999px;overflow:hidden;margin-top:12px}.deployment-progress div{height:100%;background:#A3E635;transition:width .2s ease}
     .tabs{display:flex;gap:6px;border-bottom:1px solid #27272A;margin:24px 0 18px;overflow:auto}
     .tabs button{background:transparent;border:0;border-bottom:2px solid transparent;color:#A1A1AA;padding:11px 14px;cursor:pointer;white-space:nowrap;font-size:13px}
     .tabs button.active{color:#FAFAFA;border-bottom-color:#A3E635}
