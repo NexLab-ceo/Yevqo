@@ -371,7 +371,7 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 	ctx, cancel := context.WithTimeout(r.Context(), commandTimeout)
 	defer cancel()
 	if start, ok := payload.(*shared.StartSite); ok {
-		env, envErr := s.siteDatabaseEnvironment(ctx, dev.UserID, dev.ID, start.SiteId)
+		env, envErr := s.siteRuntimeEnvironment(ctx, dev.UserID, dev.ID, start.SiteId)
 		if envErr != nil { apiError(w, shared.ErrInternal("could not prepare protected database environment")); return }
 		start.Env = env
 	}
@@ -508,6 +508,12 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 
 	rest := strings.TrimPrefix(r.URL.Path, "/api/sites/")
 	parts := strings.Split(rest, "/")
+	if len(parts) == 3 && parts[2] == "env" {
+		deviceID, err := parseSiteGitRouteID(parts[0])
+		if err != nil { apiError(w, err); return }
+		s.handleSiteEnvironment(w, r, user, deviceID, parts[1])
+		return
+	}
 	if len(parts) == 3 && parts[2] == "git" {
 		deviceID, err := parseSiteGitRouteID(parts[0])
 		if err != nil { apiError(w, err); return }
