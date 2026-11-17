@@ -32,7 +32,7 @@ type deploymentJobRecord struct {
 
 func validDeploymentJobID(id string) bool {
  if len(id) < 5 || len(id) > 64 || !strings.HasPrefix(id, "job-") { return false }
- for _, r := range id { if !((r >= 'a' && r <= 'f') || (r >= '0' && r <= '9') || r == '-') { return false } }
+ for _, r := range strings.TrimPrefix(id, "job-") { if !((r >= 'a' && r <= 'f') || (r >= '0' && r <= '9')) { return false } }
  return true
 }
 
