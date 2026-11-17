@@ -2,7 +2,9 @@ package agent
 
 import (
  "sync"
- "testing"\n\n "veltrix/internal/shared"
+ "testing"
+
+ "veltrix/internal/shared"
 )
 
 func TestDeploymentJobsAreExclusivePerSiteAndCancellable(t *testing.T) {
