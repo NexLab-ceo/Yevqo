@@ -4,6 +4,7 @@ import (
  "net"
  "net/http"
  "fmt"
+ "context"
  "strconv"
  "strings"
  "time"
@@ -33,6 +34,10 @@ func validHealthCheckPath(path string) bool {
 // waitForHTTP requires a successful 2xx response from the site's local listener.
 // Redirects are not followed, preventing a site from redirecting the probe off-device.
 func waitForHTTP(port int, path string, timeout time.Duration) error {
+ return waitForHTTPContext(context.Background(), port, path, timeout)
+}
+
+func waitForHTTPContext(ctx context.Context, port int, path string, timeout time.Duration) error {
  if !validHealthCheckPath(path) { return fmt.Errorf("invalid HTTP health check path") }
  if path == "" { return nil }
  client := &http.Client{Timeout: 800 * time.Millisecond, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
@@ -40,14 +45,15 @@ func waitForHTTP(port int, path string, timeout time.Duration) error {
  deadline := time.Now().Add(timeout)
  var lastErr error
  for time.Now().Before(deadline) {
-  req, _ := http.NewRequest(http.MethodGet, endpoint, nil)
+  if err := ctx.Err(); err != nil { return err }
+  req, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
   response, err := client.Do(req)
   if err == nil {
    response.Body.Close()
    if response.StatusCode >= 200 && response.StatusCode < 300 { return nil }
    lastErr = fmt.Errorf("HTTP health check returned status %d", response.StatusCode)
   } else { lastErr = err }
-  time.Sleep(150 * time.Millisecond)
+  select { case <-ctx.Done(): return ctx.Err(); case <-time.After(150 * time.Millisecond): }
  }
  if lastErr == nil { lastErr = fmt.Errorf("no HTTP response") }
  return fmt.Errorf("HTTP health check %s did not become healthy within %s: %w", endpoint, timeout, lastErr)
