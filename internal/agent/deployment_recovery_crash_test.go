@@ -39,23 +39,27 @@ func TestDeploymentRecoveryCrashBoundaries(t *testing.T) {
 			registry, err := NewProcessRegistry(root)
 			if err != nil { t.Fatal(err) }
 
-			startHelper := func(command string, args ...string) (*exec.Cmd, ProcessRecord) {
+			startHelper := func(listenPort int, command string, args ...string) (*exec.Cmd, ProcessRecord) {
 				cmd := exec.Command(command, args...)
 				cmd.SysProcAttr = procAttr()
 				if err := cmd.Start(); err != nil { t.Fatalf("start helper process: %v", err) }
-				if command == "python3" { if err := waitForTCP(port, 5*time.Second); err != nil { _ = cmd.Process.Kill(); _ = cmd.Wait(); t.Fatalf("wait for previous release: %v", err) } }
+				if command == "python3" { if err := waitForTCP(listenPort, 5*time.Second); err != nil { _ = cmd.Process.Kill(); _ = cmd.Wait(); t.Fatalf("wait for previous release: %v", err) } }
 				token, err := processStartToken(cmd.Process.Pid)
 				if err != nil { _ = cmd.Process.Kill(); _ = cmd.Wait(); t.Fatal(err) }
 				return cmd, ProcessRecord{SiteID:"demo", PID:cmd.Process.Pid, ProcessGroup:cmd.Process.Pid,
-					Port:port, Runtime:"static", WorkingDir:oldRelease, LogPath:filepath.Join(root,"demo.log"),
+					Port:listenPort, Runtime:"static", WorkingDir:oldRelease, LogPath:filepath.Join(root,"demo.log"),
 					StartedAt:time.Now().UTC(), StartToken:token,
 					RunPath:filepath.Join("sites","demo",".yevqo","releases","old"),
 					StartCommand:fmt.Sprintf("python3 -m http.server %d --bind 127.0.0.1",port)}
 			}
 
-			previousCmd, previous := startHelper("python3", "-m", "http.server", fmt.Sprint(port), "--bind", "127.0.0.1")
+			previousCmd, previous := startHelper(port, "python3", "-m", "http.server", fmt.Sprint(port), "--bind", "127.0.0.1")
 			defer func(){ if previousCmd.Process != nil { _ = previousCmd.Process.Kill(); _ = previousCmd.Wait() } }()
-			candidateCmd, candidate := startHelper("sh", "-c", "sleep 60")
+			candidateListener, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil { t.Fatal(err) }
+			candidatePort := candidateListener.Addr().(*net.TCPAddr).Port
+			_ = candidateListener.Close()
+			candidateCmd, candidate := startHelper(candidatePort, "python3", "-m", "http.server", fmt.Sprint(candidatePort), "--bind", "127.0.0.1")
 			defer func(){ if candidateCmd.Process != nil { _ = candidateCmd.Process.Kill(); _ = candidateCmd.Wait() } }()
 
 			tx := deploymentTransaction{Version:1, SiteID:"demo", State:"activating",
@@ -105,7 +109,7 @@ func TestDeploymentRecoveryCrashBoundaries(t *testing.T) {
 				t.Fatalf("recovery journal should be finalized: exists=%v err=%v",exists,err)
 			}
 			if point == "commit-recorded-before-journal-cleanup" {
-				if !verifyProcessRecord(got) { t.Fatal("committed candidate process identity was not preserved") }
+				if !verifyProcessRecord(got) || !waitForTCP(candidatePort, time.Second) { t.Fatal("committed candidate process is not healthy") }
 				if err := restarted.StopSite("demo"); err != nil { t.Fatal(err) }
 			}
 		})
