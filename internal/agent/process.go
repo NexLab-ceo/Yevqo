@@ -43,6 +43,7 @@ type ProcessManager struct {
 	registry *ProcessRegistry
 	registryErr error
 	logEmitter func(string, string)
+	statusEmitter func(string, string, int)
 	procs    map[string]*Process // key = siteID
 	restartMu sync.Mutex
 	restartAttempts map[string]int
@@ -58,6 +59,13 @@ func NewProcessManager(dataRoot string) *ProcessManager {
 }
 
 // SetLogEmitter installs a non-blocking best-effort callback for process output.
+// SetStatusEmitter reports lifecycle transitions to the Control Plane.
+func (m *ProcessManager) SetStatusEmitter(emit func(siteID, status string, pid int)) {
+	m.mu.Lock()
+	m.statusEmitter = emit
+	m.mu.Unlock()
+}
+
 func (m *ProcessManager) SetLogEmitter(emit func(siteID, line string)) {
 	m.mu.Lock()
 	m.logEmitter = emit
