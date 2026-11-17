@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"veltrix/internal/shared"
 	"time"
 )
 
@@ -50,4 +52,36 @@ func TestPruneSiteReleasesValidatesKeepCount(t *testing.T) {
 	for _, keep := range []int{0, 51} {
 		if _, err := manager.PruneSiteReleases("demo", keep); err == nil { t.Fatalf("expected keep=%d to be rejected", keep) }
 	}
+}
+
+func TestPruneSiteReleasesRejectsSymlinkHistoryRoot(t *testing.T) {
+	root := t.TempDir()
+	site := filepath.Join(root, "sites", "demo")
+	if err := os.MkdirAll(site, 0700); err != nil { t.Fatal(err) }
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(site, ".yevqo")); err != nil { t.Skipf("symlinks unavailable: %v", err) }
+	manager := &ProcessManager{DataRoot: root}
+	manager.registry, manager.registryErr = NewProcessRegistry(root)
+	if _, err := manager.PruneSiteReleases("demo", 1); err == nil {
+		t.Fatal("expected redirected release history to be rejected")
+	}
+}
+
+func TestPruneSiteReleasesCommand(t *testing.T) {
+	root := t.TempDir()
+	releases := filepath.Join(root, "sites", "demo", ".yevqo", "releases")
+	if err := os.MkdirAll(releases, 0700); err != nil { t.Fatal(err) }
+	for _, commit := range []string{strings.Repeat("e", 40), strings.Repeat("f", 40)} {
+		if err := os.MkdirAll(filepath.Join(releases, commit), 0700); err != nil { t.Fatal(err) }
+	}
+	manager := &ProcessManager{DataRoot: root}
+	manager.registry, manager.registryErr = NewProcessRegistry(root)
+	handler := &CommandHandler{processes: manager}
+	payload, err := shared.Marshal(shared.PruneSiteReleases{SiteId: "demo", Keep: 1})
+	if err != nil { t.Fatal(err) }
+	result := handler.HandleCommand(&shared.Command{Id: "prune-1", Action: "prune_site_releases", Payload: payload})
+	if !result.Ok { t.Fatalf("prune command failed: %s", result.Message) }
+	var response shared.PruneSiteReleasesResult
+	if err := shared.Unmarshal(result.Payload, &response); err != nil { t.Fatal(err) }
+	if len(response.Removed) != 1 { t.Fatalf("expected one removed release, got %#v", response.Removed) }
 }
