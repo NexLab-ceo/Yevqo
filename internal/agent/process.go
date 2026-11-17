@@ -281,7 +281,17 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 	return m.startSiteWithEnvLocked(siteID, path, port, runtime, extraEnv)
 }
 
+func (m *ProcessManager) StartSiteWithCommand(siteID, path string, port int, runtime, startCommand string) (int, error) {
+ m.operationMu.Lock()
+ defer m.operationMu.Unlock()
+ return m.startSiteWithCommandLocked(siteID, path, port, runtime, nil, startCommand)
+}
+
 func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, runtime string, extraEnv map[string]string) (int, error) {
+	return m.startSiteWithCommandLocked(siteID, path, port, runtime, extraEnv, "")
+}
+
+func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port int, runtime string, extraEnv map[string]string, startCommand string) (int, error) {
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return 0, fmt.Errorf("port must be between 1024 and 65535") }
 	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
@@ -335,8 +345,13 @@ func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, r
 		return 0, fmt.Errorf("open log: %w", err)
 	}
 
-	// Формируем команду в зависимости от runtime.
+	// Формируем команду в зависимости от runtime. Custom argv is never passed through a shell.
 	var cmd *exec.Cmd
+	if startCommand != "" {
+		cmd, err = parseCustomStartCommand(absPath, startCommand)
+		if err != nil { logFile.Close(); return 0, err }
+		cmd.Dir = absPath
+	} else {
 	switch runtime {
 	case "php":
 		cmd = exec.Command("php", "-S", fmt.Sprintf("127.0.0.1:%d", port), "-t", ".")
@@ -368,6 +383,7 @@ func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, r
 		logFile.Close()
 		return 0, fmt.Errorf("unsupported runtime: %s", runtime)
 	}
+	}
 
 	// Environment values are injected into this site's process only; no .env file is modified.
 	env := append([]string{}, os.Environ()...)
@@ -382,8 +398,8 @@ func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, r
 		}
 		env = append(env, key+"="+value)
 	}
-	if runtime == "go" || runtime == "nodejs" { env = append(env, fmt.Sprintf("PORT=%d", port)) }
-	if runtime == "nodejs" { env = append(env, "HOST=127.0.0.1") }
+	if runtime == "go" || runtime == "nodejs" || startCommand != "" { env = append(env, fmt.Sprintf("PORT=%d", port)) }
+	if runtime == "nodejs" || startCommand != "" { env = append(env, "HOST=127.0.0.1") }
 	cmd.Env = env
 
 	// Keep process output attached directly to the file. The Agent tails the
@@ -440,7 +456,7 @@ func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, r
 	}
 	restartPolicy, policyErr := m.GetRestartPolicy(siteID)
 	if policyErr != nil { _ = killProcessGroup(pid, pid); go cmd.Wait(); _ = logFile.Close(); return 0, fmt.Errorf("load restart policy: %w", policyErr) }
-	record := ProcessRecord{SiteID:siteID, PID:pid, ProcessGroup:pid, Port:port, Runtime:runtime, WorkingDir:absPath, LogPath:logPath, StartedAt:time.Now().UTC(), StartToken:startToken, RunPath:cleanPath, RestartPolicy:restartPolicy}
+	record := ProcessRecord{SiteID:siteID, PID:pid, ProcessGroup:pid, Port:port, Runtime:runtime, WorkingDir:absPath, LogPath:logPath, StartedAt:time.Now().UTC(), StartToken:startToken, RunPath:cleanPath, RestartPolicy:restartPolicy, StartCommand:startCommand}
 	if err := m.registry.Save(record); err != nil {
 		_ = killProcessGroup(pid, pid)
 		go cmd.Wait()
@@ -622,7 +638,10 @@ func (m *ProcessManager) RestartSite(siteID, path string, port int, runtime stri
 	m.operationMu.Lock()
 	defer m.operationMu.Unlock()
 	if err := m.stopSiteLocked(siteID); err != nil && !strings.Contains(err.Error(), "is not running") { return 0, err }
-	return m.startSiteWithEnvLocked(siteID, path, port, runtime, nil)
+	previous, hadPrevious := m.registry.Get(siteID)
+	if err := m.stopSiteLocked(siteID); err != nil && !strings.Contains(err.Error(), "is not running") { return 0, err }
+	startCommand := ""; if hadPrevious { startCommand = previous.StartCommand }
+	return m.startSiteWithCommandLocked(siteID, path, port, runtime, nil, startCommand)
 }
 
 // DeploySite pulls the fast-forwardable Git revision, optionally rebuilds Go,
@@ -869,7 +888,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 
 	runPath := filepath.Join("sites", req.SiteId, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
-	pid, startErr := m.startSiteWithEnvLocked(req.SiteId, runPath, int(req.Port), req.Runtime, nil)
+	pid, startErr := m.startSiteWithCommandLocked(req.SiteId, runPath, int(req.Port), req.Runtime, nil, req.StartCommand)
 	if startErr == nil && req.HealthCheckPath != "" {
 		if healthErr := waitForHTTPContext(ctx, int(req.Port), req.HealthCheckPath, 15*time.Second); healthErr != nil {
 			_ = m.stopSiteLocked(req.SiteId)
@@ -888,7 +907,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 			if oldRunPath == "" {
 				return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed to start (%v); rollback also failed (previous release path is unavailable)", startErr)
 			}
-			if _, rollbackErr := m.startSiteWithEnvLocked(req.SiteId, oldRunPath, previous.Port, previous.Runtime, nil); rollbackErr != nil {
+			if _, rollbackErr := m.startSiteWithCommandLocked(req.SiteId, oldRunPath, previous.Port, previous.Runtime, nil, previous.StartCommand); rollbackErr != nil {
 				return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed to start (%v); rollback also failed (%v)", startErr, rollbackErr)
 			}
 			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed health check; previous release was restored: %w", startErr)
@@ -1002,7 +1021,7 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 	}
 	runPath := filepath.Join("sites", siteID, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
-	pid, startErr := m.startSiteWithEnvLocked(siteID, runPath, port, runtime, nil)
+	pid, startErr := m.startSiteWithCommandLocked(siteID, runPath, port, runtime, nil, startCommand)
 	if startErr == nil { return pid, nil }
 	if hadPrevious {
 		oldPath := previous.RunPath
@@ -1012,7 +1031,7 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 			}
 		}
 		if oldPath == "" { return 0, fmt.Errorf("rollback activation failed (%v); previous process path unavailable", startErr) }
-		if _, restoreErr := m.startSiteWithEnvLocked(siteID, oldPath, previous.Port, previous.Runtime, nil); restoreErr != nil {
+		if _, restoreErr := m.startSiteWithCommandLocked(siteID, oldPath, previous.Port, previous.Runtime, nil, previous.StartCommand); restoreErr != nil {
 			return 0, fmt.Errorf("rollback activation failed (%v); restoring previous release also failed (%v)", startErr, restoreErr)
 		}
 	}
