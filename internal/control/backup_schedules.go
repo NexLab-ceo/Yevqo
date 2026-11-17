@@ -51,6 +51,7 @@ func (s *Server) handleBackupSchedules(w http.ResponseWriter, r *http.Request) {
 			if !validBackupSiteID(in.SiteID) || in.DeviceID < 1 || in.DatabaseID != 0 { apiError(w, shared.ErrBadRequest("invalid website schedule target")); return }
 			if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`, in.DeviceID,in.SiteID,u.ID).Scan(&owned); err != nil || owned != 1 { apiError(w, shared.ErrNotFound("website not found")); return }
 		} else if in.ResourceType == "database" {
+			if in.SiteID != "" { apiError(w, shared.ErrBadRequest("database schedules cannot include a website id")); return }
 			if in.DatabaseID < 1 { apiError(w, shared.ErrBadRequest("database id is required")); return }
 			if err := s.db.conn.QueryRowContext(r.Context(), `SELECT ds.device_id FROM db_instances db JOIN database_servers ds ON ds.id=db.server_id WHERE db.id=? AND db.user_id=? AND db.status='ready' AND ds.status='ready'`, in.DatabaseID,u.ID).Scan(&in.DeviceID); err != nil || in.DeviceID < 1 { apiError(w, shared.ErrNotFound("ready database not found")); return }
 		} else { apiError(w, shared.ErrBadRequest("resource_type must be site or database")); return }
@@ -103,7 +104,11 @@ func (s *Server) queueScheduledBackup(item dueBackupSchedule) {
 	claimed,err := s.db.conn.ExecContext(ctx,`UPDATE backup_schedules SET next_run_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? HOUR),last_run_at=UTC_TIMESTAMP(),last_status='queued',last_error=NULL WHERE id=? AND enabled=TRUE AND next_run_at<=UTC_TIMESTAMP()`,item.IntervalHours,item.ID)
 	if err != nil { return }; n,_ := claimed.RowsAffected(); if n != 1 { return }
 	conn,online := s.hub.Get(item.DeviceID)
-	if !online { s.failBackupSchedule(item,"device is offline"); return }
+	if !online {
+		_,_ = s.db.conn.ExecContext(ctx,`UPDATE backup_schedules SET next_run_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 15 MINUTE) WHERE id=?`,item.ID)
+		s.failBackupSchedule(item,"device is offline; retry scheduled in 15 minutes")
+		return
+	}
 	if item.ResourceType == "site" {
 		resourceID := fmt.Sprintf("%d:%s",item.DeviceID,item.SiteID)
 		res,err := s.db.conn.ExecContext(ctx,`INSERT INTO backups(user_id,device_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?, 'site', ?, ?,0,'queued')`,item.UserID,item.DeviceID,resourceID,"scheduled-"+item.SiteID+".tar.gz")
