@@ -114,6 +114,20 @@ type ManageDatabaseRole struct {
 	Password string `json:"password,omitempty"`
 }
 
+type WriteBackupChunk struct {
+	TransferID string `json:"transfer_id"`
+	ResourceType string `json:"resource_type"`
+	SiteId string `json:"site_id,omitempty"`
+	ServerID int64 `json:"server_id,omitempty"`
+	FileName string `json:"file_name"`
+	Offset int64 `json:"offset"`
+	TotalSize int64 `json:"total_size"`
+	Data []byte `json:"data,omitempty"`
+	Final bool `json:"final,omitempty"`
+	Abort bool `json:"abort,omitempty"`
+}
+type WriteBackupChunkResult struct { Received int64 `json:"received"`; Complete bool `json:"complete"` }
+
 type RestoreSiteBackup struct {
 	SiteId string `json:"site_id"`
 	FileName string `json:"file_name"`
