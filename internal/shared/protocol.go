@@ -222,6 +222,13 @@ type ListSiteReleases struct {
 	SiteId string `json:"site_id"`
 	Runtime string `json:"runtime,omitempty"`
 }
+type PruneSiteReleases struct {
+	SiteId string `json:"site_id"`
+	Keep int `json:"keep"`
+}
+type PruneSiteReleasesResult struct {
+	Removed []string `json:"removed"`
+}
 type RollbackSiteRelease struct {
 	SiteId string `json:"site_id"`
 	Commit string `json:"commit"`
