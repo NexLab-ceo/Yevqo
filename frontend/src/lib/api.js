@@ -252,3 +252,5 @@ export async function disconnectCloudflare() { return request('DELETE', '/api/cl
 export async function listCloudflareDNS() { return request('GET', '/api/cloudflare/dns'); }
 export async function createCloudflareTunnelDNS(hostname, tunnelId) { return request('POST', '/api/cloudflare/dns', { hostname, tunnel_id: tunnelId }); }
 export async function deleteCloudflareDNS(recordId) { return request('DELETE', '/api/cloudflare/dns', { record_id: recordId }); }
+
+export async function restoreSiteBackup(backupId) { return request('POST', '/api/backups/restore-site', { backup_id: backupId }); }
