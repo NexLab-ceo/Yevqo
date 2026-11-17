@@ -2,6 +2,7 @@ package agent
 
 import (
  "fmt"
+ "io"
  "os"
  "path/filepath"
  "strings"
@@ -51,4 +52,35 @@ func readSiteLogs(dataRoot, siteID string, lines int) (string, error) {
  if len(rows) > lines { rows = rows[len(rows)-lines:] }
  if len(rows) == 1 && rows[0] == "" { return "", nil }
  return strings.Join(rows, "\n"), nil
+}
+
+
+// rotateActiveSiteLog uses copy-truncate so the running child keeps writing to
+// the same inode. This is best-effort rotation; the active file remains bounded.
+func rotateActiveSiteLog(path string) error {
+ info, err := os.Lstat(path)
+ if os.IsNotExist(err) { return nil }
+ if err != nil { return err }
+ if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() { return fmt.Errorf("active site log is not a regular file") }
+ if info.Size() < maxSiteLogBytes { return nil }
+ oldest := fmt.Sprintf("%s.%d", path, retainedSiteLogs)
+ if err := os.Remove(oldest); err != nil && !os.IsNotExist(err) { return err }
+ for index:=retainedSiteLogs-1; index>=1; index-- {
+  from:=fmt.Sprintf("%s.%d",path,index); to:=fmt.Sprintf("%s.%d",path,index+1)
+  if err:=os.Rename(from,to);err!=nil&&!os.IsNotExist(err){return err}
+ }
+ source, err := os.Open(path); if err != nil { return err }
+ temp := path+".1.tmp"
+ target, err := os.OpenFile(temp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+ if err != nil { source.Close(); return err }
+ _, copyErr := io.Copy(target, source)
+ closeTargetErr := target.Close()
+ closeSourceErr := source.Close()
+ if copyErr != nil { _ = os.Remove(temp); return copyErr }
+ if closeTargetErr != nil { _ = os.Remove(temp); return closeTargetErr }
+ if closeSourceErr != nil { _ = os.Remove(temp); return closeSourceErr }
+ if err := os.Rename(temp, path+".1"); err != nil { _ = os.Remove(temp); return err }
+ active, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, 0600)
+ if err != nil { return err }
+ return active.Close()
 }
