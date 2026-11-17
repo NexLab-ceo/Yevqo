@@ -199,6 +199,9 @@ func (m *ProcessManager) rollbackDeploymentTransaction(tx deploymentTransaction)
 		if err := m.closeDeploymentProxy(tx.SiteID); err != nil { return err }
 		return nil
 	}
+	if tx.Previous.BackendPort == 0 {
+		if err := m.closeDeploymentProxy(tx.SiteID); err != nil { return fmt.Errorf("close candidate stable listener before legacy restore: %w", err) }
+	}
 	if verifyProcessRecord(tx.Previous) {
 		if err := m.registry.Save(tx.Previous); err != nil {
 			return fmt.Errorf("restore previous process record: %w", err)
