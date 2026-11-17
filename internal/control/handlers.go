@@ -595,7 +595,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				if strings.TrimSpace(gitCfg.GitURL) == "" { apiError(w, shared.ErrBadRequest("connect a Git repository before deploying")); return }
 				payload = &shared.SiteAction{SiteId: st.SiteID, Path: st.Path, Port: uint32(st.Port), Runtime: st.Runtime,
 					GitURL: gitCfg.GitURL, GitBranch: gitCfg.GitBranch, BuildCommand: gitCfg.BuildCommand,
-					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, AllowProjectCode: in.AllowProjectCode}
+					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, HealthCheckPath: gitCfg.HealthCheckPath, AllowProjectCode: in.AllowProjectCode}
 			}
 			if in.Action == "rollback" {
 				if !releaseCommitPattern.MatchString(in.ReleaseCommit) { apiError(w, shared.ErrBadRequest("invalid release commit")); return }
