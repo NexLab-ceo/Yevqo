@@ -191,6 +191,7 @@ type CreateSite struct {
 
 type StartSite struct {
 	SiteId  string            `json:"site_id"`
+	StartCommand string `json:"start_command,omitempty"`
 	Path    string            `json:"path"`
 	Port    uint32            `json:"port"`
 	Runtime string            `json:"runtime"`
