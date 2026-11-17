@@ -145,6 +145,25 @@
             return;
         }
 
+        // Go starters are compiled on the target Agent before first start.
+        if (newSite.runtime === 'go') {
+            const built = await sendCommand(device.id, 'build_site', {
+                site_id: siteId,
+                stack: 'go',
+                allow_project_code: true,
+                timeout_seconds: 300,
+                max_log_bytes: 1048576,
+            });
+            if (!built.ok || !built.data?.ok) {
+                busy = false;
+                showAddSiteModal = false;
+                newSite = { site_id: '', port: 8000, runtime: 'php' };
+                await loadDevice();
+                notify('Go-проект создан, но сборка не прошла: ' + (built.error || built.data?.message || 'ошибка сборки'), 'error');
+                return;
+            }
+        }
+
         // Каталог и стартовый файл уже созданы. Если запуск не удастся,
         // сайт всё равно останется в панели в состоянии «Остановлен».
         const started = await sendCommand(device.id, 'start_site', {
