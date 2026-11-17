@@ -51,7 +51,7 @@ func (m *ProcessManager) PruneSiteReleases(siteID string, keep int) ([]string, e
 		}
 	}
 
-	entries, err := os.ReadDir(resolvedRoot)
+	entries, err := os.ReadDir(releasesRoot)
 	if err != nil {
 		return nil, fmt.Errorf("read release history: %w", err)
 	}
@@ -64,7 +64,7 @@ func (m *ProcessManager) PruneSiteReleases(siteID string, keep int) ([]string, e
 		if !validReleaseCommit(entry.Name()) {
 			continue
 		}
-		info, err := os.Lstat(filepath.Join(resolvedRoot, entry.Name()))
+		info, err := os.Lstat(filepath.Join(releasesRoot, entry.Name()))
 		if err != nil {
 			return nil, fmt.Errorf("inspect release %s: %w", entry.Name(), err)
 		}
@@ -72,7 +72,7 @@ func (m *ProcessManager) PruneSiteReleases(siteID string, keep int) ([]string, e
 			return nil, fmt.Errorf("refusing to prune non-directory or symlink release %s", entry.Name())
 		}
 		date := info.ModTime().UTC().Format("2006-01-02T15:04:05Z")
-		if output, gitErr := execGitCommitDate(filepath.Join(resolvedRoot, entry.Name())); gitErr == nil && output != "" {
+		if output, gitErr := execGitCommitDate(filepath.Join(releasesRoot, entry.Name())); gitErr == nil && output != "" {
 			date = output
 		}
 		releases = append(releases, releaseEntry{commit: entry.Name(), date: date})
@@ -97,12 +97,12 @@ func (m *ProcessManager) PruneSiteReleases(siteID string, keep int) ([]string, e
 		if keepSet[release.commit] {
 			continue
 		}
-		path := filepath.Join(resolvedRoot, release.commit)
+		path := filepath.Join(releasesRoot, release.commit)
 		resolved, err := filepath.EvalSymlinks(path)
 		if err != nil {
 			return removed, fmt.Errorf("revalidate release %s: %w", release.commit, err)
 		}
-		rel, err := filepath.Rel(resolvedRoot, resolved)
+		rel, err := filepath.Rel(releasesRoot, resolved)
 		if err != nil || rel != release.commit {
 			return removed, fmt.Errorf("refusing to remove release outside release history: %s", release.commit)
 		}
