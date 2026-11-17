@@ -23,3 +23,11 @@ func (h *CommandHandler) handleRestoreSiteBackup(cmd *shared.Command) *shared.Re
 	if err:=h.processes.RestoreSiteBackup(req);err!=nil{return errorResult(cmd.Id,err.Error())}
 	return &shared.Result{Id:cmd.Id,Ok:true,Message:"site backup restored; site is stopped and ready to start"}
 }
+
+func (h *CommandHandler) handleWriteBackupChunk(cmd *shared.Command) *shared.Result {
+	var req shared.WriteBackupChunk
+	if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid write_backup_chunk payload")}
+	result,err:=writeBackupChunk(req);if err!=nil{return errorResult(cmd.Id,err.Error())}
+	payload,err:=shared.Marshal(result);if err!=nil{return errorResult(cmd.Id,"could not encode backup transfer result")}
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:"backup transfer chunk accepted",Payload:payload}
+}
