@@ -112,6 +112,7 @@ func (s *Server) registerRoutes() {
 	// --- WebSocket для агентов ---
 	s.mux.HandleFunc("/ws/logs", s.RequireAuth(s.handleLogStream))
 	s.mux.HandleFunc("/ws", s.handleWebSocket)
+	s.mux.HandleFunc("/webhooks/github/", s.handleGitHubWebhook)
 
 	// --- API для пользователей ---
 	s.mux.HandleFunc("/api/register", s.handleRegister)
