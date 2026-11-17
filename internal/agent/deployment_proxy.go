@@ -17,6 +17,7 @@ import (
 // release while new requests are routed to the candidate.
 type deploymentBackend struct {
 	target   *url.URL
+	reverse  *httputil.ReverseProxy
 	inflight sync.WaitGroup
 }
 
@@ -27,7 +28,6 @@ type deploymentProxy struct {
 	targetMu sync.RWMutex
 }
 
-type deploymentProxyContextKey struct{}
 
 func newDeploymentProxy(publicPort, backendPort int) (*deploymentProxy, error) {
 	if publicPort < 1024 || publicPort > 65535 || backendPort < 1024 || backendPort > 65535 || publicPort == backendPort {
@@ -38,20 +38,7 @@ func newDeploymentProxy(publicPort, backendPort int) (*deploymentProxy, error) {
 		return nil, fmt.Errorf("parse deployment backend: %w", err)
 	}
 	proxy := &deploymentProxy{}
-	proxy.target.Store(&deploymentBackend{target:target})
-	reverse := &httputil.ReverseProxy{
-		Director: func(request *http.Request) {
-			current, _ := request.Context().Value(deploymentProxyContextKey{}).(*deploymentBackend)
-			if current == nil { current = proxy.target.Load() }
-			if current == nil { return }
-			request.URL.Scheme = current.target.Scheme
-			request.URL.Host = current.target.Host
-			request.Host = current.target.Host
-		},
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
-			http.Error(w, "site backend temporarily unavailable", http.StatusBadGateway)
-		},
-	}
+	proxy.target.Store(newDeploymentBackend(target))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		proxy.targetMu.RLock()
 		backend := proxy.target.Load()
@@ -62,8 +49,7 @@ func newDeploymentProxy(publicPort, backendPort int) (*deploymentProxy, error) {
 			return
 		}
 		defer backend.inflight.Done()
-		w.Header().Set("X-Yevqo-Backend", backend.target.Host)
-		reverse.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), deploymentProxyContextKey{}, backend)))
+		backend.reverse.ServeHTTP(w, r)
 	})
 	proxy.server = &http.Server{
 		Handler:           handler,
@@ -79,6 +65,14 @@ func newDeploymentProxy(publicPort, backendPort int) (*deploymentProxy, error) {
 	return proxy, nil
 }
 
+func newDeploymentBackend(target *url.URL) *deploymentBackend {
+	reverse := httputil.NewSingleHostReverseProxy(target)
+	reverse.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
+		http.Error(w, "site backend temporarily unavailable", http.StatusBadGateway)
+	}
+	return &deploymentBackend{target:target, reverse:reverse}
+}
+
 func (p *deploymentProxy) switchBackend(backendPort int) error {
 	if p == nil || backendPort < 1024 || backendPort > 65535 {
 		return fmt.Errorf("invalid deployment proxy backend")
@@ -88,7 +82,7 @@ func (p *deploymentProxy) switchBackend(backendPort int) error {
 	p.targetMu.Lock()
 	defer p.targetMu.Unlock()
 	if current := p.target.Load(); current != nil && current.target.Host == target.Host { return nil }
-	p.target.Store(&deploymentBackend{target:target})
+	p.target.Store(newDeploymentBackend(target))
 	return nil
 }
 
