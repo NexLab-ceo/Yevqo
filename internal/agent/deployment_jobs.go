@@ -130,14 +130,23 @@ func (m *ProcessManager) UpdateDeploymentJob(siteID, jobID, state string, progre
 func (m *ProcessManager) FinishDeploymentJob(siteID, jobID, state, message string) {
  m.jobMu.Lock()
  job, exists := m.deploymentJobs[siteID]
- created := time.Now().UTC()
- if exists && job.id == jobID {
-  created = job.createdAt
-  if canTransitionDeploymentJob(job.state, state) { job.state = state }
-  delete(m.deploymentJobs, siteID)
-  job.cancel()
+ if !exists || job.id != jobID {
+  m.jobMu.Unlock()
+  return
  }
+ created := job.createdAt
+ // Cancellation is terminal. A deployment that races to completion after a
+ // cancellation request must not overwrite the cancelled state with healthy.
+ if !canTransitionDeploymentJob(job.state, state) {
+  state = job.state
+  if state == "cancelled" { message = "Deployment cancelled" }
+ } else {
+  job.state = state
+ }
+ delete(m.deploymentJobs, siteID)
+ job.cancel()
  m.jobMu.Unlock()
+
  progress := 100
  if state == "failed" || state == "cancelled" { progress = 0 }
  now := time.Now().UTC()
