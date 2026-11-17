@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -14,11 +15,19 @@ import (
 // deploymentProxy owns the stable site listener. Its target is changed with a
 // single atomic pointer swap, so in-flight requests may finish on the old
 // release while new requests are routed to the candidate.
+type deploymentBackend struct {
+	target   *url.URL
+	inflight sync.WaitGroup
+}
+
 type deploymentProxy struct {
 	server   *http.Server
 	listener net.Listener
-	target   atomic.Pointer[url.URL]
+	target   atomic.Pointer[deploymentBackend]
+	targetMu sync.RWMutex
 }
+
+type deploymentProxyContextKey struct{}
 
 func newDeploymentProxy(publicPort, backendPort int) (*deploymentProxy, error) {
 	if publicPort < 1024 || publicPort > 65535 || backendPort < 1024 || backendPort > 65535 || publicPort == backendPort {
@@ -29,20 +38,32 @@ func newDeploymentProxy(publicPort, backendPort int) (*deploymentProxy, error) {
 		return nil, fmt.Errorf("parse deployment backend: %w", err)
 	}
 	proxy := &deploymentProxy{}
-	proxy.target.Store(target)
+	proxy.target.Store(&deploymentBackend{target:target})
 	reverse := &httputil.ReverseProxy{
 		Rewrite: func(request *httputil.ProxyRequest) {
-			current := proxy.target.Load()
+			current, _ := request.In.Context().Value(deploymentProxyContextKey{}).(*deploymentBackend)
 			if current == nil { return }
-			request.SetURL(current)
+			request.SetURL(current.target)
 			request.SetXForwarded()
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
 			http.Error(w, "site backend temporarily unavailable", http.StatusBadGateway)
 		},
 	}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxy.targetMu.RLock()
+		backend := proxy.target.Load()
+		if backend != nil { backend.inflight.Add(1) }
+		proxy.targetMu.RUnlock()
+		if backend == nil {
+			http.Error(w, "site backend unavailable", http.StatusBadGateway)
+			return
+		}
+		defer backend.inflight.Done()
+		reverse.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), deploymentProxyContextKey{}, backend)))
+	})
 	proxy.server = &http.Server{
-		Handler:           reverse,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       90 * time.Second,
 	}
@@ -60,11 +81,43 @@ func (p *deploymentProxy) switchBackend(backendPort int) error {
 		return fmt.Errorf("invalid deployment proxy backend")
 	}
 	target, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", backendPort))
-	if err != nil {
-		return err
-	}
-	p.target.Store(target)
+	if err != nil { return err }
+	p.targetMu.Lock()
+	defer p.targetMu.Unlock()
+	if current := p.target.Load(); current != nil && current.target.Host == target.Host { return nil }
+	p.target.Store(&deploymentBackend{target:target})
 	return nil
+}
+
+func (p *deploymentProxy) switchBackendAndGetPrevious(backendPort int) (*deploymentBackend, error) {
+	if p == nil || backendPort < 1024 || backendPort > 65535 {
+		return nil, fmt.Errorf("invalid deployment proxy backend")
+	}
+	target, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", backendPort))
+	if err != nil { return nil, err }
+	p.targetMu.Lock()
+	defer p.targetMu.Unlock()
+	current := p.target.Load()
+	if current != nil && current.target.Host == target.Host { return nil, nil }
+	p.target.Store(&deploymentBackend{target:target})
+	return current, nil
+}
+
+func (p *deploymentProxy) restoreBackend(backend *deploymentBackend) {
+	if p == nil || backend == nil { return }
+	p.targetMu.Lock()
+	p.target.Store(backend)
+	p.targetMu.Unlock()
+}
+
+func waitForDeploymentBackendDrain(backend *deploymentBackend, timeout time.Duration) error {
+	if backend == nil { return nil }
+	done := make(chan struct{})
+	go func() { backend.inflight.Wait(); close(done) }()
+	select {
+	case <-done: return nil
+	case <-time.After(timeout): return fmt.Errorf("previous backend did not drain within %s", timeout)
+	}
 }
 
 func (p *deploymentProxy) close() error {
@@ -102,6 +155,20 @@ func (m *ProcessManager) switchDeploymentProxy(siteID string, backendPort int) e
 	m.mu.RUnlock()
 	if proxy == nil { return fmt.Errorf("stable deployment proxy is not running for site %s", siteID) }
 	return proxy.switchBackend(backendPort)
+}
+
+func (m *ProcessManager) switchDeploymentProxyAndDrain(siteID string, backendPort int, timeout time.Duration) error {
+	m.mu.RLock()
+	proxy := m.proxies[siteID]
+	m.mu.RUnlock()
+	if proxy == nil { return fmt.Errorf("stable deployment proxy is not running for site %s", siteID) }
+	previous, err := proxy.switchBackendAndGetPrevious(backendPort)
+	if err != nil { return err }
+	if err := waitForDeploymentBackendDrain(previous, timeout); err != nil {
+		proxy.restoreBackend(previous)
+		return err
+	}
+	return nil
 }
 
 func (m *ProcessManager) closeDeploymentProxy(siteID string) error {
@@ -186,7 +253,7 @@ func (m *ProcessManager) activateBlueGreenRelease(ctx context.Context, tx deploy
 			_ = m.removeDeploymentTransaction(tx.SiteID)
 			return 0, err
 		}
-		if err := m.switchDeploymentProxy(tx.SiteID, backendPort); err != nil {
+		if err := m.switchDeploymentProxyAndDrain(tx.SiteID, backendPort, 30*time.Second); err != nil {
 			if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr != nil {
 				return 0, fmt.Errorf("switch stable listener failed (%v); release recovery failed (%v)", err, recoveryErr)
 			}
