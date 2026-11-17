@@ -31,6 +31,8 @@ func (m *ProcessManager) watchProcesses() {
 			_ = m.registry.Delete(record.SiteID)
 			if record.RestartPolicy != "never" {
 				go m.recoverSite(record)
+			} else {
+				_ = m.closeDeploymentProxy(record.SiteID)
 			}
 		}
 	}
@@ -81,6 +83,7 @@ func (m *ProcessManager) recoverSite(record ProcessRecord) {
 		if attempt > maxAutomaticRestarts {
 			m.restartMu.Unlock()
 			m.emitProcessLog(record.SiteID, "automatic restart limit reached; manual intervention required")
+			_ = m.closeDeploymentProxy(record.SiteID)
 			return
 		}
 		m.restartAttempts[record.SiteID] = attempt
