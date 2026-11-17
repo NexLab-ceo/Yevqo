@@ -108,7 +108,7 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 		rootDir, ok := validateSiteRootDir(in.RootDirectory)
 		if !ok { apiError(w, shared.ErrBadRequest("root directory must be inside the site directory")); return }
 		startCommand := strings.TrimSpace(in.StartCommand)
-		if len(startCommand) > 512 || strings.ContainsAny(startCommand, "\r\n\x00") { apiError(w, shared.ErrBadRequest("start command is too long or contains control characters")); return }
+		if len(startCommand) > 512 || strings.ContainsAny(startCommand, ";|&`$><\r\n\x00") { apiError(w, shared.ErrBadRequest("start command is too long or contains control characters")); return }
 		healthPath := strings.TrimSpace(in.HealthCheckPath)
 		if healthPath != "" && (len(healthPath) > 255 || !strings.HasPrefix(healthPath, "/") || strings.HasPrefix(healthPath, "//") || strings.ContainsAny(healthPath, "\r\n\x00") || strings.Contains(healthPath, "..")) {
 			apiError(w, shared.ErrBadRequest("health check path must be a safe local URL path")); return
