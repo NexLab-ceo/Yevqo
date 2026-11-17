@@ -90,7 +90,11 @@
         siteId = $page.params.site_id;
         await refresh();
         loading = false;
-        metricsPoller = setInterval(() => { if (online && activeTab === 'general') loadProcessMetrics(); }, 10000);
+        metricsPoller = setInterval(() => {
+            if (!online) return;
+            if (activeTab === 'general') loadProcessMetrics();
+            if (activeTab === 'tasks') refreshScheduledTasks();
+        }, 10000);
     });
 
     async function refresh() {
