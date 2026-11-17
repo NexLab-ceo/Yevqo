@@ -85,7 +85,11 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 	}
 	readBody("release-two")
 	if verifyProcessRecord(firstRecord) { t.Fatal("previous release process was not stopped after traffic switch") }
-	if err := manager.StopSite(siteID); err != nil { t.Fatalf("stop blue-green site: %v", err) }
+	if err := manager.closeDeploymentProxy(siteID); err != nil { t.Fatalf("close proxy before simulated Agent restart: %v", err) }
+	restarted := NewProcessManager(root)
+	if !restarted.IsSiteHealthy(siteID) { t.Fatal("site was not healthy after Agent restarted and restored its stable listener") }
+	readBody("release-two")
+	if err := restarted.StopSite(siteID); err != nil { t.Fatalf("stop blue-green site: %v", err) }
 }
 
 func execLookPathPython() (string, error) {
