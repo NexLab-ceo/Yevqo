@@ -1,6 +1,8 @@
 package agent
 
 import (
+ "encoding/json"
+ "os"
  "sync"
  "testing"
 
@@ -45,4 +47,24 @@ func TestDeploymentJobStateMachineRejectsSkippedAndTerminalTransitions(t *testin
  for _, pair := range invalid {
   if canTransitionDeploymentJob(pair[0], pair[1]) { t.Errorf("transition %s -> %s should be rejected", pair[0], pair[1]) }
  }
+}
+
+
+func TestDeploymentJobStatePersistsToDisk(t *testing.T) {
+ root := t.TempDir()
+ manager := &ProcessManager{DataRoot:root}
+ jobID, _, err := manager.BeginDeploymentJob("persisted")
+ if err != nil { t.Fatal(err) }
+ path, err := manager.deploymentJobPath("persisted", jobID)
+ if err != nil { t.Fatal(err) }
+ read := func() deploymentJobRecord {
+  raw, err := os.ReadFile(path); if err != nil { t.Fatal(err) }
+  var record deploymentJobRecord
+  if err := json.Unmarshal(raw, &record); err != nil { t.Fatal(err) }
+  return record
+ }
+ if record := read(); record.State != "queued" || record.JobID != jobID { t.Fatalf("unexpected queued record: %#v", record) }
+ manager.UpdateDeploymentJob("persisted", jobID, "preparing", 5, "Preparing")
+ manager.FinishDeploymentJob("persisted", jobID, "failed", "simulated failure")
+ if record := read(); record.State != "failed" || record.Progress != 0 { t.Fatalf("unexpected terminal record: %#v", record) }
 }
