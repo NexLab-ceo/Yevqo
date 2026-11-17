@@ -34,6 +34,7 @@ type Process struct {
 
 // ProcessManager — менеджер запущенных процессов.
 type ProcessManager struct {
+	// operationMu prevents lifecycle, build and release mutations from interleaving.
 	operationMu sync.Mutex
 	
 	mu sync.RWMutex
