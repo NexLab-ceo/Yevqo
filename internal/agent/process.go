@@ -34,8 +34,8 @@ type Process struct {
 
 // ProcessManager — менеджер запущенных процессов.
 type ProcessManager struct {
-	deployMu sync.Mutex
-	startMu sync.Mutex
+	operationMu sync.Mutex
+	
 	mu sync.RWMutex
 	DataRoot string
 	BuildRunner *AndroidBuildRunner
@@ -246,9 +246,12 @@ func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string
 }
 
 func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime string, extraEnv map[string]string) (int, error) {
-	// Serialize starts so two requests cannot launch the same site concurrently.
-	m.startMu.Lock()
-	defer m.startMu.Unlock()
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
+	return m.startSiteWithEnvLocked(siteID, path, port, runtime, extraEnv)
+}
+
+func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, runtime string, extraEnv map[string]string) (int, error) {
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return 0, fmt.Errorf("port must be between 1024 and 65535") }
 	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
@@ -435,12 +438,13 @@ func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime
 
 // StopSite останавливает сайт (SIGTERM, потом SIGKILL).
 func (m *ProcessManager) StopSite(siteID string) error {
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
+	return m.stopSiteLocked(siteID)
+}
+
+func (m *ProcessManager) stopSiteLocked(siteID string) error {
 	if !validSiteID(siteID) { return fmt.Errorf("invalid site id") }
-	// Start and stop must be mutually exclusive for a site. Without this lock,
-	// a concurrent StartSite could pass its "already running" check while a
-	// StopSite is removing the process record, leaving an unmanaged process.
-	m.startMu.Lock()
-	defer m.startMu.Unlock()
 	if m.registryErr != nil || m.registry == nil { return fmt.Errorf("process registry unavailable: %v", m.registryErr) }
 	record, exists := m.registry.Get(siteID)
 	if !exists { return fmt.Errorf("site %s is not running", siteID) }
@@ -595,15 +599,17 @@ func parsePID(s string) (int, error) {
 }
 // RestartSite restarts a site without pulling source changes.
 func (m *ProcessManager) RestartSite(siteID, path string, port int, runtime string) (int, error) {
-	if err := m.StopSite(siteID); err != nil && !strings.Contains(err.Error(), "is not running") {
-		return 0, err
-	}
-	return m.StartSite(siteID, path, port, runtime)
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
+	if err := m.stopSiteLocked(siteID); err != nil && !strings.Contains(err.Error(), "is not running") { return 0, err }
+	return m.startSiteWithEnvLocked(siteID, path, port, runtime, nil)
 }
 
 // DeploySite pulls the fast-forwardable Git revision, optionally rebuilds Go,
 // then performs a stop/start cycle. Git conflicts and build errors are returned.
 func (m *ProcessManager) DeploySite(siteID, path string, port int, runtime string, rebuild bool) (int, string, error) {
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
 	if !validSiteID(siteID) { return 0, "", fmt.Errorf("invalid site id") }
 	if filepath.Clean(path) != filepath.Join("sites", siteID) || filepath.IsAbs(path) {
 		return 0, "", fmt.Errorf("site path must be sites/<site_id>")
@@ -620,8 +626,9 @@ func (m *ProcessManager) DeploySite(siteID, path string, port int, runtime strin
 		out += string(buildOut)
 		if buildErr != nil { return 0, out, fmt.Errorf("go build: %w", buildErr) }
 	}
-	pid, err := m.RestartSite(siteID, path, port, runtime)
-	return pid, out, err
+	if stopErr := m.stopSiteLocked(siteID); stopErr != nil && !strings.Contains(stopErr.Error(), "is not running") { return 0, out, stopErr }
+	pid, startErr := m.startSiteWithEnvLocked(siteID, path, port, runtime, nil)
+	return pid, out, startErr
 }
 
 // runGitPull выполняет git pull в папке сайта и возвращает вывод.
@@ -685,8 +692,8 @@ func truncateDeployOutput(value string) string {
 // currently running application. A failed candidate start restores the prior
 // process from its recorded working directory.
 func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int, string, string, string, error) {
-	m.deployMu.Lock()
-	defer m.deployMu.Unlock()
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
 
 	if !validSiteID(req.SiteId) { return 0, "", "", "", fmt.Errorf("invalid site id") }
 	if !req.AllowProjectCode { return 0, "", "", "", fmt.Errorf("deployment blocked: explicit allow_project_code=true consent is required") }
@@ -798,7 +805,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 		previous, hadPrevious = m.registry.Get(req.SiteId)
 	}
 	if hadPrevious && verifyProcessRecord(previous) {
-		if err := m.StopSite(req.SiteId); err != nil {
+		if err := m.stopSiteLocked(req.SiteId); err != nil {
 			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("stop previous release: %w", err)
 		}
 	} else if hadPrevious {
@@ -811,7 +818,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 
 	runPath := filepath.Join("sites", req.SiteId, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
-	pid, startErr := m.StartSite(req.SiteId, runPath, int(req.Port), req.Runtime)
+	pid, startErr := m.startSiteWithEnvLocked(req.SiteId, runPath, int(req.Port), req.Runtime, nil)
 	if startErr != nil {
 		if hadPrevious {
 			oldRunPath := previous.RunPath
@@ -824,7 +831,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 			if oldRunPath == "" {
 				return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed to start (%v); rollback also failed (previous release path is unavailable)", startErr)
 			}
-			if _, rollbackErr := m.StartSite(req.SiteId, oldRunPath, previous.Port, previous.Runtime); rollbackErr != nil {
+			if _, rollbackErr := m.startSiteWithEnvLocked(req.SiteId, oldRunPath, previous.Port, previous.Runtime, nil); rollbackErr != nil {
 				return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed to start (%v); rollback also failed (%v)", startErr, rollbackErr)
 			}
 			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("new release failed health check; previous release was restored: %w", startErr)
@@ -920,7 +927,7 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 	if m.registry == nil || m.registryErr != nil { return 0, fmt.Errorf("process registry unavailable: %v", m.registryErr) }
 	previous, hadPrevious := m.registry.Get(siteID)
 	if hadPrevious && verifyProcessRecord(previous) {
-		if err := m.StopSite(siteID); err != nil { return 0, fmt.Errorf("stop current release: %w", err) }
+		if err := m.stopSiteLocked(siteID); err != nil { return 0, fmt.Errorf("stop current release: %w", err) }
 	} else if hadPrevious {
 		_ = m.registry.Delete(siteID)
 		m.mu.Lock(); delete(m.procs, siteID); m.mu.Unlock()
@@ -928,7 +935,7 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 	}
 	runPath := filepath.Join("sites", siteID, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
-	pid, startErr := m.StartSite(siteID, runPath, port, runtime)
+	pid, startErr := m.startSiteWithEnvLocked(siteID, runPath, port, runtime, nil)
 	if startErr == nil { return pid, nil }
 	if hadPrevious {
 		oldPath := previous.RunPath
@@ -938,7 +945,7 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 			}
 		}
 		if oldPath == "" { return 0, fmt.Errorf("rollback activation failed (%v); previous process path unavailable", startErr) }
-		if _, restoreErr := m.StartSite(siteID, oldPath, previous.Port, previous.Runtime); restoreErr != nil {
+		if _, restoreErr := m.startSiteWithEnvLocked(siteID, oldPath, previous.Port, previous.Runtime, nil); restoreErr != nil {
 			return 0, fmt.Errorf("rollback activation failed (%v); restoring previous release also failed (%v)", startErr, restoreErr)
 		}
 	}
