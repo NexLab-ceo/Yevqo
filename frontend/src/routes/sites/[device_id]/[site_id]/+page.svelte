@@ -2,7 +2,7 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, openSiteLogStream } from '$lib/api.js';
+    import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, openSiteLogStream } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -51,6 +51,11 @@
     let newEnvName = '';
     let newEnvValue = '';
     let savingEnv = false;
+    let webhookEnabled = false;
+    let webhookPath = '';
+    let webhookSecret = '';
+    let webhookConsent = false;
+    let webhookBusy = false;
     let buildPlan = null;
     let analyzingBuild = false;
     let buildRunning = false;
@@ -77,9 +82,9 @@
     });
 
     async function refresh() {
-        const [deviceRes, siteRes, gitRes, connectionsRes, variablesRes] = await Promise.all([
+        const [deviceRes, siteRes, gitRes, connectionsRes, variablesRes, webhookRes] = await Promise.all([
             getDevice(deviceId), getSite(deviceId, siteId), getSiteGit(deviceId, siteId),
-            listSiteDatabaseConnections(deviceId, siteId), listSiteEnvironment(deviceId, siteId)
+            listSiteDatabaseConnections(deviceId, siteId), listSiteEnvironment(deviceId, siteId), getSiteWebhook(deviceId, siteId)
         ]);
         if (!deviceRes.ok || !siteRes.ok) {
             notify(deviceRes.error || siteRes.error || 'Не удалось загрузить сайт', 'error');
@@ -98,12 +103,36 @@
         }
         connections = connectionsRes.ok ? (connectionsRes.data.connections || []) : [];
         envVariables = variablesRes.ok ? (variablesRes.data.variables || []) : [];
+        if (webhookRes.ok) { webhookEnabled = !!webhookRes.data.enabled; webhookPath = webhookRes.data.path || ''; }
         if (online) {
             const policyRes = await sendCommand(deviceId, 'get_site_restart_policy', { site_id: siteId });
             if (policyRes.ok && policyRes.data?.ok && policyRes.data.payload) {
                 try { restartPolicy = JSON.parse(decodeLogs(policyRes.data.payload)).policy || 'on-failure'; } catch { /* keep safe default */ }
             }
         }
+    }
+
+    async function configureWebhook(enabled) {
+        if (webhookBusy) return;
+        webhookBusy = true;
+        const res = await setSiteWebhook(deviceId, siteId, enabled, webhookConsent);
+        webhookBusy = false;
+        if (!res.ok) { notify(res.error || 'Не удалось изменить webhook', 'error'); return; }
+        webhookEnabled = !!res.data.enabled;
+        webhookPath = res.data.path || webhookPath;
+        webhookSecret = res.data.secret || '';
+        webhookConsent = false;
+        notify(enabled ? 'Webhook включён. Скопируйте secret и добавьте его в GitHub.' : 'Webhook отключён', 'success');
+    }
+
+    async function copyWebhookSecret() {
+        try { await navigator.clipboard.writeText(webhookSecret); notify('Webhook secret скопирован', 'success'); }
+        catch { notify('Не удалось скопировать secret', 'error'); }
+    }
+
+    async function copyWebhookURL() {
+        try { await navigator.clipboard.writeText(window.location.origin + webhookPath); notify('Webhook URL скопирован', 'success'); }
+        catch { notify('Не удалось скопировать URL', 'error'); }
     }
 
     async function saveEnvironmentVariable() {
@@ -744,6 +773,21 @@
             </div>
             <p class="security-note">Build Command выполняется на устройстве от имени пользователя Termux. Используйте только доверенные команды.</p>
             <div class="save-row"><Button variant="primary" loading={busyAction === 'git'} on:click={saveGit}>Connect / Save</Button></div>
+            <section class="webhook-panel">
+                <h3>GitHub Push Deployments</h3>
+                <p class="muted">При push в выбранную ветку Yevqo проверит HMAC-подпись и развернёт именно commit из события. Повторные webhook delivery игнорируются.</p>
+                {#if webhookEnabled}
+                    <div class="webhook-state">Webhook enabled</div>
+                    <div class="webhook-url"><code>{webhookPath}</code><Button size="sm" on:click={copyWebhookURL}>Copy URL</Button></div>
+                    <Button size="sm" variant="danger" loading={webhookBusy} on:click={() => configureWebhook(false)}>Disable webhook</Button>
+                {:else}
+                    <label class="webhook-consent"><input type="checkbox" bind:checked={webhookConsent} /> Я разрешаю автоматически выполнять код этого репозитория при push в выбранную ветку.</label>
+                    <Button size="sm" variant="primary" disabled={!webhookConsent || !git.repository_url || webhookBusy} loading={webhookBusy} on:click={() => configureWebhook(true)}>Enable GitHub webhook</Button>
+                {/if}
+                {#if webhookSecret}
+                    <div class="webhook-secret"><strong>Webhook secret — показывается только один раз</strong><code>{webhookSecret}</code><Button size="sm" on:click={copyWebhookSecret}>Copy secret</Button><small>В GitHub откройте Settings → Webhooks → Add webhook. Content type: application/json; Events: Just the push event.</small></div>
+                {/if}
+            </section>
         </Card>
     {/if}
 {:else}
@@ -763,6 +807,7 @@
 </Modal>
 
 <style>
+.webhook-panel{display:grid;gap:9px;margin-top:18px;padding:14px;border:1px solid #334155;border-radius:10px;background:#0b1220}.webhook-panel h3{font-size:13px}.webhook-state{color:#4ade80;font-size:11px}.webhook-url{display:flex;align-items:center;justify-content:space-between;gap:8px}.webhook-url code,.webhook-secret code{overflow-wrap:anywhere;color:#c7d2fe;font-size:11px}.webhook-consent{display:flex;gap:8px;align-items:flex-start;color:#fcd34d;font-size:11px}.webhook-secret{display:grid;gap:8px;padding:10px;border:1px solid #854d0e;border-radius:8px}.webhook-secret small{color:#94a3b8;font-size:10px;line-height:1.5}
 .env-editor{display:grid;gap:10px;margin:12px 0}.env-add{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px}.env-list{display:grid;gap:6px}.env-list .env-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid #253149;border-radius:8px;background:#0b1220}.env-list .env-row code{flex:1;color:#c7d2fe}.env-list .env-row span{color:#64748b;font-size:10px}@media(max-width:700px){.env-add{grid-template-columns:1fr}.env-list .env-row{flex-wrap:wrap}}
     .deploy-consent{display:grid;gap:5px;margin:12px 0;padding:10px 12px;border:1px solid #854D0E;background:#21190D;border-radius:8px}
     .deploy-consent label{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#FDE68A;line-height:1.5}
