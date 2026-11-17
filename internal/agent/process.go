@@ -801,6 +801,14 @@ func validDeployRepository(raw string) bool {
 	return false
 }
 
+func configuredDeploymentTimeout(seconds int, fallback time.Duration, minimum, maximum int, name string) (time.Duration, error) {
+	if seconds == 0 { return fallback, nil }
+	if seconds < minimum || seconds > maximum {
+		return 0, fmt.Errorf("%s timeout must be between %d and %d seconds", name, minimum, maximum)
+	}
+	return time.Duration(seconds) * time.Second, nil
+}
+
 func truncateDeployOutput(value string) string {
 	const max = 64 << 10
 	if len(value) <= max { return value }
@@ -828,6 +836,12 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	if branch == "" { branch = "main" }
 	if !validDeployBranch(branch) { return 0, "", "", "", fmt.Errorf("invalid Git branch") }
 	if !validHealthCheckPath(req.HealthCheckPath) { return 0, "", "", "", fmt.Errorf("invalid HTTP health check path") }
+	cloneTimeout, err := configuredDeploymentTimeout(req.CloneTimeoutSeconds, 10*time.Minute, 30, 1800, "clone")
+	if err != nil { return 0, "", "", "", err }
+	buildTimeout, err := configuredDeploymentTimeout(req.BuildTimeoutSeconds, 20*time.Minute, 60, 7200, "build")
+	if err != nil { return 0, "", "", "", err }
+	healthTimeout, err := configuredDeploymentTimeout(req.HealthCheckTimeoutSeconds, 15*time.Second, 3, 300, "health check")
+	if err != nil { return 0, "", "", "", err }
 	if req.GitCommit != "" && !validGitCommit(req.GitCommit) { return 0, "", "", "", fmt.Errorf("invalid Git commit target") }
 	if req.Runtime != "php" && req.Runtime != "go" && req.Runtime != "static" && req.Runtime != "nodejs" {
 		return 0, "", "", "", fmt.Errorf("runtime %q cannot be launched by this Agent yet; supported runtimes are php, go, static and nodejs", req.Runtime)
@@ -860,7 +874,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	// an unresponsive SSH endpoint. Bound checkout time independently from the
 	// longer build phase so a deployment cannot hold the engine forever.
 	m.UpdateDeploymentJob(req.SiteId, jobID, "cloning", 15, "Cloning Git repository")
-	cloneCtx, cancelClone := context.WithTimeout(ctx, 10*time.Minute)
+	cloneCtx, cancelClone := context.WithTimeout(ctx, cloneTimeout)
 	defer cancelClone()
 	clone := exec.CommandContext(cloneCtx, "git", "clone", "--branch", branch, "--single-branch", "--depth", "1", req.GitURL, stageDir)
 	clone.Env = gitEnv
@@ -869,7 +883,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	output.Write(cloneOutput)
 	if cloneErr != nil {
 		if cloneCtx.Err() == context.DeadlineExceeded {
-			return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout timed out after 10 minutes")
+			return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout timed out after %s", cloneTimeout)
 		}
 		return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout failed: %w", cloneErr)
 	}
@@ -923,7 +937,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 		if m.BuildRunner == nil { m.BuildRunner = NewAndroidBuildRunner(m.DataRoot) }
 		build := m.BuildRunner.Run(ctx, AndroidBuildRequest{
 			SiteID:req.SiteId, SiteRoot:stageDir, RootDir:rootDir, Stack:plan.Stack,
-			PackageTool:plan.PackageTool, AllowProjectCode:true, Timeout:20*time.Minute, MaxLogBytes:10<<20,
+			PackageTool:plan.PackageTool, AllowProjectCode:true, Timeout:buildTimeout, MaxLogBytes:10<<20,
 			OnStep:func(name string, index, total int) {
 				progress := 40
 				if total > 0 { progress += index * 25 / total }
@@ -967,7 +981,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	runPath := filepath.Join("sites", req.SiteId, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
 	tx := deploymentTransaction{Version:1, SiteID:req.SiteId, State:"activating", CandidateCommit:commit, HadPrevious:hadPrevious, Previous:previous}
-	pid, startErr := m.activateBlueGreenRelease(ctx, tx, runPath, int(req.Port), req.Runtime, req.Env, req.StartCommand, req.HealthCheckPath)
+	pid, startErr := m.activateBlueGreenRelease(ctx, tx, runPath, int(req.Port), req.Runtime, req.Env, req.StartCommand, req.HealthCheckPath, healthTimeout)
 	if startErr != nil {
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("release activation failed: %w", startErr)
 	}
@@ -1080,7 +1094,7 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 	runPath := filepath.Join("sites", siteID, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
 	tx := deploymentTransaction{Version:1, SiteID:siteID, State:"activating", CandidateCommit:commit, HadPrevious:hadPrevious, Previous:previous}
-	pid, startErr := m.activateBlueGreenRelease(context.Background(), tx, runPath, port, runtime, nil, startCommand, "")
+	pid, startErr := m.activateBlueGreenRelease(context.Background(), tx, runPath, port, runtime, nil, startCommand, "", 15*time.Second)
 	if startErr != nil { return 0, fmt.Errorf("could not activate release %s: %w", commit, startErr) }
 	return pid, nil
 }
