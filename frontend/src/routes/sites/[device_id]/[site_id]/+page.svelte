@@ -18,6 +18,8 @@
     let busyAction = '';
     let restartPolicy = 'on-failure';
     let savingRestartPolicy = false;
+    let deploymentJob = null;
+    let deploymentJobBusy = false;
     let showTerminal = false;
     let terminalLoading = false;
     let terminalText = '';
@@ -111,6 +113,14 @@
         notify('Политика перезапуска сохранена', 'success');
     }
 
+
+    async function cancelDeployment() {
+        if (!online || !deploymentJob?.job_id || !deploymentJobBusy) return;
+        const res = await sendCommand(deviceId, 'cancel_deployment_job', { site_id: siteId, job_id: deploymentJob.job_id });
+        if (!res.ok || !res.data?.ok) notify(res.error || res.data?.message || 'Не удалось отменить деплой', 'error');
+        else notify('Отмена деплоя запрошена', 'warning');
+    }
+
     async function runAction(action) {
         if (!online || busyAction) return;
         if ((action === 'deploy' || action === 'rebuild') && !allowDeployCode) {
@@ -118,6 +128,13 @@
             return;
         }
         busyAction = action;
+        if (action === 'deploy' || action === 'rebuild') {
+            deploymentJobBusy = true;
+            deploymentJob = { state: 'queued', progress: 0, message: 'Deployment queued' };
+            agentLogOnline = true;
+            logStreamEnabled = true;
+            connectLiveLogs();
+        }
         let res;
         if (action === 'start') {
             res = await sendCommand(deviceId, 'start_site', {
@@ -127,6 +144,7 @@
             res = await runSiteCommand(deviceId, siteId, action, action === 'deploy' || action === 'rebuild' ? allowDeployCode : false);
         }
         busyAction = '';
+        if (action === 'deploy' || action === 'rebuild') deploymentJobBusy = false;
         if (!res.ok || !res.data?.ok) {
             notify(res.error || res.data?.message || 'Команда завершилась ошибкой', 'error');
             await refresh();
@@ -278,6 +296,14 @@
                             connectLiveLogs();
                         }
                     }
+                    return;
+                }
+                if (message.type === 'deployment_job' && message.site_id === siteId) {
+                    const seq = Number(message.seq || 0);
+                    if (seq && seq <= lastLogSeq) return;
+                    if (seq) lastLogSeq = seq;
+                    deploymentJob = { job_id: message.job_id, state: message.state, progress: Number(message.progress || 0), message: message.message || '' };
+                    deploymentJobBusy = !['healthy', 'failed', 'cancelled'].includes(message.state);
                     return;
                 }
                 if (message.type !== 'log' || message.site_id !== siteId) return;
@@ -449,6 +475,16 @@
 {#if loading}
     <div class="empty">Загрузка сайта...</div>
 {:else if site}
+    {#if deploymentJob}
+        <Card>
+            <div class="deployment-job">
+                <div><strong>Deployment · {deploymentJob.state}</strong><p class="muted">{deploymentJob.message || 'Выполняется деплой'}</p></div>
+                <strong>{deploymentJob.progress}%</strong>
+                {#if deploymentJobBusy}<Button size="sm" variant="danger" disabled={!online} on:click={cancelDeployment}>Cancel</Button>{/if}
+            </div>
+            <div class="deployment-progress"><div style={'width:' + deploymentJob.progress + '%'}></div></div>
+        </Card>
+    {/if}
     <div class="page-header">
         <div>
             <button class="back" on:click={() => goto('/sites')}>← Все сайты</button>
