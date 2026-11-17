@@ -151,8 +151,8 @@ func canTransitionDeploymentJob(current, next string) bool {
  allowed := map[string][]string{
   "queued":{"preparing"},
   "preparing":{"cloning"},
-  "cloning":{"installing","starting"},
-  "installing":{"building"},
+  "cloning":{"installing","building","starting"},
+  "installing":{"building","starting"},
   "building":{"starting"},
   "starting":{"healthy"},
  }
