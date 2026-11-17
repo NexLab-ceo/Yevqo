@@ -119,6 +119,12 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 	if backendReadErr != nil || backendResponse.StatusCode != http.StatusOK || strings.TrimSpace(string(backendBody)) != "release-two" {
 		t.Fatalf("candidate backend is not serving the expected release: status=%d body=%q read_error=%v", backendResponse.StatusCode, strings.TrimSpace(string(backendBody)), backendReadErr)
 	}
+	manager.mu.RLock()
+	activeProxy := manager.proxies[siteID]
+	manager.mu.RUnlock()
+	if activeProxy == nil || activeProxy.target.Load() == nil || activeProxy.target.Load().target.Port() != fmt.Sprint(secondRecord.BackendPort) {
+		t.Fatalf("stable proxy target was not switched to candidate backend %d", secondRecord.BackendPort)
+	}
 	stopRequestLoop()
 	<-requestDone
 	select { case requestErr := <-requestErrors: t.Fatalf("zero-downtime traffic check failed: %v", requestErr); default: }
