@@ -67,6 +67,19 @@ func newDeploymentProxy(publicPort, backendPort int) (*deploymentProxy, error) {
 
 func newDeploymentBackend(target *url.URL) *deploymentBackend {
 	reverse := httputil.NewSingleHostReverseProxy(target)
+	defaultDirector := reverse.Director
+	reverse.Director = func(request *http.Request) {
+		originalHost := request.Host
+		forwardedProto := request.Header.Get("X-Forwarded-Proto")
+		defaultDirector(request)
+		request.Host = originalHost
+		if originalHost != "" { request.Header.Set("X-Forwarded-Host", originalHost) }
+		if forwardedProto == "" {
+			forwardedProto = "http"
+			if request.TLS != nil { forwardedProto = "https" }
+		}
+		request.Header.Set("X-Forwarded-Proto", forwardedProto)
+	}
 	reverse.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, err error) {
 		http.Error(w, "site backend temporarily unavailable", http.StatusBadGateway)
 	}
