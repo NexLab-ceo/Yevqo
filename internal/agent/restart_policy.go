@@ -17,6 +17,12 @@ func cloneEnv(src map[string]string) map[string]string {
 const maxAutomaticRestarts = 3
 
 // restartDelay is bounded exponential backoff: 2s, 4s, 8s.
+func shouldRestart(policy string, waitErr error) bool {
+ if policy == "never" { return false }
+ if policy == "always" { return true }
+ return policy == "on-failure" && waitErr != nil
+}
+
 func restartDelay(attempt int) time.Duration {
  if attempt<1 { attempt=1 }; if attempt>3 { attempt=3 }
  return time.Duration(1<<attempt)*time.Second
