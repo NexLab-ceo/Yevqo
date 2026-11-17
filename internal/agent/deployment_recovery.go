@@ -36,6 +36,18 @@ func (m *ProcessManager) deploymentTransactionPath(siteID string) (string, error
 	return filepath.Join(metadata, "deployment-transaction.json"), nil
 }
 
+// createDeploymentTransaction refuses to replace an unresolved recovery record.
+func (m *ProcessManager) createDeploymentTransaction(tx deploymentTransaction) error {
+	_, exists, err := m.readDeploymentTransaction(tx.SiteID)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return fmt.Errorf("an unresolved deployment recovery transaction already exists")
+	}
+	return m.persistDeploymentTransaction(tx)
+}
+
 func (m *ProcessManager) persistDeploymentTransaction(tx deploymentTransaction) error {
 	if tx.Version != 1 || !validSiteID(tx.SiteID) {
 		return fmt.Errorf("invalid deployment transaction")
