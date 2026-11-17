@@ -376,9 +376,9 @@ func (s *Server) handleBackups(w http.ResponseWriter,r *http.Request) {
 		writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"backup":map[string]interface{}{"id":id,"device_id":in.DeviceID,"resource_type":"site","resource_id":resourceID,"file_name":pendingName,"size_bytes":0,"status":"queued"}});return
 	}
 	if r.Method!=http.MethodGet{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
-	rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT id,resource_type,resource_id,file_name,size_bytes,status,created_at FROM backups WHERE user_id=? ORDER BY id DESC LIMIT 100`,u.ID)
+	rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT id,device_id,resource_type,resource_id,file_name,size_bytes,status,created_at FROM backups WHERE user_id=? ORDER BY id DESC LIMIT 100`,u.ID)
 	if err!=nil{apiError(w,shared.ErrInternal("could not load backups"));return};defer rows.Close()
-	out:=make([]map[string]interface{},0);for rows.Next(){var id,size int64;var typ,resource,file,status string;var created time.Time;if err:=rows.Scan(&id,&typ,&resource,&file,&size,&status,&created);err!=nil{apiError(w,shared.ErrInternal("could not read backups"));return};out=append(out,map[string]interface{}{"id":id,"resource_type":typ,"resource_id":resource,"file_name":file,"size_bytes":size,"status":status,"created_at":created})}
+	out:=make([]map[string]interface{},0);for rows.Next(){var id,deviceID,size int64;var typ,resource,file,status string;var created time.Time;if err:=rows.Scan(&id,&deviceID,&typ,&resource,&file,&size,&status,&created);err!=nil{apiError(w,shared.ErrInternal("could not read backups"));return};out=append(out,map[string]interface{}{"id":id,"device_id":deviceID,"resource_type":typ,"resource_id":resource,"file_name":file,"size_bytes":size,"status":status,"created_at":created})}
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"backups":out})
 }
 
