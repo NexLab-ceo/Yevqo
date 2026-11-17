@@ -428,7 +428,9 @@ func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, r
 		logFile.Close()
 		return 0, fmt.Errorf("process registry unavailable: %w", m.registryErr)
 	}
-	record := ProcessRecord{SiteID:siteID, PID:pid, ProcessGroup:pid, Port:port, Runtime:runtime, WorkingDir:absPath, LogPath:logPath, StartedAt:time.Now().UTC(), StartToken:startToken, RunPath:cleanPath}
+	restartPolicy, policyErr := m.GetRestartPolicy(siteID)
+	if policyErr != nil { _ = killProcessGroup(pid, pid); go cmd.Wait(); _ = logFile.Close(); return 0, fmt.Errorf("load restart policy: %w", policyErr) }
+	record := ProcessRecord{SiteID:siteID, PID:pid, ProcessGroup:pid, Port:port, Runtime:runtime, WorkingDir:absPath, LogPath:logPath, StartedAt:time.Now().UTC(), StartToken:startToken, RunPath:cleanPath, RestartPolicy:restartPolicy}
 	if err := m.registry.Save(record); err != nil {
 		_ = killProcessGroup(pid, pid)
 		go cmd.Wait()
