@@ -86,3 +86,28 @@ func TestWaitForProcessExitReapsAndRemovesOnlyMatchingRecord(t *testing.T) {
 		t.Fatal("exited process remained in memory")
 	}
 }
+
+func TestProcessRegistryInstancesUseIndependentAtomicTempFiles(t *testing.T) {
+	root := t.TempDir()
+	first, err := NewProcessRegistry(root)
+	if err != nil { t.Fatal(err) }
+	second, err := NewProcessRegistry(root)
+	if err != nil { t.Fatal(err) }
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	write := func(registry *ProcessRegistry, site string) {
+		<-start
+		for i := 0; i < 40; i++ {
+			record := ProcessRecord{SiteID:site, PID:1000+i, ProcessGroup:1000+i, Port:3000, Runtime:"nodejs", WorkingDir:root, LogPath:filepath.Join(root, site+".log"), StartedAt:time.Now(), StartToken:"test"}
+			if err := registry.Save(record); err != nil { errs <- err; return }
+		}
+		errs <- nil
+	}
+	go write(first, "first")
+	go write(second, "second")
+	close(start)
+	for i := 0; i < 2; i++ {
+		if err := <-errs; err != nil { t.Fatalf("concurrent registry write failed: %v", err) }
+	}
+	if _, err := os.Stat(filepath.Join(root, "processes.json")); err != nil { t.Fatalf("registry file missing: %v", err) }
+}
