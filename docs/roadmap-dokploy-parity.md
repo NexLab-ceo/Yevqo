@@ -37,6 +37,7 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 - [x] Agent-side encrypted environment persistence so crash recovery and Agent restart can re-inject secrets without plaintext process-registry storage.
 - [x] Release history with commit, runtime, timestamp and active status.
 - [x] Per-site deployment configuration: branch/commit, root directory, allowlisted build/start argv, optional HTTP health path, and bounded clone/build/health-check timeouts.
+- [x] Structured deployment failures with stable error codes and retryability metadata for cancellation, timeout, Git checkout, build, readiness, health-check and configuration failures; the site UI displays actionable failure details.
 - [x] Rollback to a previous immutable release without rebuilding.
 - [x] Signed GitHub push webhooks (HMAC-SHA256), delivery replay protection, branch filtering and exact commit checkout.
 - [x] Manual branch and full commit SHA-1/SHA-256 selection for deployments.
