@@ -299,6 +299,7 @@
                     return;
                 }
                 if (message.type === 'deployment_job' && message.site_id === siteId) {
+                    if (message.stream_id && message.stream_id !== logStreamID) { logStreamID = message.stream_id; lastLogSeq = 0; }
                     const seq = Number(message.seq || 0);
                     if (seq && seq <= lastLogSeq) return;
                     if (seq) lastLogSeq = seq;
