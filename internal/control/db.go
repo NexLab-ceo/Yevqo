@@ -187,9 +187,10 @@ func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Devic
 	defer tx.Rollback()
 
 	var maxDevices, bonusDevices int
+	var accountStatus string
 	if err := tx.QueryRowContext(ctx,
-		`SELECT max_devices, bonus_devices FROM users WHERE id = ? FOR UPDATE`, d.UserID,
-	).Scan(&maxDevices, &bonusDevices); err != nil {
+		`SELECT status, max_devices, bonus_devices FROM users WHERE id = ? FOR UPDATE`, d.UserID,
+	).Scan(&accountStatus, &maxDevices, &bonusDevices); err != nil {
 		if errors.Is(err, sql.ErrNoRows) { return nil, shared.ErrNotFound("user not found") }
 		return nil, fmt.Errorf("lock device owner: %w", err)
 	}
@@ -228,7 +229,7 @@ func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Devic
 		return nil, fmt.Errorf("count registered devices: %w", err)
 	}
 	limit := maxDevices + bonusDevices
-	if limit < 1 { limit = 1 }
+	if accountStatus == shared.UserFree || limit < 1 { limit = 1 }
 	if count >= limit {
 		return nil, shared.ErrForbidden("device limit reached: your current plan allows " + strconv.Itoa(limit) + " connected phone(s); disconnect a phone or upgrade your plan")
 	}
