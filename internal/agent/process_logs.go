@@ -28,3 +28,26 @@ func rotateSiteLog(path string) error {
  if err := os.Rename(path, filepath.Clean(path+".1")); err != nil { return fmt.Errorf("rotate active site log: %w", err) }
  return nil
 }
+
+
+// readSiteLogs returns the newest requested lines across rotated and active logs.
+func readSiteLogs(dataRoot, siteID string, lines int) (string, error) {
+ if !validSiteID(siteID) { return "", fmt.Errorf("invalid site id") }
+ if lines <= 0 { lines = 50 }
+ if lines > 5000 { lines = 5000 }
+ base := filepath.Join(dataRoot, "logs", siteID+".log")
+ chunks := make([]string, 0, retainedSiteLogs+1)
+ for index := retainedSiteLogs; index >= 1; index-- {
+  path := fmt.Sprintf("%s.%d", base, index)
+  data, err := os.ReadFile(path)
+  if err == nil { chunks = append(chunks, string(data)) } else if !os.IsNotExist(err) { return "", fmt.Errorf("read rotated site log: %w", err) }
+ }
+ data, err := os.ReadFile(base)
+ if err == nil { chunks = append(chunks, string(data)) } else if !os.IsNotExist(err) { return "", fmt.Errorf("read site log: %w", err) }
+ if len(chunks) == 0 { return "", fmt.Errorf("log not found: %s", base) }
+ all := strings.Join(chunks, "")
+ rows := strings.Split(strings.TrimRight(all, "\n"), "\n")
+ if len(rows) > lines { rows = rows[len(rows)-lines:] }
+ if len(rows) == 1 && rows[0] == "" { return "", nil }
+ return strings.Join(rows, "\n"), nil
+}
