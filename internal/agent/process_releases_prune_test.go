@@ -108,3 +108,23 @@ func TestGitPullSiteUsesLifecycleLock(t *testing.T) {
 		t.Fatal("Git pull remained blocked after lifecycle lock was released")
 	}
 }
+
+func TestEnsureSafeSubdirectoryRejectsMetadataSymlink(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, ".yevqo")); err != nil { t.Skipf("symlinks unavailable: %v", err) }
+	if _, err := ensureSafeSubdirectory(root, filepath.Join(".yevqo", "releases"), 0700); err == nil {
+		t.Fatal("expected metadata symlink to be rejected")
+	}
+}
+
+func TestSafeExistingSubdirectoryRejectsNestedSymlink(t *testing.T) {
+	root := t.TempDir()
+	metadata := filepath.Join(root, ".yevqo")
+	if err := os.MkdirAll(metadata, 0700); err != nil { t.Fatal(err) }
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(metadata, "releases")); err != nil { t.Skipf("symlinks unavailable: %v", err) }
+	if _, err := safeExistingSubdirectory(root, filepath.Join(".yevqo", "releases")); err == nil {
+		t.Fatal("expected release history symlink to be rejected")
+	}
+}
