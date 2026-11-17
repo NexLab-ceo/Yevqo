@@ -720,14 +720,7 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 		gitEnv = append(gitEnv, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraheader",
 			"GIT_CONFIG_VALUE_0=AUTHORIZATION: basic "+encoded)
 	}
-	clone := exec.Command("git", "clone", "--branch", branch, "--single-branch", "--depth", "1", req.GitURL, stageDir)
-	clone.Env = gitEnv
-	cloneOutput, cloneErr := clone.CombinedOutput()
-	output := strings.Builder{}
-	output.Write(cloneOutput)
-	if cloneErr != nil {
-		return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout failed: %w", cloneErr)
-	}
+	// Git transports can otherwise wait indefinitely on a stalled network or\n\t// an unresponsive SSH endpoint. Bound checkout time independently from the\n\t// longer build phase so a deployment cannot hold the engine forever.\n\tcloneCtx, cancelClone := context.WithTimeout(context.Background(), 10*time.Minute)\n\tdefer cancelClone()\n\tclone := exec.CommandContext(cloneCtx, "git", "clone", "--branch", branch, "--single-branch", "--depth", "1", req.GitURL, stageDir)\n\tclone.Env = gitEnv\n\tcloneOutput, cloneErr := clone.CombinedOutput()\n\toutput := strings.Builder{}\n\toutput.Write(cloneOutput)\n\tif cloneErr != nil {\n\t\tif cloneCtx.Err() == context.DeadlineExceeded {\n\t\t\treturn 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout timed out after 10 minutes")\n\t\t}\n\t\treturn 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout failed: %w", cloneErr)\n\t}
 
 	commitBytes, err := exec.Command("git", "-C", stageDir, "rev-parse", "HEAD").Output()
 	if err != nil { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("read checked-out commit: %w", err) }
