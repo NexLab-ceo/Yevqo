@@ -109,7 +109,7 @@ func (s *Server) queueScheduledBackup(item dueBackupSchedule) {
 		res,err := s.db.conn.ExecContext(ctx,`INSERT INTO backups(user_id,device_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?, 'site', ?, ?,0,'queued')`,item.UserID,item.DeviceID,resourceID,"scheduled-"+item.SiteID+".tar.gz")
 		if err != nil { s.failBackupSchedule(item,"could not queue site backup"); return }
 		id,_ := res.LastInsertId()
-		go func(){ s.runSiteBackup(id,item.UserID,item.DeviceID,conn,&shared.CreateSiteBackup{SiteId:item.SiteID}); s.finishScheduledBackup(item,id) }()
+		go func(){ s.runSiteBackup(id,item.UserID,item.DeviceID,conn,&shared.CreateSiteBackup{SiteId:item.SiteID}); if err:=s.applyScheduledBackupRetention(item); err!=nil { s.failBackupSchedule(item,"backup created but retention failed: "+err.Error()); return }; s.finishScheduledBackup(item,id) }()
 		return
 	}
 	var serverID int64; var database string; var port int; var engine,status,serverStatus string
@@ -118,7 +118,30 @@ func (s *Server) queueScheduledBackup(item dueBackupSchedule) {
 	res,err := s.db.conn.ExecContext(ctx,`INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,'database',?,?,0,'queued')`,item.UserID,item.DeviceID,serverID,fmt.Sprint(item.DatabaseID),fmt.Sprintf("scheduled-%d.dump",item.DatabaseID))
 	if err != nil { s.failBackupSchedule(item,"could not queue database backup"); return }
 	id,_ := res.LastInsertId()
-	go func(){ s.runDatabaseBackup(id,item.UserID,item.DeviceID,conn,&shared.CreateDatabaseBackup{DatabaseID:item.DatabaseID,ServerID:serverID,Database:database,Port:uint32(port)}); s.finishScheduledBackup(item,id) }()
+	go func(){ s.runDatabaseBackup(id,item.UserID,item.DeviceID,conn,&shared.CreateDatabaseBackup{DatabaseID:item.DatabaseID,ServerID:serverID,Database:database,Port:uint32(port)}); if err:=s.applyScheduledBackupRetention(item); err!=nil { s.failBackupSchedule(item,"backup created but retention failed: "+err.Error()); return }; s.finishScheduledBackup(item,id) }()
+}
+
+func (s *Server) applyScheduledBackupRetention(item dueBackupSchedule) error {
+	conn,online:=s.hub.Get(item.DeviceID)
+	if !online { return fmt.Errorf("device went offline before retention could run") }
+	req:=&shared.PruneBackups{Keep:item.Retention}
+	resourceType,resourceID:="site",fmt.Sprintf("%d:%s",item.DeviceID,item.SiteID)
+	if item.ResourceType=="site" { req.SiteId=item.SiteID } else {
+		var serverID int64
+		if err:=s.db.conn.QueryRowContext(context.Background(),`SELECT server_id FROM db_instances WHERE id=? AND user_id=?`,item.DatabaseID,item.UserID).Scan(&serverID);err!=nil{return err}
+		req.SiteId="";req.ServerID=serverID
+		resourceType,resourceID="database",fmt.Sprint(item.DatabaseID)
+	}
+	ctx,cancel:=context.WithTimeout(context.Background(),45*time.Second);defer cancel()
+	result,err:=conn.SendCommand(ctx,"prune_backups",req)
+	if err!=nil{return err};if !result.Ok{return fmt.Errorf("%s",result.Message)}
+	var pruned shared.PruneBackupsResult
+	if err:=shared.Unmarshal(result.Payload,&pruned);err!=nil{return err}
+	for _,name:=range pruned.Removed {
+		if len(name)>255 || strings.Contains(name,"/") || strings.Contains(name,"\\") { continue }
+		_,_ = s.db.conn.ExecContext(context.Background(),`DELETE FROM backups WHERE user_id=? AND device_id=? AND resource_type=? AND resource_id=? AND file_name=?`,item.UserID,item.DeviceID,resourceType,resourceID,name)
+	}
+	return nil
 }
 
 func (s *Server) finishScheduledBackup(item dueBackupSchedule, backupID int64) {
