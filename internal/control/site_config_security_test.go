@@ -38,7 +38,7 @@ func containsInvalidGitBranchSuffix(branch string) bool {
 }
 
 func TestGitRepositoryAndRootDirectoryValidation(t *testing.T) {
-	for _, raw := range []string{"https://github.com/acme/app.git", "ssh://git@github.com/acme/app.git"} {
+	for _, raw := range []string{"https://github.com/acme/app.git", "ssh://github.com/acme/app.git"} {
 		if !validateGitRepository(raw) {
 			t.Errorf("valid Git URL %q was rejected", raw)
 		}
