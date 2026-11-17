@@ -2,7 +2,7 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, openSiteLogStream } from '$lib/api.js';
+    import { getDevice, getSite, getSiteMetrics, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, openSiteLogStream } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -62,8 +62,12 @@
     let allowProjectCode = false;
     let allowDeployCode = false;
     let buildResult = null;
+    let processMetrics = null;
+    let metricsPoller = null;
+    let metricsBusy = false;
 
     onDestroy(() => {
+        if (metricsPoller) clearInterval(metricsPoller);
         logStreamEnabled = false;
         clearLogReconnectTimer();
         clearLogStableTimer();
@@ -79,6 +83,7 @@
         siteId = $page.params.site_id;
         await refresh();
         loading = false;
+        metricsPoller = setInterval(() => { if (online && activeTab === 'general') loadProcessMetrics(); }, 10000);
     });
 
     async function refresh() {
@@ -155,6 +160,23 @@
         if (!res.ok) { notify(res.error || 'Не удалось удалить переменную', 'error'); return; }
         envVariables = envVariables.filter(item => item.name !== name);
         notify('Переменная удалена', 'success');
+    }
+
+    async function loadProcessMetrics() {
+        if (!online || metricsBusy) return;
+        metricsBusy = true;
+        const res = await getSiteMetrics(deviceId, siteId);
+        metricsBusy = false;
+        if (res.ok) processMetrics = res.data.metrics || null;
+        else if (res.status === 400) processMetrics = null;
+    }
+
+    function formatBytes(value) {
+        const n = Number(value || 0);
+        if (n < 1024) return n + ' B';
+        if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+        if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+        return (n / 1073741824).toFixed(2) + ' GB';
     }
 
     async function saveRestartPolicy() {
@@ -619,6 +641,18 @@
                 <Button variant="primary" disabled={!site.domain && !device?.tailscale_ip} on:click={openSite}>Открыть сайт ↗</Button>
             </Card>
             <Card>
+                <div class="metrics-card-head"><h2 class="details-title">Process telemetry</h2><Button size="sm" disabled={!online || metricsBusy} on:click={loadProcessMetrics}>Refresh</Button></div>
+                {#if !online}<p class="muted">Устройство офлайн — метрики недоступны.</p>
+                {:else if processMetrics}
+                    <div class="process-metrics">
+                        <div><span>CPU</span><strong>{Number(processMetrics.cpu_percent || 0).toFixed(1)}%</strong></div>
+                        <div><span>RSS memory</span><strong>{formatBytes(processMetrics.rss_bytes)}</strong></div>
+                        <div><span>PID</span><strong>{processMetrics.pid}</strong></div>
+                    </div>
+                    <p class="muted">Метрики главного процесса сайта из /proc. Дочерние процессы не суммируются; это не контейнерные лимиты или cgroup-метрики.</p>
+                {:else}<p class="muted">Нет активного управляемого процесса для сбора метрик.</p>{/if}
+            </Card>
+            <Card>
                 <h2 class="details-title">Последний деплой</h2>
                 <div class="commit">{git.commit ? git.commit.slice(0, 12) : 'Ещё не выполнялся'}</div>
                 <p class="muted">{git.deployed_at ? new Date(git.deployed_at).toLocaleString() : 'Нет данных о деплое'}</p>
@@ -807,6 +841,7 @@
 </Modal>
 
 <style>
+.metrics-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.process-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.process-metrics>div{display:grid;gap:5px;padding:10px;border:1px solid #253149;border-radius:8px;background:#0b1220}.process-metrics span{font-size:9px;color:#64748b}.process-metrics strong{font-size:15px;color:#e2e8f0}@media(max-width:560px){.process-metrics{grid-template-columns:1fr}}
 .webhook-panel{display:grid;gap:9px;margin-top:18px;padding:14px;border:1px solid #334155;border-radius:10px;background:#0b1220}.webhook-panel h3{font-size:13px}.webhook-state{color:#4ade80;font-size:11px}.webhook-url{display:flex;align-items:center;justify-content:space-between;gap:8px}.webhook-url code,.webhook-secret code{overflow-wrap:anywhere;color:#c7d2fe;font-size:11px}.webhook-consent{display:flex;gap:8px;align-items:flex-start;color:#fcd34d;font-size:11px}.webhook-secret{display:grid;gap:8px;padding:10px;border:1px solid #854d0e;border-radius:8px}.webhook-secret small{color:#94a3b8;font-size:10px;line-height:1.5}
 .env-editor{display:grid;gap:10px;margin:12px 0}.env-add{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px}.env-list{display:grid;gap:6px}.env-list .env-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid #253149;border-radius:8px;background:#0b1220}.env-list .env-row code{flex:1;color:#c7d2fe}.env-list .env-row span{color:#64748b;font-size:10px}@media(max-width:700px){.env-add{grid-template-columns:1fr}.env-list .env-row{flex-wrap:wrap}}
     .deploy-consent{display:grid;gap:5px;margin:12px 0;padding:10px 12px;border:1px solid #854D0E;background:#21190D;border-radius:8px}
