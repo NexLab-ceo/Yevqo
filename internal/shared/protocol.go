@@ -221,6 +221,7 @@ type SiteAction struct {
 	GitURL string `json:"git_url,omitempty"`
 	GitBranch string `json:"git_branch,omitempty"`
 	HealthCheckPath string `json:"health_check_path,omitempty"`
+	StartCommand string `json:"start_command,omitempty"`
 	BuildCommand string `json:"build_command,omitempty"`
 	RootDir string `json:"root_dir,omitempty"`
 	GitToken string `json:"git_token,omitempty"`
@@ -239,6 +240,7 @@ type PruneSiteReleasesResult struct {
 }
 type RollbackSiteRelease struct {
 	SiteId string `json:"site_id"`
+	StartCommand string `json:"start_command,omitempty"`
 	Commit string `json:"commit"`
 	RootDir string `json:"root_dir,omitempty"`
 	Runtime string `json:"runtime"`
