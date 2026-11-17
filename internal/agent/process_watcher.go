@@ -63,12 +63,11 @@ func (m *ProcessManager) waitForProcessExit(siteID string, pid int, startToken s
 	m.restartMu.Unlock()
 	_ = m.registry.Delete(siteID)
 	if intentional { return }
-	if !shouldRestart(record.RestartPolicy, waitErr) { return }
 	reason := "process exited unexpectedly"
 	if waitErr != nil { reason = fmt.Sprintf("process exited unexpectedly: %v", waitErr) }
 	m.emitProcessLog(siteID, reason)
 	m.emitProcessStatus(siteID, "error", 0)
-	go m.recoverSite(record)
+	if shouldRestart(record.RestartPolicy, waitErr) { go m.recoverSite(record) }
 }
 
 // recoverSite retries the last known immutable/run path with exponential
