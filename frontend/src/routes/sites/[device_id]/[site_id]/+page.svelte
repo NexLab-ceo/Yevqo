@@ -2,7 +2,7 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteMetrics, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, openSiteLogStream } from '$lib/api.js';
+    import { getDevice, getSite, getSiteMetrics, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -66,6 +66,12 @@
     let processMetrics = null;
     let metricsPoller = null;
     let metricsBusy = false;
+    let scheduledTasks = [];
+    let taskName = '';
+    let taskCommand = '';
+    let taskInterval = 1440;
+    let taskBusy = false;
+    let taskOutputOpen = {};
 
     onDestroy(() => {
         if (metricsPoller) clearInterval(metricsPoller);
@@ -88,9 +94,9 @@
     });
 
     async function refresh() {
-        const [deviceRes, siteRes, gitRes, connectionsRes, variablesRes, webhookRes] = await Promise.all([
+        const [deviceRes, siteRes, gitRes, connectionsRes, variablesRes, webhookRes, tasksRes] = await Promise.all([
             getDevice(deviceId), getSite(deviceId, siteId), getSiteGit(deviceId, siteId),
-            listSiteDatabaseConnections(deviceId, siteId), listSiteEnvironment(deviceId, siteId), getSiteWebhook(deviceId, siteId)
+            listSiteDatabaseConnections(deviceId, siteId), listSiteEnvironment(deviceId, siteId), getSiteWebhook(deviceId, siteId), listScheduledTasks(deviceId, siteId)
         ]);
         if (!deviceRes.ok || !siteRes.ok) {
             notify(deviceRes.error || siteRes.error || 'Не удалось загрузить сайт', 'error');
@@ -110,6 +116,7 @@
         connections = connectionsRes.ok ? (connectionsRes.data.connections || []) : [];
         envVariables = variablesRes.ok ? (variablesRes.data.variables || []) : [];
         if (webhookRes.ok) { webhookEnabled = !!webhookRes.data.enabled; webhookPath = webhookRes.data.path || ''; }
+        scheduledTasks = tasksRes.ok ? (tasksRes.data.tasks || []) : [];
         if (online) {
             const policyRes = await sendCommand(deviceId, 'get_site_restart_policy', { site_id: siteId });
             if (policyRes.ok && policyRes.data?.ok && policyRes.data.payload) {
@@ -161,6 +168,63 @@
         if (!res.ok) { notify(res.error || 'Не удалось удалить переменную', 'error'); return; }
         envVariables = envVariables.filter(item => item.name !== name);
         notify('Переменная удалена', 'success');
+    }
+
+    async function addScheduledTask() {
+        if (!taskName.trim() || !taskCommand.trim() || taskBusy) return;
+        taskBusy = true;
+        const res = await createScheduledTask({ device_id: Number(deviceId), site_id: siteId, name: taskName.trim(), command: taskCommand.trim(), interval_minutes: Number(taskInterval) });
+        taskBusy = false;
+        if (!res.ok) { notify(res.error || 'Не удалось создать задачу', 'error'); return; }
+        taskName = ''; taskCommand = '';
+        notify('Scheduled task создана', 'success');
+        const refreshed = await listScheduledTasks(deviceId, siteId);
+        if (refreshed.ok) scheduledTasks = refreshed.data.tasks || [];
+    }
+
+    async function toggleScheduledTask(task) {
+        const res = await setScheduledTaskEnabled(task.id, !task.enabled);
+        if (!res.ok) { notify(res.error || 'Не удалось изменить задачу', 'error'); return; }
+        scheduledTasks = scheduledTasks.map(item => item.id === task.id ? { ...item, enabled: !task.enabled } : item);
+    }
+
+    async function removeScheduledTask(task) {
+        if (!confirm('Удалить задачу ' + task.name + '?')) return;
+        const res = await deleteScheduledTask(task.id);
+        if (!res.ok) { notify(res.error || 'Не удалось удалить задачу', 'error'); return; }
+        scheduledTasks = scheduledTasks.filter(item => item.id !== task.id);
+        notify('Задача удалена', 'success');
+    }
+
+    async function refreshScheduledTasks() {
+        const res = await listScheduledTasks(deviceId, siteId);
+        if (res.ok) scheduledTasks = res.data.tasks || [];
+    }
+
+    async function addScheduledTask() {
+        if (!taskName.trim() || !taskCommand.trim() || taskBusy) return;
+        taskBusy = true;
+        const res = await createScheduledTask({ device_id: Number(deviceId), site_id: siteId, name: taskName.trim(), command: taskCommand.trim(), interval_minutes: Number(taskInterval) });
+        taskBusy = false;
+        if (!res.ok) { notify(res.error || 'Не удалось создать задачу', 'error'); return; }
+        taskName = ''; taskCommand = '';
+        notify('Scheduled task создана', 'success');
+        const refreshed = await listScheduledTasks(deviceId, siteId);
+        if (refreshed.ok) scheduledTasks = refreshed.data.tasks || [];
+    }
+
+    async function toggleScheduledTask(task) {
+        const res = await setScheduledTaskEnabled(task.id, !task.enabled);
+        if (!res.ok) { notify(res.error || 'Не удалось изменить задачу', 'error'); return; }
+        scheduledTasks = scheduledTasks.map(item => item.id === task.id ? { ...item, enabled: !task.enabled } : item);
+    }
+
+    async function removeScheduledTask(task) {
+        if (!confirm('Удалить задачу ' + task.name + '?')) return;
+        const res = await deleteScheduledTask(task.id);
+        if (!res.ok) { notify(res.error || 'Не удалось удалить задачу', 'error'); return; }
+        scheduledTasks = scheduledTasks.filter(item => item.id !== task.id);
+        notify('Задача удалена', 'success');
     }
 
     async function loadProcessMetrics() {
@@ -615,6 +679,7 @@
         <button class:active={activeTab === 'build'} on:click={() => activeTab = 'build'}>Build</button>
         <button class:active={activeTab === 'git'} on:click={() => activeTab = 'git'}>Git</button>
         <button class:active={activeTab === 'releases'} on:click={() => { activeTab = 'releases'; loadReleases(); }}>Releases</button>
+        <button class:active={activeTab === 'tasks'} on:click={() => { activeTab = 'tasks'; refreshScheduledTasks(); }}>Scheduled Tasks</button>
     </nav>
 
     {#if activeTab === 'general'}
@@ -664,6 +729,34 @@
         <Card>
             <div class="logs-head"><div><h2 class="details-title">Terminal / Logs</h2><span class:live={logConnected} class="log-connection">{logStatus === 'live' ? '● Live' : logStatus === 'connecting' ? '◌ Connecting…' : logStatus === 'reconnecting' ? '↻ Reconnecting…' : logStatus === 'agent-offline' ? '● Agent offline' : '○ Disconnected'}</span></div><div class="log-actions"><Button size="sm" on:click={copyTerminal} disabled={!terminalText}>Copy</Button><Button size="sm" on:click={exportTerminal} disabled={!terminalText}>Export</Button><Button size="sm" on:click={clearTerminal}>Clear</Button><Button size="sm" on:click={toggleLiveLogs} disabled={!online}>{logStreamEnabled ? 'Остановить поток' : 'Live logs'}</Button><Button size="sm" on:click={openTerminal} disabled={terminalLoading}>Обновить</Button></div></div>
             {#if terminalLoading}<p class="terminal-loading">Загрузка…</p>{:else}<div class="log-filters"><input class="log-search" bind:value={logSearch} placeholder="Поиск по логам…" /><select class="log-level" bind:value={logLevel}><option value="all">Все уровни</option><option value="error">ERROR</option><option value="warn">WARN</option><option value="info">INFO / DEBUG</option></select><label class="autoscroll"><input type="checkbox" bind:checked={autoScroll} /> Автопрокрутка</label></div><pre class="terminal" bind:this={terminalElement} on:scroll={() => autoScroll = terminalElement.scrollHeight - terminalElement.scrollTop - terminalElement.clientHeight < 30}>{filteredTerminalText || (logSearch || logLevel !== 'all' ? 'Совпадений нет.' : 'Логи пока не загружены.')}</pre>{/if}
+        </Card>
+    {:else if activeTab === 'tasks'}
+        <Card>
+            <h2 class="details-title">Scheduled Tasks</h2>
+            <p class="muted">Запускайте команды в каталоге сайта по фиксированному интервалу. Задачи выполняются от имени пользователя Agent, используют защищённые переменные окружения и ограничены 30 минутами на запуск.</p>
+            <div class="task-create">
+                <input class="input" bind:value={taskName} placeholder="Task name (e.g. Clear cache)" maxlength="100" />
+                <textarea class="input task-command" bind:value={taskCommand} placeholder="Command (e.g. php artisan schedule:run)" maxlength="4096" rows="3"></textarea>
+                <div class="task-create-actions">
+                    <select class="input" bind:value={taskInterval}>
+                        <option value={15}>Every 15 minutes</option><option value={60}>Hourly</option><option value={360}>Every 6 hours</option><option value={1440}>Daily</option><option value={10080}>Weekly</option><option value={43200}>Every 30 days</option>
+                    </select>
+                    <Button variant="primary" disabled={!online || !taskName.trim() || !taskCommand.trim() || taskBusy} loading={taskBusy} on:click={addScheduledTask}>Add task</Button>
+                </div>
+            </div>
+            {#if scheduledTasks.length}
+                <div class="task-list">
+                    {#each scheduledTasks as task}
+                        <div class="task-item">
+                            <div class="task-item-head"><div><strong>{task.name}</strong><span class:task-failed={task.last_status==='failed'} class="task-state">{task.enabled ? task.last_status : 'paused'}</span></div><div class="task-buttons"><Button size="sm" on:click={() => toggleScheduledTask(task)}>{task.enabled ? 'Pause' : 'Enable'}</Button><Button size="sm" variant="danger" on:click={() => removeScheduledTask(task)}>Delete</Button></div></div>
+                            <code>{task.command}</code>
+                            <small>Every {task.interval_minutes} min · next {new Date(task.next_run_at).toLocaleString()}{task.last_run_at ? ' · last ' + new Date(task.last_run_at).toLocaleString() : ''}</small>
+                            {#if task.last_error}<small class="task-failed">{task.last_error}</small>{/if}
+                            {#if task.last_output}<button class="task-output-toggle" on:click={() => taskOutputOpen[task.id] = !taskOutputOpen[task.id]}>{taskOutputOpen[task.id] ? 'Hide output' : 'Show last output'}</button>{#if taskOutputOpen[task.id]}<pre class="task-output">{task.last_output}</pre>{/if}{/if}
+                        </div>
+                    {/each}
+                </div>
+            {:else}<p class="muted">Scheduled tasks пока не созданы.</p>{/if}
         </Card>
     {:else if activeTab === 'environment'}
         <Card>
@@ -843,6 +936,7 @@
 </Modal>
 
 <style>
+.task-create{display:grid;gap:8px;margin:14px 0;padding:12px;border:1px solid #253149;border-radius:9px;background:#0b1220}.task-command{width:100%;font:11px/1.5 ui-monospace,monospace;resize:vertical}.task-create-actions{display:flex;gap:8px}.task-create-actions .input{flex:1}.task-list{display:grid;gap:8px}.task-item{display:grid;gap:7px;padding:12px;border:1px solid #253149;border-radius:9px;background:#0b1220}.task-item-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.task-item-head>div:first-child{display:flex;align-items:center;gap:9px}.task-item-head strong{font-size:11px}.task-state{font-size:9px;color:#4ade80}.task-state.task-failed,.task-failed{color:#f87171}.task-buttons{display:flex;gap:6px}.task-item code{font-size:10px;color:#cbd5e1;overflow-wrap:anywhere}.task-item small{font-size:9px;color:#64748b}.task-output-toggle{justify-self:start;background:transparent;border:0;color:#a5b4fc;font-size:10px}.task-output{max-height:220px;overflow:auto;padding:10px;background:#050a13;border-radius:7px;color:#94a3b8;font-size:10px;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:560px){.task-create-actions{flex-direction:column}.task-item-head{align-items:flex-start;flex-direction:column}}
 .metrics-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.process-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.process-metrics>div{display:grid;gap:5px;padding:10px;border:1px solid #253149;border-radius:8px;background:#0b1220}.process-metrics span{font-size:9px;color:#64748b}.process-metrics strong{font-size:15px;color:#e2e8f0}@media(max-width:560px){.process-metrics{grid-template-columns:1fr}}
 .webhook-panel{display:grid;gap:9px;margin-top:18px;padding:14px;border:1px solid #334155;border-radius:10px;background:#0b1220}.webhook-panel h3{font-size:13px}.webhook-state{color:#4ade80;font-size:11px}.webhook-url{display:flex;align-items:center;justify-content:space-between;gap:8px}.webhook-url code,.webhook-secret code{overflow-wrap:anywhere;color:#c7d2fe;font-size:11px}.webhook-consent{display:flex;gap:8px;align-items:flex-start;color:#fcd34d;font-size:11px}.webhook-secret{display:grid;gap:8px;padding:10px;border:1px solid #854d0e;border-radius:8px}.webhook-secret small{color:#94a3b8;font-size:10px;line-height:1.5}
 .env-editor{display:grid;gap:10px;margin:12px 0}.env-add{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px}.env-list{display:grid;gap:6px}.env-list .env-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid #253149;border-radius:8px;background:#0b1220}.env-list .env-row code{flex:1;color:#c7d2fe}.env-list .env-row span{color:#64748b;font-size:10px}@media(max-width:700px){.env-add{grid-template-columns:1fr}.env-list .env-row{flex-wrap:wrap}}
