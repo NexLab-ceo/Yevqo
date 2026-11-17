@@ -6,6 +6,7 @@ import (
  "os"
  "path/filepath"
  "strings"
+ "time"
 )
 
 const (
@@ -71,7 +72,8 @@ func rotateActiveSiteLog(path string) error {
  }
  source, err := os.Open(path); if err != nil { return err }
  temp := path+".1.tmp"
- target, err := os.OpenFile(temp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+ _ = os.Remove(temp)
+ target, err := os.OpenFile(temp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
  if err != nil { source.Close(); return err }
  _, copyErr := io.Copy(target, source)
  closeTargetErr := target.Close()
