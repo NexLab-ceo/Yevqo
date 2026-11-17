@@ -83,7 +83,11 @@ func (s *Server) queueScheduledTask(item dueScheduledTask){
 	res,err:=s.db.conn.ExecContext(ctx,`UPDATE scheduled_tasks SET next_run_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL interval_minutes MINUTE),last_run_at=UTC_TIMESTAMP(),last_status='queued',last_output=NULL,last_error=NULL WHERE id=? AND enabled=TRUE AND next_run_at<=UTC_TIMESTAMP()`,item.ID)
 	if err!=nil{return};n,_:=res.RowsAffected();if n!=1{return}
 	conn,online:=s.hub.Get(item.DeviceID)
-	if !online{_,_ = s.db.conn.ExecContext(ctx,`UPDATE scheduled_tasks SET next_run_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 15 MINUTE),last_status='failed',last_error='device offline; retry in 15 minutes' WHERE id=?`,item.ID);return}
+	if !online{
+		_,_ = s.db.conn.ExecContext(ctx,`UPDATE scheduled_tasks SET next_run_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 15 MINUTE),last_status='failed',last_error='device offline; retry in 15 minutes' WHERE id=?`,item.ID)
+		_,_ = s.db.conn.ExecContext(ctx,`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,item.UserID,"error","Scheduled task delayed: "+item.Name,"The device is offline. Yevqo will retry in 15 minutes.")
+		return
+	}
 	go s.executeScheduledTask(item,conn)
 }
 
