@@ -226,6 +226,7 @@ type SiteAction struct {
 	BuildCommand string `json:"build_command,omitempty"`
 	RootDir string `json:"root_dir,omitempty"`
 	GitToken string `json:"git_token,omitempty"`
+	Env map[string]string `json:"env,omitempty"`
 }
 
 type ListSiteReleases struct {
