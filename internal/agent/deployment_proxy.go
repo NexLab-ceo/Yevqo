@@ -74,3 +74,42 @@ func (p *deploymentProxy) close() error {
 	}
 	return p.server.Close()
 }
+
+func allocateDeploymentBackendPort() (int, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil { return 0, fmt.Errorf("allocate deployment backend port: %w", err) }
+	port := listener.Addr().(*net.TCPAddr).Port
+	if err := listener.Close(); err != nil { return 0, fmt.Errorf("release allocated backend port: %w", err) }
+	return port, nil
+}
+
+func (m *ProcessManager) ensureDeploymentProxy(siteID string, publicPort, backendPort int) error {
+	if !validSiteID(siteID) { return fmt.Errorf("invalid site id for deployment proxy") }
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.proxies == nil { m.proxies = make(map[string]*deploymentProxy) }
+	if existing := m.proxies[siteID]; existing != nil {
+		return existing.switchBackend(backendPort)
+	}
+	proxy, err := newDeploymentProxy(publicPort, backendPort)
+	if err != nil { return err }
+	m.proxies[siteID] = proxy
+	return nil
+}
+
+func (m *ProcessManager) switchDeploymentProxy(siteID string, backendPort int) error {
+	m.mu.RLock()
+	proxy := m.proxies[siteID]
+	m.mu.RUnlock()
+	if proxy == nil { return fmt.Errorf("stable deployment proxy is not running for site %s", siteID) }
+	return proxy.switchBackend(backendPort)
+}
+
+func (m *ProcessManager) closeDeploymentProxy(siteID string) error {
+	m.mu.Lock()
+	proxy := m.proxies[siteID]
+	delete(m.proxies, siteID)
+	m.mu.Unlock()
+	if proxy == nil { return nil }
+	return proxy.close()
+}
