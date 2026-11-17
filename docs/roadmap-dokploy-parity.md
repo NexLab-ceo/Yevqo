@@ -41,7 +41,7 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 - [x] Manual branch and full commit SHA-1/SHA-256 selection for deployments.
 - [x] Persistent per-site scheduled commands with fixed intervals (15 minutes–30 days), pause/resume, bounded runtime and task output history.
 - [x] In-app notifications for manual and webhook deployments, scheduled tasks, scheduled backups and transfer outcomes.
-- [x] Per-site main-process CPU and RSS telemetry from Linux /proc; the UI explicitly does not claim container/cgroup or child-process aggregate metrics.
+- [x] Per-site CPU and RSS telemetry aggregated across the dedicated Linux process group (main process plus workers/children), with process count; device-level CPU, memory and storage telemetry.
 - [x] Cloudflare API token verification and encrypted storage; scoped zone DNS CNAME create/update/list/delete for Cloudflare Tunnel hostnames.
 - [x] Website backup download, safe archive restore with atomic directory swap, and preservation of target-device environment secrets.
 - [x] Scheduled website and PostgreSQL backups with configurable interval and on-device retention pruning.
@@ -53,7 +53,7 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 - Environment values are masked on read. They are encrypted at rest in the Control Plane and again on the Agent; they are never included in website backup archives or copied to another device.
 - GitHub webhook enablement requires explicit consent to execute repository code. The endpoint verifies the raw request body signature and ignores duplicate delivery IDs. Agent-offline deliveries return a retryable error before the delivery ID is committed.
 - Scheduled tasks use fixed intervals rather than arbitrary cron expressions. Commands execute as the Termux Agent user in the site's directory, with that site's protected environment and a 30-minute hard timeout.
-- CPU/RSS telemetry samples the managed main PID from /proc; Android may not expose all process/cgroup accounting. Child processes are not aggregated.
+- Site CPU/RSS telemetry sums `/proc` counters for the site's dedicated process group, including workers and descendants; device storage is reported separately from the Agent data-root filesystem. Android may not expose all process/cgroup accounting, and these values are not container limits.
 - Cloudflare automation manages proxied CNAME records pointing to a tunnel UUID hostname. It does not create or provision Cloudflare Tunnels, issue certificates, or configure Public Hostname origins.
 - Backup transfer is streamed through the Control Plane in 256 KiB chunks and is currently limited to 2 GiB per archive. Both source and destination Agents must be online; database transfers require a ready PostgreSQL server on the destination.
 - Website restore replaces the target site's files and leaves its process stopped. Review the restored files before starting it.
