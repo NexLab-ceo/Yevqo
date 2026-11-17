@@ -625,7 +625,9 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				if in.GitCommit != "" && !releaseCommitPattern.MatchString(in.GitCommit) { apiError(w, shared.ErrBadRequest("invalid Git commit SHA")); return }
 				payload = &shared.SiteAction{SiteId: st.SiteID, Path: st.Path, Port: uint32(st.Port), Runtime: st.Runtime,
 					GitURL: gitCfg.GitURL, GitBranch: gitCfg.GitBranch, GitCommit: in.GitCommit, BuildCommand: gitCfg.BuildCommand,
-					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, HealthCheckPath: gitCfg.HealthCheckPath, StartCommand: gitCfg.StartCommand, AllowProjectCode: in.AllowProjectCode}
+					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, HealthCheckPath: gitCfg.HealthCheckPath,
+					CloneTimeoutSeconds: gitCfg.CloneTimeoutSeconds, BuildTimeoutSeconds: gitCfg.BuildTimeoutSeconds, HealthCheckTimeoutSeconds: gitCfg.HealthCheckTimeoutSeconds,
+					StartCommand: gitCfg.StartCommand, AllowProjectCode: in.AllowProjectCode}
 			}
 			if in.Action == "rollback" {
 				if !releaseCommitPattern.MatchString(in.ReleaseCommit) { apiError(w, shared.ErrBadRequest("invalid release commit")); return }
