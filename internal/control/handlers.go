@@ -508,6 +508,23 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 
 	rest := strings.TrimPrefix(r.URL.Path, "/api/sites/")
 	parts := strings.Split(rest, "/")
+	if len(parts) == 3 && parts[2] == "metrics" {
+		deviceID, err := parseSiteGitRouteID(parts[0])
+		if err != nil { apiError(w, err); return }
+		dev, err := s.db.GetDeviceByID(r.Context(), deviceID)
+		if err != nil || dev.UserID != user.ID { apiError(w, shared.ErrNotFound("site not found")); return }
+		if !validBackupSiteID(parts[1]) { apiError(w, shared.ErrBadRequest("invalid site id")); return }
+		conn, online := s.hub.Get(deviceID)
+		if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second); defer cancel()
+		result, err := conn.SendCommand(ctx, "get_site_metrics", &shared.GetSiteMetrics{SiteId:parts[1]})
+		if err != nil { apiError(w, shared.ErrInternal("could not collect site metrics")); return }
+		if !result.Ok { apiError(w, shared.ErrBadRequest(result.Message)); return }
+		var metrics shared.SiteMetricsResult
+		if err := shared.Unmarshal(result.Payload, &metrics); err != nil { apiError(w, shared.ErrInternal("invalid site metrics response")); return }
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"metrics":metrics,"scope":"main_process"})
+		return
+	}
 	if len(parts) == 3 && parts[2] == "webhook" {
 		deviceID, err := parseSiteGitRouteID(parts[0])
 		if err != nil { apiError(w, err); return }
