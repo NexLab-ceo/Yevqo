@@ -882,7 +882,7 @@
                 <label class="wide">HTTP Health Check Timeout (seconds)<input class="input" type="number" min="3" max="300" step="1" bind:value={gitForm.health_check_timeout_seconds} /><small>3–300 сек. По умолчанию 15. Применяется только при заданном Health Check Path.</small></label>
                 <label class="wide">GitHub Token<input class="input" type="password" bind:value={gitForm.github_token} autocomplete="new-password" placeholder={git.has_token ? 'Токен сохранён — пустое поле оставит его без изменений' : 'Только для приватного репозитория'} />{#if git.has_token}<small>Токен сохранён с AES-GCM шифрованием.</small>{/if}</label>
             </div>
-            <p class="security-note">Build Command выполняется на устройстве от имени пользователя Termux. Используйте только доверенные команды.</p>
+            <p class="security-note">Build Command выполняется на устройстве от имени пользователя Termux через allowlisted executable без shell-интерпретации. Используйте только доверенные команды.</p>
             <div class="save-row"><Button variant="primary" loading={busyAction === 'git'} on:click={saveGit}>Connect / Save</Button></div>
             <section class="webhook-panel">
                 <h3>GitHub Push Deployments</h3>
