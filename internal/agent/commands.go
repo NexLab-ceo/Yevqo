@@ -248,10 +248,7 @@ func (h *CommandHandler) handleGitPull(cmd *shared.Command) *shared.Result {
 		return errorResult(cmd.Id, "invalid git_pull payload")
 	}
 
-	path, pathErr := safeSiteDirectory(h.cfg.DataRoot, req.SiteId)
-	if pathErr != nil { return errorResult(cmd.Id, pathErr.Error()) }
-
-	out, err := runGitPull(path)
+	out, err := h.processes.GitPullSite(req.SiteId)
 	if err != nil {
 		return errorResult(cmd.Id, err.Error())
 	}
