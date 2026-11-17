@@ -59,7 +59,13 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 			} else {
 				body, readErr := io.ReadAll(resp.Body)
 				_ = resp.Body.Close()
-				last = fmt.Sprintf("status=%d body=%q backend=%q proxy=%q read_error=%v", resp.StatusCode, strings.TrimSpace(string(body)), resp.Header.Get("X-Yevqo-Backend"), resp.Header.Get("X-Yevqo-Proxy"), readErr)
+				manager.mu.RLock()
+				expectedProxy := manager.proxies[siteID]
+				manager.mu.RUnlock()
+				expectedProxyID := fmt.Sprintf("%p", expectedProxy)
+				expectedBackend := ""
+				if expectedProxy != nil && expectedProxy.target.Load() != nil { expectedBackend = expectedProxy.target.Load().target.Host }
+				last = fmt.Sprintf("status=%d body=%q backend=%q proxy=%q expected_proxy=%q expected_backend=%q read_error=%v", resp.StatusCode, strings.TrimSpace(string(body)), resp.Header.Get("X-Yevqo-Backend"), resp.Header.Get("X-Yevqo-Proxy"), expectedProxyID, expectedBackend, readErr)
 				if readErr == nil && resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == want { return }
 			}
 			time.Sleep(30*time.Millisecond)
