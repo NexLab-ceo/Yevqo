@@ -31,16 +31,27 @@ func (m *ProcessManager) PruneSiteReleases(siteID string, keep int) ([]string, e
 		return nil, err
 	}
 	releasesRoot := filepath.Join(siteRoot, ".yevqo", "releases")
-	resolvedRoot, err := filepath.EvalSymlinks(releasesRoot)
+	rootInfo, err := os.Lstat(releasesRoot)
 	if os.IsNotExist(err) {
 		return []string{}, nil
 	}
 	if err != nil {
+		return nil, fmt.Errorf("inspect release history: %w", err)
+	}
+	if !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("release history must be a real directory, not a symlink")
+	}
+	resolvedSiteRoot, err := filepath.EvalSymlinks(siteRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve site directory: %w", err)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(releasesRoot)
+	if err != nil {
 		return nil, fmt.Errorf("resolve release history: %w", err)
 	}
-	rootInfo, err := os.Stat(resolvedRoot)
-	if err != nil || !rootInfo.IsDir() {
-		return nil, fmt.Errorf("release history is not a directory")
+	rootRel, err := filepath.Rel(resolvedSiteRoot, resolvedRoot)
+	if err != nil || rootRel != filepath.Join(".yevqo", "releases") {
+		return nil, fmt.Errorf("release history resolves outside the site directory")
 	}
 
 	activeCommit := ""
