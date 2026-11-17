@@ -17,9 +17,10 @@ const (
 // rotateSiteLog keeps the active log bounded while retaining the three most
 // recent complete files. Call only after the previous process has stopped.
 func rotateSiteLog(path string) error {
- info, err := os.Stat(path)
+ info, err := os.Lstat(path)
  if os.IsNotExist(err) { return nil }
  if err != nil { return fmt.Errorf("inspect site log: %w", err) }
+ if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() { return fmt.Errorf("site log is not a regular file") }
  if info.Size() < maxSiteLogBytes { return nil }
  oldest := fmt.Sprintf("%s.%d", path, retainedSiteLogs)
  if err := os.Remove(oldest); err != nil && !os.IsNotExist(err) { return fmt.Errorf("remove oldest site log: %w", err) }
@@ -42,10 +43,10 @@ func readSiteLogs(dataRoot, siteID string, lines int) (string, error) {
  chunks := make([]string, 0, retainedSiteLogs+1)
  for index := retainedSiteLogs; index >= 1; index-- {
   path := fmt.Sprintf("%s.%d", base, index)
-  data, err := os.ReadFile(path)
+  data, err := readRegularSiteLog(path)
   if err == nil { chunks = append(chunks, string(data)) } else if !os.IsNotExist(err) { return "", fmt.Errorf("read rotated site log: %w", err) }
  }
- data, err := os.ReadFile(base)
+ data, err := readRegularSiteLog(base)
  if err == nil { chunks = append(chunks, string(data)) } else if !os.IsNotExist(err) { return "", fmt.Errorf("read site log: %w", err) }
  if len(chunks) == 0 { return "", fmt.Errorf("log not found: %s", base) }
  all := strings.Join(chunks, "")
@@ -99,4 +100,12 @@ func (m *ProcessManager) watchLogRotation(siteID, logPath string, pid int) {
   if !managed || !isAlive(pid) { return }
   if err := rotateActiveSiteLog(logPath); err != nil { m.emitProcessLog(siteID, "log rotation failed: "+err.Error()) }
  }
+}
+
+
+func readRegularSiteLog(path string) ([]byte, error) {
+ info, err := os.Lstat(path)
+ if err != nil { return nil, err }
+ if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() { return nil, fmt.Errorf("site log is not a regular file") }
+ return os.ReadFile(path)
 }
