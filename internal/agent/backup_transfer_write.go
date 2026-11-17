@@ -40,6 +40,7 @@ func writeBackupChunk(req shared.WriteBackupChunk)(*shared.WriteBackupChunkResul
 		if _,err:=os.Lstat(finalPath);err==nil{return nil,fmt.Errorf("target backup already exists")}
 		file,err:=os.OpenFile(tempPath,os.O_CREATE|os.O_EXCL|os.O_WRONLY,0600);if err!=nil{return nil,err};if len(req.Data)>0{if _,err=file.Write(req.Data);err!=nil{_ = file.Close();_ = os.Remove(tempPath);return nil,err}};if err=file.Sync();err!=nil{_ = file.Close();_ = os.Remove(tempPath);return nil,err};if err=file.Close();err!=nil{return nil,err}
 	}else{
+		linkInfo,linkErr:=os.Lstat(tempPath);if linkErr!=nil{return nil,linkErr};if !linkInfo.Mode().IsRegular()||linkInfo.Mode()&os.ModeSymlink!=0{return nil,fmt.Errorf("backup transfer temporary file is not regular")}
 		file,err:=os.OpenFile(tempPath,os.O_WRONLY,0600);if err!=nil{return nil,err}
 		info,err:=file.Stat();if err!=nil{_ = file.Close();return nil,err};if info.Size()!=req.Offset{_ = file.Close();return nil,fmt.Errorf("backup transfer offset mismatch")}
 		if len(req.Data)>0{if _,err:=file.WriteAt(req.Data,req.Offset);err!=nil{_ = file.Close();return nil,err}}
