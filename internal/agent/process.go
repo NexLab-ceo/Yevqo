@@ -157,6 +157,8 @@ func safeSiteDirectory(dataRoot, siteID string) (string, error) {
 
 // AnalyzeSiteBuild inspects a configured site root without executing project code.
 func (m *ProcessManager) AnalyzeSiteBuild(siteID, rootDir string) (BuildPlan, error) {
+	m.operationMu.Lock()
+	defer m.operationMu.Unlock()
 	if !validSiteID(siteID) {
 		return BuildPlan{}, fmt.Errorf("invalid site id")
 	}
