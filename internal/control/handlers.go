@@ -606,7 +606,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(parts) == 3 && parts[2] == "cmd" {
 			if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
-			var in struct { Action string `json:"action"`; AllowProjectCode bool `json:"allow_project_code"`; ReleaseCommit string `json:"release_commit"` }
+			var in struct { Action string `json:"action"`; AllowProjectCode bool `json:"allow_project_code"`; ReleaseCommit string `json:"release_commit"`; GitCommit string `json:"git_commit"` }
 			if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
 			if in.Action != "deploy" && in.Action != "rebuild" && in.Action != "restart" && in.Action != "stop" && in.Action != "rollback" {
 				apiError(w, shared.ErrBadRequest("unsupported site action")); return
@@ -622,8 +622,9 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				gitCfg, cfgErr := s.siteGitSettings(r.Context(), deviceID, siteID)
 				if cfgErr != nil { apiError(w, shared.ErrInternal("could not load site Git settings")); return }
 				if strings.TrimSpace(gitCfg.GitURL) == "" { apiError(w, shared.ErrBadRequest("connect a Git repository before deploying")); return }
+				if in.GitCommit != "" && !releaseCommitPattern.MatchString(in.GitCommit) { apiError(w, shared.ErrBadRequest("invalid Git commit SHA")); return }
 				payload = &shared.SiteAction{SiteId: st.SiteID, Path: st.Path, Port: uint32(st.Port), Runtime: st.Runtime,
-					GitURL: gitCfg.GitURL, GitBranch: gitCfg.GitBranch, BuildCommand: gitCfg.BuildCommand,
+					GitURL: gitCfg.GitURL, GitBranch: gitCfg.GitBranch, GitCommit: in.GitCommit, BuildCommand: gitCfg.BuildCommand,
 					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, HealthCheckPath: gitCfg.HealthCheckPath, StartCommand: gitCfg.StartCommand, AllowProjectCode: in.AllowProjectCode}
 			}
 			if in.Action == "rollback" {
