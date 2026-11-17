@@ -148,7 +148,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/backups", s.RequireAuth(s.handleBackups))
 	s.mux.HandleFunc("/api/backup-schedules", s.RequireAuth(s.handleBackupSchedules))
 	s.mux.HandleFunc("/api/backup-schedules/", s.RequireAuth(s.handleBackupSchedules))
-	s.mux.HandleFunc("/api/backups/", s.RequireAuth(s.handleDatabaseBackupChunk))
+	s.mux.HandleFunc("/api/backups/", s.RequireAuth(func(w http.ResponseWriter,r *http.Request) { if strings.HasSuffix(r.URL.Path,"/transfer") { s.handleBackupTransfer(w,r); return }; s.handleDatabaseBackupChunk(w,r) }))
 	s.mux.HandleFunc("/api/backups/restore", s.RequireAuth(s.handleRestoreDatabaseBackup))
 	s.mux.HandleFunc("/api/backups/restore-site", s.RequireAuth(s.handleRestoreSiteBackup))
 	s.mux.HandleFunc("/api/domains", s.RequireAuth(s.handleDomains))
