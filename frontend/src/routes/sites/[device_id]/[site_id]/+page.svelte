@@ -46,6 +46,7 @@
     let rollbackTarget = '';
     let git = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', health_check_path: '', start_command: '', has_token: false, commit: '', deployed_at: null };
     let gitForm = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', health_check_path: '', start_command: '', github_token: '' };
+    let deployCommit = '';
     let connections = [];
     let envVariables = [];
     let newEnvName = '';
@@ -219,7 +220,7 @@
                 site_id: site.site_id, path: site.path, port: site.port, runtime: site.runtime
             });
         } else {
-            res = await runSiteCommand(deviceId, siteId, action, action === 'deploy' || action === 'rebuild' ? allowDeployCode : false);
+            res = await runSiteCommand(deviceId, siteId, action, action === 'deploy' || action === 'rebuild' ? allowDeployCode : false, '', action === 'deploy' || action === 'rebuild' ? deployCommit.trim() : '');
         }
         busyAction = '';
         if (action === 'deploy' || action === 'rebuild') deploymentJobBusy = false;
@@ -799,6 +800,7 @@
             <div class="git-form">
                 <label>Repository URL<input class="input" bind:value={gitForm.repository_url} placeholder="https://github.com/user/repo.git" /></label>
                 <label>Branch<input class="input" bind:value={gitForm.branch} placeholder="main" /></label>
+                <label class="wide">Commit SHA for next deploy (optional)<input class="input" bind:value={deployCommit} placeholder="Leave empty to deploy current branch HEAD" maxlength="64" /><small>Можно указать полный SHA-1 или SHA-256. Agent fetches and checks out exactly this commit; the field is not saved as the default branch.</small></label>
                 <label class="wide">Build Command<input class="input" bind:value={gitForm.build_command} placeholder="npm run build или composer install" /></label>
                 <label class="wide">Root Directory<input class="input" bind:value={gitForm.root_directory} placeholder="." /></label>
                 <label class="wide">Custom Start Command (optional)<input class="input" bind:value={gitForm.start_command} placeholder="npm run start · node server.js · ./bin/server" /><small>Запускается напрямую без shell. Поддерживаются allowlisted tools или исполняемый файл внутри каталога сайта; shell-операторы запрещены.</small></label>
