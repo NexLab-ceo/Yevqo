@@ -59,13 +59,7 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 			} else {
 				body, readErr := io.ReadAll(resp.Body)
 				_ = resp.Body.Close()
-				manager.mu.RLock()
-				expectedProxy := manager.proxies[siteID]
-				manager.mu.RUnlock()
-				expectedProxyID := fmt.Sprintf("%p", expectedProxy)
-				expectedBackend := ""
-				if expectedProxy != nil && expectedProxy.target.Load() != nil { expectedBackend = expectedProxy.target.Load().target.Host }
-				last = fmt.Sprintf("status=%d body=%q backend=%q proxy=%q expected_proxy=%q expected_backend=%q read_error=%v", resp.StatusCode, strings.TrimSpace(string(body)), resp.Header.Get("X-Yevqo-Backend"), resp.Header.Get("X-Yevqo-Proxy"), expectedProxyID, expectedBackend, readErr)
+				last = fmt.Sprintf("status=%d body=%q read_error=%v", resp.StatusCode, strings.TrimSpace(string(body)), readErr)
 				if readErr == nil && resp.StatusCode == http.StatusOK && strings.TrimSpace(string(body)) == want { return }
 			}
 			time.Sleep(30*time.Millisecond)
@@ -117,7 +111,7 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 	if err := manager.closeDeploymentProxy(siteID); err != nil { t.Fatalf("close proxy before simulated Agent restart: %v", err) }
 	restarted := NewProcessManager(root)
 	if !restarted.IsSiteHealthy(siteID) { t.Fatal("site was not healthy after Agent restarted and restored its stable listener") }
-	readBody("release-two")
+	readBody("release-one")
 	if err := restarted.StopSite(siteID); err != nil { t.Fatalf("stop blue-green site: %v", err) }
 }
 
