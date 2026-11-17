@@ -250,7 +250,7 @@ func (h *CommandHandler) handleSiteLifecycle(cmd *shared.Command, action string)
   state := "failed"
   if errors.Is(jobCtx.Err(), context.Canceled) { state = "cancelled" }
   h.processes.FinishDeploymentJob(req.SiteId, jobID, state, deployErr.Error())
-  return errorResult(cmd.Id, deployErr.Error())
+  return deploymentErrorResult(cmd.Id, deployErr)
  }
  h.processes.FinishDeploymentJob(req.SiteId, jobID, "healthy", "Deployment completed")
  payload, _ := shared.Marshal(&shared.StartSiteResult{Pid:uint32(pid), Port:req.Port, CommitHash:commitHash, CommitDate:commitDate})
@@ -363,6 +363,11 @@ func (h *CommandHandler) handleCreateTunnel(cmd *shared.Command) *shared.Result 
 
 func errorResult(cmdID, msg string) *shared.Result {
 	return &shared.Result{Id: cmdID, Ok: false, Message: msg}
+}
+
+func deploymentErrorResult(cmdID string, err error) *shared.Result {
+	failure := classifyDeploymentFailure(err)
+	return &shared.Result{Id:cmdID, Ok:false, Message:err.Error(), ErrorCode:failure.Code, Retryable:failure.Retryable}
 }
 
 func (h *CommandHandler) handleCreateDatabase(cmd *shared.Command) *shared.Result {
