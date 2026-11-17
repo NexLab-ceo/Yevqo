@@ -52,6 +52,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleGetDatabaseStats(cmd)
 	case "create_site_backup":
 		return h.handleCreateSiteBackup(cmd)
+	case "prune_backups":
+		return h.handlePruneBackups(cmd)
 	case "create_database_backup":
 		return h.handleCreateDatabaseBackup(cmd)
 	case "read_database_backup_chunk":
@@ -111,6 +113,16 @@ func (h *CommandHandler) handleInstallDatabaseServer(cmd *shared.Command) *share
 	payload, err := shared.Marshal(result)
 	if err != nil { return errorResult(cmd.Id, "could not encode install result") }
 	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL is installed and running",Payload:payload}
+}
+
+func (h *CommandHandler) handlePruneBackups(cmd *shared.Command) *shared.Result {
+	var req shared.PruneBackups
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid prune_backups payload") }
+	result, err := pruneBackups(req)
+	if err != nil { return errorResult(cmd.Id, err.Error()) }
+	payload, err := shared.Marshal(result)
+	if err != nil { return errorResult(cmd.Id, "could not encode backup retention result") }
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:"backup retention applied",Payload:payload}
 }
 
 func (h *CommandHandler) handleCreateSiteBackup(cmd *shared.Command) *shared.Result {
