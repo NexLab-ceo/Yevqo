@@ -873,9 +873,10 @@ func (m *ProcessManager) ListSiteReleases(siteID, runtime string) ([]shared.Site
 	if !validSiteID(siteID) { return nil, fmt.Errorf("invalid site id") }
 	root, err := safeSiteDirectory(m.DataRoot, siteID)
 	if err != nil { return nil, err }
-	releasesRoot := filepath.Join(root, ".yevqo", "releases")
-	entries, err := os.ReadDir(releasesRoot)
+	releasesRoot, err := safeExistingSubdirectory(root, filepath.Join(".yevqo", "releases"))
 	if os.IsNotExist(err) { return []shared.SiteRelease{}, nil }
+	if err != nil { return nil, fmt.Errorf("resolve release history: %w", err) }
+	entries, err := os.ReadDir(releasesRoot)
 	if err != nil { return nil, fmt.Errorf("read release history: %w", err) }
 	activeCommit := ""
 	if m.registry != nil {
@@ -925,12 +926,18 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 	if rootDir == ".." || strings.HasPrefix(rootDir, ".."+string(filepath.Separator)) { return 0, fmt.Errorf("release root directory escapes site") }
 	siteRoot, err := safeSiteDirectory(m.DataRoot, siteID)
 	if err != nil { return 0, err }
-	releasesRoot := filepath.Join(siteRoot, ".yevqo", "releases")
+	releasesRoot, err := safeExistingSubdirectory(siteRoot, filepath.Join(".yevqo", "releases"))
+	if err != nil { return 0, fmt.Errorf("release history not found: %w", err) }
 	resolvedReleasesRoot, err := filepath.EvalSymlinks(releasesRoot)
-	if err != nil { return 0, fmt.Errorf("release history not found") }
+	if err != nil { return 0, fmt.Errorf("resolve release history: %w", err) }
 	releaseDir := filepath.Join(releasesRoot, commit)
-	resolvedRelease, err := filepath.EvalSymlinks(releaseDir)
+	releaseInfoOnDisk, err := os.Lstat(releaseDir)
 	if err != nil { return 0, fmt.Errorf("release not found: %s", commit) }
+	if !releaseInfoOnDisk.IsDir() || releaseInfoOnDisk.Mode()&os.ModeSymlink != 0 {
+		return 0, fmt.Errorf("release must be a real directory")
+	}
+	resolvedRelease, err := filepath.EvalSymlinks(releaseDir)
+	if err != nil { return 0, fmt.Errorf("resolve release %s: %w", commit, err) }
 	releaseRel, err := filepath.Rel(resolvedReleasesRoot, resolvedRelease)
 	if err != nil || releaseRel == "." || releaseRel == ".." || strings.HasPrefix(releaseRel, ".."+string(filepath.Separator)) {
 		return 0, fmt.Errorf("release path resolves outside release history")
