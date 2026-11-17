@@ -17,13 +17,16 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 - [x] Supported launch runtimes: PHP, Go, static and Node.js; custom argv start commands are supported without shell interpolation.
 - [x] Immutable staged Git deployment, build-before-activation and restoration of the previous release when candidate activation/health checks fail.
 - [x] Durable write-ahead deployment journal for Git activation and rollback; Agent startup restores the last confirmed process after an interrupted activation, and unresolved recovery records cannot be overwritten.
-- [x] Regression coverage for failed build steps, deployment cancellation races, Agent restart process adoption, process crashes, occupied ports, process-group shutdown and HTTP health-check failures/timeouts.
+- [x] Stable per-site reverse-proxy listener with blue-green immutable-release activation; candidate backends are health-checked before an atomic target swap, in-flight requests drain before the previous process is stopped, and the active backend port is restored after Agent restart.
+- [x] Backward-compatible first-deployment migration from legacy direct-port processes to the stable listener; subsequent immutable Git deployments and release rollbacks use blue-green switching.
+- [x] Regression coverage for failed build steps, deployment cancellation races, Agent restart process adoption, process crashes, occupied ports, process-group shutdown, HTTP health-check failures/timeouts, blue-green switching, request draining, legacy migration and crash recovery after traffic switch but before commit.
 
 ### P0 implementation notes
 
 - Restart attempts are intentionally bounded to avoid an endless crash loop. After the automatic retry budget is exhausted, manual intervention is required.
 - A successful TCP readiness check is the default. Configure an HTTP health-check path when the application exposes a health endpoint.
-- Release activation is crash-recoverable, but it still uses a stop/start handoff on the site's port. True zero-downtime switching requires a stable reverse-proxy/blue-green layer and remains open; the Agent does not claim an atomic live traffic swap yet.
+- Immutable Git release activation uses a stable loopback reverse proxy. A candidate starts on a private backend port, passes readiness/health checks, then becomes the active target through an atomic pointer swap. Requests already in flight on the previous backend are drained before that process is stopped.
+- Existing legacy direct-port sites are migrated on their first immutable Git deployment. That one-time handoff must release the public port before the proxy can bind it; subsequent blue-green deployments and rollbacks keep the stable listener open.
 - Logs are local to the device. The live viewer timestamps received lines; timestamps are not injected into the application's original stdout/stderr bytes.
 - Deployment job events are streamed to the Control Plane. The durable job record is retained on the Agent for local recovery/diagnostics; it is not a cross-device job-history database.
 - Android battery optimization, force-stop and OS process reclamation can still terminate workloads outside the Agent's control. Use the supported boot/background setup where appropriate.
