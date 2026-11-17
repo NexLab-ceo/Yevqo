@@ -140,6 +140,12 @@ export async function saveSiteEnvironment(deviceId, siteId, name, value) {
 export async function deleteSiteEnvironment(deviceId, siteId, name) {
     return request('DELETE', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/env?name=${encodeURIComponent(name)}`);
 }
+export async function getSiteWebhook(deviceId, siteId) {
+    return request('GET', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/webhook`);
+}
+export async function setSiteWebhook(deviceId, siteId, enabled, allowProjectCode = false) {
+    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/webhook`, { enabled, allow_project_code: allowProjectCode });
+}
 
 // === Admin ===
 
