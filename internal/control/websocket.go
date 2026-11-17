@@ -206,6 +206,9 @@ func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 		Hostname:     req.Hostname,
 		TailscaleIP:  req.TailscaleIp,
 		AgentVersion: req.AgentVersion,
+		Platform: req.Platform,
+		Architecture: req.Architecture,
+		Capabilities: req.Capabilities,
 	}
 	device, err = srv.db.UpsertDevice(ctx, device)
 	if err != nil {
