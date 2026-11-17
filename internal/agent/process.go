@@ -1052,40 +1052,12 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 		m.mu.Unlock()
 		hadPrevious = false
 	}
-	tx := deploymentTransaction{Version: 1, SiteID: siteID, State: "activating", CandidateCommit: commit, HadPrevious: hadPrevious, Previous: previous}
-	if err := m.createDeploymentTransaction(tx); err != nil {
-		return 0, fmt.Errorf("persist rollback recovery journal: %w", err)
-	}
-	if hadPrevious {
-		if err := m.stopSiteLocked(siteID); err != nil {
-			if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr == nil {
-				_ = m.removeDeploymentTransaction(siteID)
-			}
-			return 0, fmt.Errorf("stop current release: %w", err)
-		}
-	}
 	runPath := filepath.Join("sites", siteID, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
-	pid, startErr := m.startSiteWithCommandLocked(siteID, runPath, port, runtime, nil, startCommand)
-	if startErr != nil {
-		if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr != nil {
-			return 0, fmt.Errorf("rollback activation failed (%v); recovery journal retained because restoration failed (%v)", startErr, recoveryErr)
-		}
-		if cleanupErr := m.removeDeploymentTransaction(siteID); cleanupErr != nil {
-			return 0, fmt.Errorf("rollback activation failed (%v); previous release restored but journal cleanup failed (%v)", startErr, cleanupErr)
-		}
-		return 0, fmt.Errorf("could not activate release %s: %w", commit, startErr)
-	}
-	tx.State = "committed"
-	if err := m.persistDeploymentTransaction(tx); err != nil {
-		if recoveryErr := m.rollbackDeploymentTransaction(tx); recoveryErr != nil {
-			return 0, fmt.Errorf("rollback started but commit journal failed (%v); recovery also failed (%v)", err, recoveryErr)
-		}
-		_ = m.removeDeploymentTransaction(siteID)
-		return 0, fmt.Errorf("rollback started but could not commit journal; previous release restored: %w", err)
-	}
-	_ = m.removeDeploymentTransaction(siteID)
-	return pid, nil
+	tx := deploymentTransaction{Version:1, SiteID:siteID, State:"activating", CandidateCommit:commit, HadPrevious:hadPrevious, Previous:previous}
+	pid, startErr := m.activateBlueGreenRelease(context.Background(), tx, runPath, port, runtime, nil, startCommand, "")
+	if startErr != nil { return 0, fmt.Errorf("could not activate release %s: %w", commit, startErr) }
+
 }
 
 // BuildSite runs the Android-native local provider for a site. Project code is
