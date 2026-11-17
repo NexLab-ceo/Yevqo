@@ -79,3 +79,23 @@ func TestLogStreamReplayIsBoundedAndCarriesEpoch(t *testing.T) {
 		t.Fatalf("first replay seq = %v, want 173 (latest 128 of 300)", event["seq"])
 	}
 }
+
+
+func TestLogStreamHubPublishesDeploymentProgressToMatchingSite(t *testing.T) {
+ hub := newLogStreamHub()
+ matching := hub.subscribe(5, 9, "app", 0)
+ other := hub.subscribe(5, 9, "other", 0)
+ defer hub.unsubscribe(matching)
+ defer hub.unsubscribe(other)
+ hub.publishDeployment(5, 9, shared.DeploymentJobEvent{SiteId:"app", JobId:"job-1", State:"building", Progress:60, Message:"building", Timestamp:time.Now().UTC()})
+ select {
+ case raw := <-matching.messages:
+  var event map[string]interface{}
+  if err := json.Unmarshal(raw, &event); err != nil { t.Fatal(err) }
+  if event["type"] != "deployment_job" || event["job_id"] != "job-1" || event["state"] != "building" || event["progress"] != float64(60) {
+   t.Fatalf("unexpected deployment event: %#v", event)
+  }
+ case <-time.After(time.Second): t.Fatal("deployment event was not delivered")
+ }
+ select { case <-other.messages: t.Fatal("deployment event leaked to another site"); default: }
+}
