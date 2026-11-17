@@ -731,10 +731,10 @@ func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int
 	output := strings.Builder{}
 	output.Write(cloneOutput)
 	if cloneErr != nil {
-	\tif cloneCtx.Err() == context.DeadlineExceeded {
-	\t\treturn 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout timed out after 10 minutes")
-	\t}
-	\treturn 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout failed: %w", cloneErr)
+		if cloneCtx.Err() == context.DeadlineExceeded {
+			return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout timed out after 10 minutes")
+		}
+		return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git checkout failed: %w", cloneErr)
 	}
 
 	commitBytes, err := exec.Command("git", "-C", stageDir, "rev-parse", "HEAD").Output()
