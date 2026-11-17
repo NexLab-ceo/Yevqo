@@ -56,7 +56,7 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 
 ## P2 — Platform capabilities
 
-- [ ] App templates and one-click starters.
+- [ ] App templates and one-click starters. (Initial built-in runtime starters are exposed in the device create-site dialog; framework/Git templates and full one-click build/deploy remain open. See [app templates](app-templates.md).)
 - [ ] Preview deployments and staging environments.
 - [ ] Build plugins/providers.
 - [ ] Remote Linux build executor for Dockerfile/Nixpacks/Railpack.
