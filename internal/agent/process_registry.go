@@ -100,14 +100,26 @@ func (r *ProcessRegistry) List() []ProcessRecord {
 }
 
 func (r *ProcessRegistry) persistLocked() error {
-	if err := os.MkdirAll(filepath.Dir(r.path), 0700); err != nil { return err }
+	dir := filepath.Dir(r.path)
+	if err := os.MkdirAll(dir, 0700); err != nil { return err }
 	data, err := json.MarshalIndent(r.rows, "", "  ")
 	if err != nil { return err }
-	tmp := r.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil { return err }
-	if err := os.Rename(tmp, r.path); err != nil {
-		_ = os.Remove(tmp)
-		return err
+
+	// Use a unique same-directory temporary file. Multiple ProcessRegistry
+	// instances may briefly coexist during Agent recovery and must never race
+	// over a shared ".tmp" pathname.
+	tmp, err := os.CreateTemp(dir, ".processes-*.tmp")
+	if err != nil { return fmt.Errorf("create process registry temp file: %w", err) }
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(0600); err != nil { _ = tmp.Close(); return fmt.Errorf("secure process registry temp file: %w", err) }
+	if _, err := tmp.Write(data); err != nil { _ = tmp.Close(); return fmt.Errorf("write process registry: %w", err) }
+	if err := tmp.Sync(); err != nil { _ = tmp.Close(); return fmt.Errorf("sync process registry: %w", err) }
+	if err := tmp.Close(); err != nil { return fmt.Errorf("close process registry temp file: %w", err) }
+	if err := os.Rename(tmpPath, r.path); err != nil { return fmt.Errorf("replace process registry: %w", err) }
+	if directory, err := os.Open(dir); err == nil {
+		_ = directory.Sync()
+		_ = directory.Close()
 	}
 	return nil
 }
