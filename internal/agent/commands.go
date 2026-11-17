@@ -3,6 +3,8 @@
 package agent
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -78,6 +80,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleSiteLifecycle(cmd, "restart")
 	case "deploy":
 		return h.handleSiteLifecycle(cmd, "deploy")
+	case "cancel_deployment_job":
+		return h.handleCancelDeploymentJob(cmd)
 	case "rebuild":
 		return h.handleSiteLifecycle(cmd, "rebuild")
 	case "list_site_releases":
@@ -219,7 +223,23 @@ func (h *CommandHandler) handleSiteLifecycle(cmd *shared.Command, action string)
 	case "deploy":
 		pid, output, commitHash, commitDate, err = h.processes.DeployGitSite(req, false)
 	case "rebuild":
-		pid, output, commitHash, commitDate, err = h.processes.DeployGitSite(req, true)
+		jobID, jobCtx, jobErr := h.processes.BeginDeploymentJob(req.SiteId)
+		if jobErr != nil { return errorResult(cmd.Id, jobErr.Error()) }
+		pid, output, commitHash, commitDate, err = h.processes.DeployGitSiteWithJob(jobCtx, jobID, req, true)
+		if err != nil {
+			state := "failed"; if errors.Is(jobCtx.Err(), context.Canceled) { state = "cancelled" }
+			h.processes.FinishDeploymentJob(req.SiteId, jobID, state, err.Error())
+		} else { h.processes.FinishDeploymentJob(req.SiteId, jobID, "healthy", "Deployment completed") }
+		return deploymentResult(cmd.Id, action, pid, req.Port, output, commitHash, commitDate, err)
+	case "deploy":
+		jobID, jobCtx, jobErr := h.processes.BeginDeploymentJob(req.SiteId)
+		if jobErr != nil { return errorResult(cmd.Id, jobErr.Error()) }
+		pid, output, commitHash, commitDate, err = h.processes.DeployGitSiteWithJob(jobCtx, jobID, req, false)
+		if err != nil {
+			state := "failed"; if errors.Is(jobCtx.Err(), context.Canceled) { state = "cancelled" }
+			h.processes.FinishDeploymentJob(req.SiteId, jobID, state, err.Error())
+		} else { h.processes.FinishDeploymentJob(req.SiteId, jobID, "healthy", "Deployment completed") }
+		return deploymentResult(cmd.Id, action, pid, req.Port, output, commitHash, commitDate, err)
 	}
 	if err != nil { return errorResult(cmd.Id, err.Error()) }
 	payload, _ := shared.Marshal(&shared.StartSiteResult{Pid: uint32(pid), Port: req.Port, CommitHash: commitHash, CommitDate: commitDate})
@@ -429,4 +449,18 @@ func (h *CommandHandler) handleGetSiteRestartPolicy(cmd *shared.Command) *shared
  payload, err := shared.Marshal(map[string]string{"policy": policy})
  if err != nil { return errorResult(cmd.Id, "could not encode restart policy") }
  return &shared.Result{Id: cmd.Id, Ok: true, Message: "restart policy loaded", Payload: payload}
+}
+
+
+func deploymentResult(cmdID, action string, pid int, port uint32, output, commitHash, commitDate string, err error) *shared.Result {
+ if err != nil { return errorResult(cmdID, err.Error()) }
+ payload, _ := shared.Marshal(&shared.StartSiteResult{Pid:uint32(pid), Port:port, CommitHash:commitHash, CommitDate:commitDate})
+ return &shared.Result{Id:cmdID, Ok:true, Message:fmt.Sprintf("%s completed (pid %d): %s", action, pid, output), Payload:payload}
+}
+
+func (h *CommandHandler) handleCancelDeploymentJob(cmd *shared.Command) *shared.Result {
+ var req shared.DeploymentJobAction
+ if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid cancel_deployment_job payload") }
+ if err := h.processes.CancelDeploymentJob(req.SiteId, req.JobId); err != nil { return errorResult(cmd.Id, err.Error()) }
+ return &shared.Result{Id:cmd.Id, Ok:true, Message:"deployment cancellation requested"}
 }
