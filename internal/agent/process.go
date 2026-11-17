@@ -937,7 +937,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 		hadPrevious = false
 	}
 	tx := deploymentTransaction{Version: 1, SiteID: req.SiteId, State: "activating", CandidateCommit: commit, HadPrevious: hadPrevious, Previous: previous}
-	if err := m.persistDeploymentTransaction(tx); err != nil {
+	if err := m.createDeploymentTransaction(tx); err != nil {
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("persist deployment recovery journal: %w", err)
 	}
 	if hadPrevious {
@@ -1086,7 +1086,7 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 		hadPrevious = false
 	}
 	tx := deploymentTransaction{Version: 1, SiteID: siteID, State: "activating", CandidateCommit: commit, HadPrevious: hadPrevious, Previous: previous}
-	if err := m.persistDeploymentTransaction(tx); err != nil {
+	if err := m.createDeploymentTransaction(tx); err != nil {
 		return 0, fmt.Errorf("persist rollback recovery journal: %w", err)
 	}
 	if hadPrevious {
