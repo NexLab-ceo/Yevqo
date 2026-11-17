@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,7 +26,7 @@ func readSiteBackupChunk(req shared.ReadSiteBackupChunk) (*shared.DatabaseBackup
 	file,err:=os.Open(path);if err!=nil{return nil,err};defer file.Close()
 	buf:=make([]byte,req.Length)
 	n,readErr:=file.ReadAt(buf,req.Offset)
-	if readErr!=nil && readErr.Error()!="EOF"{return nil,readErr}
+	if readErr!=nil && readErr!=io.EOF{return nil,readErr}
 	buf=buf[:n]
 	return &shared.DatabaseBackupChunk{Data:buf,Offset:req.Offset,TotalSize:info.Size(),Done:req.Offset+int64(n)>=info.Size()},nil
 }
