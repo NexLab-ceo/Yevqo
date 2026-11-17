@@ -72,16 +72,18 @@ type User struct {
 	LastSeen     *time.Time `json:"last_seen,omitempty"`
 }
 
-// MaxDevicesTotal — сколько телефонов можно подключить по тарифу.
-// Free is intentionally capped at one phone; referral bonuses never bypass
-// the Free plan limit. Commercial plans may use their configured allowance.
-func (u *User) MaxDevicesTotal() int {
-	if u.Status == UserFree {
-		return 1
-	}
-	limit := u.MaxDevices + u.BonusDevices
+// DeviceLimitFor returns the effective phone allowance for an account.
+// Free is intentionally capped at one phone; referral bonuses never bypass it.
+func DeviceLimitFor(status string, maxDevices, bonusDevices int) int {
+	if status == UserFree { return 1 }
+	limit := maxDevices + bonusDevices
 	if limit < 1 { return 1 }
 	return limit
+}
+
+// MaxDevicesTotal — сколько телефонов можно подключить по тарифу.
+func (u *User) MaxDevicesTotal() int {
+	return DeviceLimitFor(u.Status, u.MaxDevices, u.BonusDevices)
 }
 
 // ============================================================
