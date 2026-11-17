@@ -60,6 +60,7 @@ func (m *ProcessManager) waitForProcessExit(siteID string, pid int, startToken s
 	m.restartMu.Unlock()
 	_ = m.registry.Delete(siteID)
 	if intentional { return }
+	if record.RestartPolicy == "never" { return }
 	reason := "process exited unexpectedly"
 	if waitErr != nil { reason = fmt.Sprintf("process exited unexpectedly: %v", waitErr) }
 	m.emitProcessLog(siteID, reason)
@@ -108,6 +109,10 @@ func (m *ProcessManager) recoverSite(record ProcessRecord) {
 		if _, err := m.StartSite(record.SiteID, runPath, record.Port, record.Runtime); err != nil {
 			m.emitProcessLog(record.SiteID, fmt.Sprintf("automatic restart %d failed: %v", attempt, err))
 		 continue
+		}
+		if current, ok := m.registry.Get(record.SiteID); ok && record.RestartPolicy != "" {
+			current.RestartPolicy = record.RestartPolicy
+			_ = m.registry.Save(current)
 		}
 		m.emitProcessLog(record.SiteID, fmt.Sprintf("site recovered successfully (attempt %d)", attempt))
 		if current, ok := m.registry.Get(record.SiteID); ok { m.emitProcessStatus(record.SiteID, "running", current.PID) }
