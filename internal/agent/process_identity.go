@@ -25,7 +25,12 @@ func verifyProcessRecord(r ProcessRecord) bool {
 }
 func (m *ProcessManager) restoreProcesses() {
  for _,r:=range m.registry.List(){
-  if !validSiteID(r.SiteID)||!verifyProcessRecord(r){_ = m.registry.Delete(r.SiteID);continue}
+  if !validSiteID(r.SiteID) { _ = m.registry.Delete(r.SiteID); continue }
+  if !verifyProcessRecord(r) {
+   _ = m.registry.Delete(r.SiteID)
+   if shouldRecoverAfterAgentRestart(r.RestartPolicy) { go m.recoverSite(r) }
+   continue
+  }
   m.procs[r.SiteID]=&Process{SiteID:r.SiteID,PID:r.PID,Port:r.Port,Runtime:r.Runtime,LogPath:r.LogPath}
   go m.watchRestoredProcess(r)
  }
@@ -50,7 +55,10 @@ func (m *ProcessManager) watchRestoredProcess(record ProcessRecord) {
   if m.intentionalStops == nil { m.intentionalStops = make(map[string]bool) }
   intentional := m.intentionalStops[record.SiteID]
   m.restartMu.Unlock()
-  if !intentional { go m.recoverSite(record) }
+  if !intentional && shouldRecoverAfterAgentRestart(record.RestartPolicy) {
+   m.emitProcessStatus(record.SiteID, "error", 0)
+   go m.recoverSite(record)
+  }
   return
  }
 }
