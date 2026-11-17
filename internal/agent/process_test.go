@@ -23,6 +23,22 @@ func TestValidSiteID(t *testing.T) {
 	}
 }
 
+func TestCreateSiteGeneratesRunnableGoStarter(t *testing.T) {
+	root := t.TempDir()
+	manager := NewProcessManager(root)
+	if err := manager.CreateSite("go-demo", 8080, "go"); err != nil { t.Fatal(err) }
+	for _, name := range []string{"go.mod", "main.go"} {
+		if _, err := os.Stat(filepath.Join(root, "sites", "go-demo", name)); err != nil {
+			t.Fatalf("Go starter file %s missing: %v", name, err)
+		}
+	}
+	mainSource, err := os.ReadFile(filepath.Join(root, "sites", "go-demo", "main.go"))
+	if err != nil { t.Fatal(err) }
+	if !strings.Contains(string(mainSource), "http.ListenAndServe") || !strings.Contains(string(mainSource), "os.Getenv(\"PORT\")") {
+		t.Fatalf("Go starter does not contain an HTTP server using PORT: %s", mainSource)
+	}
+}
+
 func TestCreateSiteIsNonDestructive(t *testing.T) {
 	root := t.TempDir()
 	manager := NewProcessManager(root)
