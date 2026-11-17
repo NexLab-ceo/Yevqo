@@ -70,6 +70,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleStartSite(cmd)
 	case "stop_site":
 		return h.handleStopSite(cmd)
+	case "set_site_restart_policy":
+		return h.handleSetSiteRestartPolicy(cmd)
 	case "restart":
 		return h.handleSiteLifecycle(cmd, "restart")
 	case "deploy":
@@ -406,4 +408,12 @@ func (h *CommandHandler) handlePruneSiteReleases(cmd *shared.Command) *shared.Re
 		return errorResult(cmd.Id, "could not encode release pruning result")
 	}
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: fmt.Sprintf("removed %d old release(s)", len(removed)), Payload: payload}
+}
+
+
+func (h *CommandHandler) handleSetSiteRestartPolicy(cmd *shared.Command) *shared.Result {
+ var req shared.SetSiteRestartPolicy
+ if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid set_site_restart_policy payload") }
+ if err := h.processes.SetRestartPolicy(req.SiteId, req.Policy); err != nil { return errorResult(cmd.Id, err.Error()) }
+ return &shared.Result{Id: cmd.Id, Ok: true, Message: "restart policy saved: " + req.Policy}
 }
