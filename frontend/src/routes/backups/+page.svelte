@@ -36,6 +36,7 @@
    chunks.push(bytes);offset+=bytes.length;
    if(offset>total){failed='Размер архива превышает объявленный';break}
    if(r.data.eof&&offset!==total){failed='Архив завершился раньше ожидаемого размера';break}
+   if(offset===total&&!r.data.eof){failed='Последняя часть архива не помечена как завершающая';break}
   }
   downloadingId=0;
   if(failed){notify(failed,'error');return}
