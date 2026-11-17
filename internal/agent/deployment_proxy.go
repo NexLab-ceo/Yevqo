@@ -151,6 +151,9 @@ func (m *ProcessManager) ensureDeploymentProxy(siteID string, publicPort, backen
 	defer m.mu.Unlock()
 	if m.proxies == nil { m.proxies = make(map[string]*deploymentProxy) }
 	if existing := m.proxies[siteID]; existing != nil {
+		if address, ok := existing.listener.Addr().(*net.TCPAddr); ok && address.Port != publicPort {
+			return fmt.Errorf("stable listener for site %s is bound to port %d, not configured port %d", siteID, address.Port, publicPort)
+		}
 		return existing.switchBackend(backendPort)
 	}
 	proxy, err := newDeploymentProxy(publicPort, backendPort)
