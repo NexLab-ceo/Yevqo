@@ -20,7 +20,7 @@
     let logsSiteId = '';
     let busy = false;
 
-    // Форма нового сайта.
+    // Форма нового сайта. Шаблоны используют существующий безопасный Agent create_site lifecycle.
     let newSite = { site_id: '', port: 8000, runtime: 'php' };
 
     // Загружаем данные устройства.
@@ -282,13 +282,14 @@
             />
         </div>
         <div class="form-group">
-            <label class="form-label" for="runtime">Runtime</label>
+            <label class="form-label" for="runtime">Стартовый шаблон</label>
             <select id="runtime" class="input" bind:value={newSite.runtime}>
-                <option value="php">PHP</option>
-                <option value="go">Go</option>
-                <option value="nodejs">Node.js</option>
-                <option value="static">Статика</option>
+                <option value="static">Static Website — готовая index.html</option>
+                <option value="php">PHP Website — готовая index.php</option>
+                <option value="nodejs">Node.js HTTP — package.json + server.js</option>
+                <option value="go">Go Application — структура проекта и README</option>
             </select>
+            <p class="form-hint">Yevqo создаст каталог и стартовые файлы на устройстве. После создания сайт можно подключить к Git и развернуть через Deployment Engine.</p>
         </div>
 
         <svelte:fragment slot="footer">
