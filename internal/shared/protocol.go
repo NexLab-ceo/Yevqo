@@ -292,6 +292,18 @@ type SiteRelease struct {
 	Runtime string `json:"runtime,omitempty"`
 }
 
+type RunScheduledTask struct {
+	SiteId string `json:"site_id"`
+	TaskID int64 `json:"task_id"`
+	Command string `json:"command"`
+	TimeoutSeconds int `json:"timeout_seconds"`
+}
+type ScheduledTaskResult struct {
+	ExitCode int `json:"exit_code"`
+	Output string `json:"output"`
+	DurationMS int64 `json:"duration_ms"`
+}
+
 type GetSiteMetrics struct { SiteId string `json:"site_id"` }
 type SiteMetricsResult struct {
 	SiteId string `json:"site_id"`
