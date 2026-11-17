@@ -43,6 +43,7 @@ func TestDeploymentRecoveryCrashBoundaries(t *testing.T) {
 				cmd := exec.Command(command, args...)
 				cmd.SysProcAttr = procAttr()
 				if err := cmd.Start(); err != nil { t.Fatalf("start helper process: %v", err) }
+				if command == "python3" { if err := waitForTCP(port, 5*time.Second); err != nil { _ = cmd.Process.Kill(); _ = cmd.Wait(); t.Fatalf("wait for previous release: %v", err) } }
 				token, err := processStartToken(cmd.Process.Pid)
 				if err != nil { _ = cmd.Process.Kill(); _ = cmd.Wait(); t.Fatal(err) }
 				return cmd, ProcessRecord{SiteID:"demo", PID:cmd.Process.Pid, ProcessGroup:cmd.Process.Pid,
