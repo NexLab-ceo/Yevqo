@@ -96,7 +96,7 @@ func (p *deploymentProxy) switchBackendAndGetPrevious(backendPort int) (*deploym
 	defer p.targetMu.Unlock()
 	current := p.target.Load()
 	if current != nil && current.target.Host == target.Host { return nil, nil }
-	p.target.Store(&deploymentBackend{target:target})
+	p.target.Store(newDeploymentBackend(target))
 	return current, nil
 }
 
