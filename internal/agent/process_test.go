@@ -163,3 +163,13 @@ func TestRollbackRejectsReleaseSymlinkEscape(t *testing.T) {
 	manager:=&ProcessManager{DataRoot:root}
 	if _,err:=manager.RollbackSiteRelease("demo",commit,".","nodejs",3000);err==nil||!strings.Contains(err.Error(),"outside release history"){t.Fatalf("expected release symlink escape to be rejected, got %v",err)}
 }
+
+func TestSafeSiteDirectoryRejectsInternalSiteSymlink(t *testing.T) {
+	root := t.TempDir()
+	sites := filepath.Join(root, "sites")
+	if err := os.MkdirAll(filepath.Join(sites, "real"), 0700); err != nil { t.Fatal(err) }
+	if err := os.Symlink(filepath.Join(sites, "real"), filepath.Join(sites, "alias")); err != nil { t.Skipf("symlinks unavailable: %v", err) }
+	if _, err := safeSiteDirectory(root, "alias"); err == nil {
+		t.Fatal("expected internal site symlink to be rejected")
+	}
+}
