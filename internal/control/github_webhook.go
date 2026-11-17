@@ -79,12 +79,7 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil || !enabled || len(encrypted) < 13 { http.NotFound(w, r); return }
 	secret, err := decryptCredential(s.credentialKey, encrypted[:12], encrypted[12:])
 	if err != nil { http.Error(w, "webhook configuration unavailable", http.StatusInternalServerError); return }
-	signature := strings.TrimSpace(r.Header.Get("X-Hub-Signature-256"))
-	if !strings.HasPrefix(signature, "sha256=") { http.Error(w, "invalid signature", http.StatusUnauthorized); return }
-	provided, err := hex.DecodeString(strings.TrimPrefix(signature, "sha256="))
-	if err != nil { http.Error(w, "invalid signature", http.StatusUnauthorized); return }
-	mac := hmac.New(sha256.New, secret); _, _ = mac.Write(body)
-	if !hmac.Equal(provided, mac.Sum(nil)) { http.Error(w, "invalid signature", http.StatusUnauthorized); return }
+	if !validGitHubWebhookSignature(r.Header.Get("X-Hub-Signature-256"), body, secret) { http.Error(w, "invalid signature", http.StatusUnauthorized); return }
 
 	var event struct { Ref string `json:"ref"`; After string `json:"after"`; Deleted bool `json:"deleted"` }
 	if err := json.Unmarshal(body, &event); err != nil { http.Error(w, "invalid webhook payload", http.StatusBadRequest); return }
@@ -93,11 +88,6 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	if err := s.db.conn.QueryRowContext(r.Context(), `SELECT git_branch FROM sites WHERE device_id=? AND site_id=?`, deviceID, parts[1]).Scan(&branch); err != nil { http.NotFound(w, r); return }
 	if event.Deleted || event.Ref != "refs/heads/"+branch { w.WriteHeader(http.StatusAccepted); return }
 	if !validWebhookCommit(event.After) { http.Error(w, "invalid commit", http.StatusBadRequest); return }
-	delivery := strings.TrimSpace(r.Header.Get("X-GitHub-Delivery"))
-	if delivery == "" || len(delivery) > 128 { http.Error(w, "missing delivery id", http.StatusBadRequest); return }
-	res, err := s.db.conn.ExecContext(r.Context(), `INSERT IGNORE INTO github_webhook_deliveries(device_id,site_id,delivery_id,status) VALUES(?,?,?,'accepted')`, deviceID, parts[1], delivery)
-	if err != nil { http.Error(w, "could not record webhook delivery", http.StatusInternalServerError); return }
-	if n, _ := res.RowsAffected(); n == 0 { w.WriteHeader(http.StatusAccepted); return }
 
 	var userID int64
 	var sitePath, runtime string
@@ -112,6 +102,11 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil { http.Error(w, "Git settings unavailable", http.StatusInternalServerError); return }
 	env, err := s.siteRuntimeEnvironment(r.Context(), userID, deviceID, parts[1])
 	if err != nil { http.Error(w, "site environment unavailable", http.StatusInternalServerError); return }
+	delivery := strings.TrimSpace(r.Header.Get("X-GitHub-Delivery"))
+	if delivery == "" || len(delivery) > 128 { http.Error(w, "missing delivery id", http.StatusBadRequest); return }
+	res, err := s.db.conn.ExecContext(r.Context(), `INSERT IGNORE INTO github_webhook_deliveries(device_id,site_id,delivery_id,status) VALUES(?,?,?,'accepted')`, deviceID, parts[1], delivery)
+	if err != nil { http.Error(w, "could not record webhook delivery", http.StatusInternalServerError); return }
+	if n, _ := res.RowsAffected(); n == 0 { w.WriteHeader(http.StatusAccepted); return }
 	action := &shared.SiteAction{SiteId: parts[1], Path: sitePath, Port: uint32(port), Runtime: runtime, GitURL: gitCfg.GitURL, GitBranch: branch, GitCommit: event.After, BuildCommand: gitCfg.BuildCommand, RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, HealthCheckPath: gitCfg.HealthCheckPath, StartCommand: gitCfg.StartCommand, AllowProjectCode: true, Env: env}
 	_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(userID), DeviceID: shared.PtrInt64(deviceID), Action: "github_webhook_accepted", Details: map[string]interface{}{"site_id": parts[1], "commit": event.After, "delivery": delivery}, IP: clientIP(r)})
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "accepted": true, "commit": event.After})
@@ -132,6 +127,17 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		_, _ = s.db.conn.ExecContext(context.Background(), `INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`, userID, map[bool]string{true:"error",false:"success"}[status=="failed"], title, truncateNotification(message))
 		_ = s.db.Log(context.Background(), &shared.LogEntry{UserID: shared.PtrInt64(userID), DeviceID: shared.PtrInt64(deviceID), Action: "github_webhook_deployment_"+status, Details: map[string]interface{}{"site_id": parts[1], "commit": event.After, "delivery": delivery}})
 	}()
+}
+
+
+func validGitHubWebhookSignature(signature string, body, secret []byte) bool {
+	signature = strings.TrimSpace(signature)
+	if !strings.HasPrefix(signature, "sha256=") { return false }
+	provided, err := hex.DecodeString(strings.TrimPrefix(signature, "sha256="))
+	if err != nil || len(provided) != sha256.Size { return false }
+	mac := hmac.New(sha256.New, secret)
+	_, _ = mac.Write(body)
+	return hmac.Equal(provided, mac.Sum(nil))
 }
 
 func validWebhookCommit(value string) bool {
