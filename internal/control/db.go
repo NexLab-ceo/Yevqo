@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -179,55 +180,72 @@ func (db *DB) AddBonusDevice(ctx context.Context, userID int64, n int) error {
 // ============================================================
 
 func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Device, error) {
-	existing, err := db.GetDeviceByUUID(ctx, d.DeviceID)
-	if err != nil && !isNotFound(err) {
-		return nil, err
+	// Serialize registrations per account. Locking the user row prevents two
+	// simultaneous first-time Agent connections from both passing the limit.
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil { return nil, fmt.Errorf("begin device registration: %w", err) }
+	defer tx.Rollback()
+
+	var maxDevices, bonusDevices int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT max_devices, bonus_devices FROM users WHERE id = ? FOR UPDATE`, d.UserID,
+	).Scan(&maxDevices, &bonusDevices); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { return nil, shared.ErrNotFound("user not found") }
+		return nil, fmt.Errorf("lock device owner: %w", err)
 	}
 
-	if existing != nil {
-		// A device UUID is globally unique. Never let a token owned by another
-		// account rebind or take over an already paired device.
+	var existing shared.Device
+	err = tx.QueryRowContext(ctx, `
+		SELECT id, user_id, device_id, hostname, tailscale_ip,
+		       agent_version, status, created_at, last_seen
+		FROM devices WHERE device_id = ? FOR UPDATE`, d.DeviceID,
+	).Scan(&existing.ID, &existing.UserID, &existing.DeviceID, &existing.Hostname,
+		&existing.TailscaleIP, &existing.AgentVersion, &existing.Status,
+		&existing.CreatedAt, &existing.LastSeen)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("lookup registered device: %w", err)
+	}
+
+	now := shared.Now()
+	if err == nil {
+		// Device UUIDs are globally unique and cannot be rebound across accounts.
 		if existing.UserID != d.UserID {
 			return nil, shared.ErrForbidden("device is already paired to another account")
 		}
-		query := `
-			UPDATE devices
-			SET tailscale_ip = ?, hostname = ?, agent_version = ?,
-			    status = ?, last_seen = ?
-			WHERE id = ?`
-		now := shared.Now()
-		_, err := db.conn.ExecContext(ctx, query,
-			d.TailscaleIP, d.Hostname, d.AgentVersion,
-			shared.DeviceOnline, now, existing.ID,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("update device: %w", err)
-		}
-		existing.TailscaleIP = d.TailscaleIP
-		existing.Hostname = d.Hostname
-		existing.AgentVersion = d.AgentVersion
-		existing.Status = shared.DeviceOnline
-		existing.LastSeen = &now
-		return existing, nil
+		_, err = tx.ExecContext(ctx, `
+			UPDATE devices SET tailscale_ip = ?, hostname = ?, agent_version = ?,
+				status = ?, last_seen = ? WHERE id = ?`,
+			d.TailscaleIP, d.Hostname, d.AgentVersion, shared.DeviceOnline, now, existing.ID)
+		if err != nil { return nil, fmt.Errorf("update device: %w", err) }
+		existing.TailscaleIP, existing.Hostname = d.TailscaleIP, d.Hostname
+		existing.AgentVersion, existing.Status, existing.LastSeen = d.AgentVersion, shared.DeviceOnline, &now
+		if err := tx.Commit(); err != nil { return nil, fmt.Errorf("commit device heartbeat: %w", err) }
+		return &existing, nil
 	}
 
-	query := `
-		INSERT INTO devices
-			(user_id, device_id, hostname, tailscale_ip, agent_version, status, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`
-	now := shared.Now()
-	res, err := db.conn.ExecContext(ctx, query,
-		d.UserID, d.DeviceID, d.Hostname, d.TailscaleIP,
-		d.AgentVersion, shared.DeviceOnline, now,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("insert device: %w", err)
+	count := 0
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM devices WHERE user_id = ?`, d.UserID).Scan(&count); err != nil {
+		return nil, fmt.Errorf("count registered devices: %w", err)
 	}
-	id, _ := res.LastInsertId()
-	d.ID = id
-	d.Status = shared.DeviceOnline
-	d.CreatedAt = now
-	d.LastSeen = &now
+	limit := maxDevices + bonusDevices
+	if limit < 1 { limit = 1 }
+	if count >= limit {
+		return nil, shared.ErrForbidden("device limit reached: your current plan allows " + strconv.Itoa(limit) + " connected phone(s); disconnect a phone or upgrade your plan")
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO devices (user_id, device_id, hostname, tailscale_ip, agent_version, status, last_seen)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		d.UserID, d.DeviceID, d.Hostname, d.TailscaleIP, d.AgentVersion, shared.DeviceOnline, now)
+	if err != nil { return nil, fmt.Errorf("insert device: %w", err) }
+	id, err := tx.ExecContext(ctx, "SELECT LAST_INSERT_ID()")
+	if err != nil { return nil, fmt.Errorf("read registered device id: %w", err) }
+	_ = id
+	if err := tx.QueryRowContext(ctx, "SELECT id FROM devices WHERE device_id = ?", d.DeviceID).Scan(&d.ID); err != nil {
+		return nil, fmt.Errorf("read registered device: %w", err)
+	}
+	d.Status, d.CreatedAt, d.LastSeen = shared.DeviceOnline, now, &now
+	if err := tx.Commit(); err != nil { return nil, fmt.Errorf("commit device registration: %w", err) }
 	return d, nil
 }
 
