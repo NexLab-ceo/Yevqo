@@ -85,6 +85,26 @@ func (h *logStreamHub) publish(userID, deviceID int64, event shared.LogEvent) {
  h.history=append(h.history,logReplayEntry{userID:userID,deviceID:deviceID,siteID:event.SiteId,seq:seq,payload:payload}); if len(h.history)>2000 {h.history=append([]logReplayEntry(nil),h.history[len(h.history)-2000:]...)}
  for sub:=range h.subscribers {if sub.userID!=userID||sub.deviceID!=deviceID||sub.siteID!=event.SiteId {continue};select{case sub.messages<-payload:default:select{case <-sub.messages:default:};select{case sub.messages<-payload:default:}}};h.mu.Unlock()
 }
+func (h *logStreamHub) publishDeployment(userID, deviceID int64, event shared.DeploymentJobEvent) {
+ key := logStreamKey(userID, deviceID, event.SiteId)
+ h.mu.Lock()
+ h.sequence[key]++
+ seq := h.sequence[key]
+ payload, err := json.Marshal(map[string]interface{}{
+  "type":"deployment_job", "stream_id":h.streamID, "device_id":deviceID,
+  "site_id":event.SiteId, "job_id":event.JobId, "state":event.State,
+  "progress":event.Progress, "message":event.Message, "timestamp":event.Timestamp, "seq":seq,
+ })
+ if err != nil { h.mu.Unlock(); return }
+ h.history = append(h.history, logReplayEntry{userID:userID, deviceID:deviceID, siteID:event.SiteId, seq:seq, payload:payload})
+ if len(h.history)>2000 { h.history=append([]logReplayEntry(nil), h.history[len(h.history)-2000:]...) }
+ for sub := range h.subscribers {
+  if sub.userID!=userID || sub.deviceID!=deviceID || sub.siteID!=event.SiteId { continue }
+  select { case sub.messages<-payload: default: select { case <-sub.messages: default: }; select { case sub.messages<-payload: default: } }
+ }
+ h.mu.Unlock()
+}
+
 func validLogSiteID(value string) bool {
 	if len(value) == 0 || len(value) > 64 { return false }
 	for _, r := range value {
