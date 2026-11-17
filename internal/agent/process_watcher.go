@@ -63,8 +63,7 @@ func (m *ProcessManager) waitForProcessExit(siteID string, pid int, startToken s
 	m.restartMu.Unlock()
 	_ = m.registry.Delete(siteID)
 	if intentional { return }
-	if record.RestartPolicy == "never" { return }
-	if record.RestartPolicy == "on-failure" && waitErr == nil { return }
+	if !shouldRestart(record.RestartPolicy, waitErr) { return }
 	reason := "process exited unexpectedly"
 	if waitErr != nil { reason = fmt.Sprintf("process exited unexpectedly: %v", waitErr) }
 	m.emitProcessLog(siteID, reason)
