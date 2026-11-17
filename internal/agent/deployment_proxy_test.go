@@ -49,7 +49,9 @@ func TestDeploymentProxySwitchesBackendAtomically(t *testing.T) {
 	}
 
 	request("first")
-	if err := proxy.switchBackend(secondPort); err != nil { t.Fatal(err) }
+	previous, err := proxy.switchBackendAndGetPrevious(secondPort)
+	if err != nil { t.Fatal(err) }
+	if err := waitForDeploymentBackendDrain(previous, time.Second); err != nil { t.Fatalf("drain previous backend: %v", err) }
 	request("second")
 }
 
