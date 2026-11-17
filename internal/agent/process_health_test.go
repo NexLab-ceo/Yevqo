@@ -1,6 +1,7 @@
 package agent
 
 import (
+ "context"
  "net/http"
  "net/http/httptest"
  "strconv"
@@ -48,4 +49,12 @@ func TestValidHealthCheckPath(t *testing.T) {
  for _, path := range []string{"health", "//example.com", "/../secret", "/bad\rpath", strings.Repeat("a", 256)} {
   if validHealthCheckPath(path) { t.Errorf("expected path %q to be rejected", path) }
  }
+}
+
+
+func TestWaitForHTTPHonorsCancellation(t *testing.T) {
+ ctx, cancel := context.WithCancel(context.Background())
+ cancel()
+ err := waitForHTTPContext(ctx, 65000, "/health", time.Second)
+ if err != context.Canceled { t.Fatalf("expected cancellation, got %v", err) }
 }
