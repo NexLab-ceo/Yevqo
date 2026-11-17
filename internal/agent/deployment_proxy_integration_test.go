@@ -77,10 +77,12 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 
 	stopRequests := make(chan struct{})
 	requestErrors := make(chan error, 1)
+	requestDone := make(chan struct{})
 	var stopOnce sync.Once
 	stopRequestLoop := func() { stopOnce.Do(func() { close(stopRequests) }) }
 	defer stopRequestLoop()
 	go func() {
+		defer close(requestDone)
 		for {
 			select { case <-stopRequests: return; default: }
 			resp, requestErr := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", publicPort))
@@ -93,6 +95,7 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 				select { case requestErrors <- fmt.Errorf("stable listener returned HTTP %d during switch", resp.StatusCode): default: }
 				return
 			}
+			time.Sleep(5*time.Millisecond)
 		}
 	}()
 
@@ -106,6 +109,7 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 		t.Fatalf("second release did not switch backend: %#v", secondRecord)
 	}
 	stopRequestLoop()
+	<-requestDone
 	select { case requestErr := <-requestErrors: t.Fatalf("zero-downtime traffic check failed: %v", requestErr); default: }
 	readBody("release-two")
 	if verifyProcessRecord(firstRecord) { t.Fatal("previous release process was not stopped after traffic switch") }
