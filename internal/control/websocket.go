@@ -4,6 +4,7 @@ package control
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -199,15 +200,6 @@ func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 		return
 	}
 
-	count, _ := srv.db.CountDevicesByUser(ctx, user.ID)
-	if count >= user.MaxDevicesTotal() {
-		existing, _ := srv.db.GetDeviceByUUID(ctx, req.DeviceId)
-		if existing == nil {
-			c.sendAuthError("device limit reached")
-			return
-		}
-	}
-
 	device := &shared.Device{
 		UserID:       user.ID,
 		DeviceID:     req.DeviceId,
@@ -217,7 +209,12 @@ func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 	}
 	device, err = srv.db.UpsertDevice(ctx, device)
 	if err != nil {
-		c.sendAuthError("db error")
+		var apiErr *shared.APIError
+		if errors.As(err, &apiErr) {
+			c.sendAuthError(apiErr.Message)
+		} else {
+			c.sendAuthError("device registration failed")
+		}
 		log.Printf("upsert device: %v", err)
 		return
 	}
