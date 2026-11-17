@@ -112,6 +112,13 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 	if !ok || secondRecord.PID != secondPID || secondRecord.Port != publicPort || secondRecord.BackendPort == firstRecord.BackendPort {
 		t.Fatalf("second release did not switch backend: %#v", secondRecord)
 	}
+	backendResponse, backendErr := http.Get(fmt.Sprintf("http://127.0.0.1:%d/", secondRecord.BackendPort))
+	if backendErr != nil { t.Fatalf("candidate backend is unreachable on port %d: %v", secondRecord.BackendPort, backendErr) }
+	backendBody, backendReadErr := io.ReadAll(backendResponse.Body)
+	_ = backendResponse.Body.Close()
+	if backendReadErr != nil || backendResponse.StatusCode != http.StatusOK || strings.TrimSpace(string(backendBody)) != "release-two" {
+		t.Fatalf("candidate backend is not serving the expected release: status=%d body=%q read_error=%v", backendResponse.StatusCode, strings.TrimSpace(string(backendBody)), backendReadErr)
+	}
 	stopRequestLoop()
 	<-requestDone
 	select { case requestErr := <-requestErrors: t.Fatalf("zero-downtime traffic check failed: %v", requestErr); default: }
