@@ -276,15 +276,17 @@ func (m *ProcessManager) StartSite(siteID, path string, port int, runtime string
 }
 
 func (m *ProcessManager) StartSiteWithEnv(siteID, path string, port int, runtime string, extraEnv map[string]string) (int, error) {
-	m.operationMu.Lock()
-	defer m.operationMu.Unlock()
-	return m.startSiteWithEnvLocked(siteID, path, port, runtime, extraEnv)
+ return m.StartSiteWithEnvAndCommand(siteID, path, port, runtime, extraEnv, "")
 }
 
 func (m *ProcessManager) StartSiteWithCommand(siteID, path string, port int, runtime, startCommand string) (int, error) {
+ return m.StartSiteWithEnvAndCommand(siteID, path, port, runtime, nil, startCommand)
+}
+
+func (m *ProcessManager) StartSiteWithEnvAndCommand(siteID, path string, port int, runtime string, extraEnv map[string]string, startCommand string) (int, error) {
  m.operationMu.Lock()
  defer m.operationMu.Unlock()
- return m.startSiteWithCommandLocked(siteID, path, port, runtime, nil, startCommand)
+ return m.startSiteWithCommandLocked(siteID, path, port, runtime, extraEnv, startCommand)
 }
 
 func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, runtime string, extraEnv map[string]string) (int, error) {
