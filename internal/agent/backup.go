@@ -41,6 +41,10 @@ func createSiteBackup(dataRoot, siteID string) (*shared.SiteBackupResult, error)
 		if entry.Type()&os.ModeSymlink != 0 { return nil }
 		rel, err := filepath.Rel(siteDir, path)
 		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return fmt.Errorf("invalid archive path") }
+		if rel == ".yevqo" || strings.HasPrefix(rel, ".yevqo"+string(filepath.Separator)) {
+			if entry.IsDir() { return filepath.SkipDir }
+			return nil
+		}
 		info, err := entry.Info()
 		if err != nil { return err }
 		header, err := tar.FileInfoHeader(info, "")
