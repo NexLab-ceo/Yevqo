@@ -405,9 +405,11 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 	_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(dev.UserID), DeviceID: shared.PtrInt64(dev.ID), Action: req.Action, Details: details, IP: clientIP(r)})
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":      result.Ok,
-		"message": result.Message,
-		"payload": result.Payload,
+		"ok":        result.Ok,
+		"message":   result.Message,
+		"payload":   result.Payload,
+		"error_code": result.ErrorCode,
+		"retryable": result.Retryable,
 	})
 }
 
