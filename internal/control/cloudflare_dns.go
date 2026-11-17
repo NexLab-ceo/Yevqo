@@ -15,6 +15,24 @@ import (
 )
 
 const cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
+var cloudflareZoneIDPattern = regexp.MustCompile(`^[a-fA-F0-9]{32}package control
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"regexp"
+	"strings"
+	"time"
+
+	"veltrix/internal/shared"
+)
+
+const cloudflareAPIBase = "https://api.cloudflare.com/client/v4"
+)
 var cloudflareTunnelIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 type cloudflareAPIEnvelope struct {
@@ -41,6 +59,7 @@ func cloudflareAPIRequest(ctx context.Context, token, method, endpoint string, b
 	return nil
 }
 
+func validCloudflareZoneID(value string) bool { return cloudflareZoneIDPattern.MatchString(value) }
 func validCloudflareTunnelID(value string) bool { return cloudflareTunnelIDPattern.MatchString(value) }
 func hostnameBelongsToZone(hostname, zone string) bool {
 	hostname=strings.ToLower(strings.TrimSuffix(strings.TrimSpace(hostname),"."))
@@ -69,12 +88,12 @@ func (s *Server) handleCloudflareConfig(w http.ResponseWriter,r *http.Request){
 		var in struct{Token string `json:"token"`;ZoneID string `json:"zone_id"`}
 		if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid Cloudflare configuration"));return}
 		in.Token=strings.TrimSpace(in.Token);in.ZoneID=strings.TrimSpace(in.ZoneID)
-		if len(in.Token)<20||len(in.Token)>4096||strings.ContainsAny(in.Token,"\r\n\x00")||len(in.ZoneID)<16||len(in.ZoneID)>64{apiError(w,shared.ErrBadRequest("enter a valid scoped API token and zone ID"));return}
+		if len(in.Token)<20||len(in.Token)>4096||strings.ContainsAny(in.Token,"\r\n\x00")||!validCloudflareZoneID(in.ZoneID){apiError(w,shared.ErrBadRequest("enter a valid scoped API token and zone ID"));return}
 		ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
 		var verify struct{Status string `json:"status"`}
 		if err:=cloudflareAPIRequest(ctx,in.Token,http.MethodGet,"/user/tokens/verify",nil,&verify);err!=nil||verify.Status!="active"{apiError(w,shared.ErrBadRequest("Cloudflare token is invalid or inactive"));return}
 		var zone struct{ID string `json:"id"`;Name string `json:"name"`;Status string `json:"status"`}
-		if err:=cloudflareAPIRequest(ctx,in.Token,http.MethodGet,"/zones/"+in.ZoneID,nil,&zone);err!=nil||zone.ID!=in.ZoneID||zone.Name==""{apiError(w,shared.ErrBadRequest("Cloudflare zone could not be verified"));return}
+		if err:=cloudflareAPIRequest(ctx,in.Token,http.MethodGet,"/zones/"+in.ZoneID,nil,&zone);err!=nil||zone.ID!=in.ZoneID||zone.Name==""||zone.Status!="active"{apiError(w,shared.ErrBadRequest("Cloudflare zone could not be verified"));return}
 		nonce,ciphertext,err:=encryptCredential(s.credentialKey,[]byte(in.Token));if err!=nil{apiError(w,shared.ErrInternal("could not encrypt Cloudflare token"));return}
 		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO cloudflare_accounts(user_id,zone_id,zone_name,token_nonce,token_ciphertext,last_verified_at) VALUES(?,?,?,?,?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE zone_id=VALUES(zone_id),zone_name=VALUES(zone_name),token_nonce=VALUES(token_nonce),token_ciphertext=VALUES(token_ciphertext),last_verified_at=VALUES(last_verified_at)`,u.ID,in.ZoneID,zone.Name,nonce,ciphertext)
 		if err!=nil{apiError(w,shared.ErrInternal("could not save Cloudflare configuration"));return}
@@ -106,7 +125,9 @@ func (s *Server) handleCloudflareDNS(w http.ResponseWriter,r *http.Request){
 		var records []cloudflareDNSRecord
 		err:=cloudflareAPIRequest(ctx,token,http.MethodGet,"/zones/"+zoneID+"/dns_records?per_page=100",nil,&records)
 		if err!=nil{apiError(w,shared.ErrBadRequest("could not load Cloudflare DNS records"));return}
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"records":records,"zone_name":zoneName})
+		managed:=make([]cloudflareDNSRecord,0)
+		for _,record:=range records{if record.Type=="CNAME"&&strings.HasSuffix(strings.ToLower(record.Content),".cfargotunnel.com"){managed=append(managed,record)}}
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"records":managed,"zone_name":zoneName})
 	case http.MethodPost:
 		var in struct{Hostname string `json:"hostname"`;TunnelID string `json:"tunnel_id"`}
 		if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid DNS record"));return}
@@ -118,7 +139,10 @@ func (s *Server) handleCloudflareDNS(w http.ResponseWriter,r *http.Request){
 		if err!=nil{apiError(w,shared.ErrBadRequest("could not check existing DNS record"));return}
 		payload:=map[string]interface{}{"type":"CNAME","name":in.Hostname,"content":strings.ToLower(in.TunnelID)+".cfargotunnel.com","proxied":true,"ttl":1}
 		method,endpoint:=http.MethodPost,"/zones/"+zoneID+"/dns_records"
-		if len(existing)>0{method=http.MethodPut;endpoint+="/"+existing[0].ID}
+		if len(existing)>0 {
+			if existing[0].Type!="CNAME"||!strings.HasSuffix(strings.ToLower(existing[0].Content),".cfargotunnel.com"){apiError(w,shared.ErrBadRequest("a non-tunnel DNS record already uses this hostname; refusing to overwrite it"));return}
+			method=http.MethodPut;endpoint+="/"+existing[0].ID
+		}
 		var record cloudflareDNSRecord
 		if err:=cloudflareAPIRequest(ctx,token,method,endpoint,payload,&record);err!=nil{apiError(w,shared.ErrBadRequest("Cloudflare could not create the tunnel DNS record"));return}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"record":record})
@@ -126,7 +150,7 @@ func (s *Server) handleCloudflareDNS(w http.ResponseWriter,r *http.Request){
 		var in struct{RecordID string `json:"record_id"`}
 		if err:=decodeJSON(r,&in);err!=nil||len(in.RecordID)<10||len(in.RecordID)>64{apiError(w,shared.ErrBadRequest("invalid DNS record id"));return}
 		var record cloudflareDNSRecord
-		if err:=cloudflareAPIRequest(ctx,token,http.MethodGet,"/zones/"+zoneID+"/dns_records/"+in.RecordID,nil,&record);err!=nil||record.ID!=in.RecordID||!hostnameBelongsToZone(record.Name,zoneName){apiError(w,shared.ErrNotFound("DNS record not found in configured zone"));return}
+		if err:=cloudflareAPIRequest(ctx,token,http.MethodGet,"/zones/"+zoneID+"/dns_records/"+in.RecordID,nil,&record);err!=nil||record.ID!=in.RecordID||record.Type!="CNAME"||!strings.HasSuffix(strings.ToLower(record.Content),".cfargotunnel.com")||!hostnameBelongsToZone(record.Name,zoneName){apiError(w,shared.ErrNotFound("DNS record not found in configured zone"));return}
 		if err:=cloudflareAPIRequest(ctx,token,http.MethodDelete,"/zones/"+zoneID+"/dns_records/"+in.RecordID,nil,nil);err!=nil{apiError(w,shared.ErrBadRequest("could not delete DNS record"));return}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	default:http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
