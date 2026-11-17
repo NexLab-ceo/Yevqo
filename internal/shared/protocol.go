@@ -143,6 +143,7 @@ type ReadSiteBackupChunk struct {
 type PruneBackups struct {
 	SiteId string `json:"site_id,omitempty"`
 	ServerID int64 `json:"server_id,omitempty"`
+	DatabaseID int64 `json:"database_id,omitempty"`
 	Keep int `json:"keep"`
 }
 type PruneBackupsResult struct { Removed []string `json:"removed"` }
