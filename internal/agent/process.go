@@ -46,6 +46,7 @@ type ProcessManager struct {
 	logEmitter func(string, string)
 	statusEmitter func(string, string, int)
 	procs    map[string]*Process // key = siteID
+	proxies map[string]*deploymentProxy // stable public listener per blue-green site
 	restartMu sync.Mutex
 	restartAttempts map[string]int
 	intentionalStops map[string]bool
@@ -56,7 +57,7 @@ type ProcessManager struct {
 
 // NewProcessManager создаёт менеджер.
 func NewProcessManager(dataRoot string) *ProcessManager {
- m := &ProcessManager{DataRoot:dataRoot, BuildRunner:NewAndroidBuildRunner(dataRoot), procs:make(map[string]*Process), restartAttempts:make(map[string]int), intentionalStops:make(map[string]bool)}
+ m := &ProcessManager{DataRoot:dataRoot, BuildRunner:NewAndroidBuildRunner(dataRoot), procs:make(map[string]*Process), proxies:make(map[string]*deploymentProxy), restartAttempts:make(map[string]int), intentionalStops:make(map[string]bool)}
  m.registry, m.registryErr = NewProcessRegistry(dataRoot)
  if m.registryErr == nil {
   // Reconcile interrupted release activation before adopting process records.
