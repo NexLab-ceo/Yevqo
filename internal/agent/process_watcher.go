@@ -29,6 +29,9 @@ func (m *ProcessManager) watchProcesses() {
 			// Never signal a PID whose identity no longer matches. A stale record
 			// is safe to remove, but automatic recovery is handled by the child waiter.
 			_ = m.registry.Delete(record.SiteID)
+			if record.RestartPolicy != "never" {
+				go m.recoverSite(record)
+			}
 		}
 	}
 }
@@ -61,6 +64,7 @@ func (m *ProcessManager) waitForProcessExit(siteID string, pid int, startToken s
 	_ = m.registry.Delete(siteID)
 	if intentional { return }
 	if record.RestartPolicy == "never" { return }
+	if record.RestartPolicy == "on-failure" && waitErr == nil { return }
 	reason := "process exited unexpectedly"
 	if waitErr != nil { reason = fmt.Sprintf("process exited unexpectedly: %v", waitErr) }
 	m.emitProcessLog(siteID, reason)
