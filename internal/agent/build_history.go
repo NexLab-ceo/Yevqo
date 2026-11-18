@@ -184,8 +184,7 @@ type BuildArtifactFile struct {
 func buildArtifactRoot(dataRoot,siteID,buildID string)(string,error){
  record,err:=GetBuildHistory(dataRoot,siteID,buildID);if err!=nil{return "",err}
  if !record.Result.Success{return "",fmt.Errorf("artifacts are available only for successful builds")}
- expected:=filepath.Join(dataRoot,"artifacts",siteID)
- resolvedExpected,err:=filepath.EvalSymlinks(expected);if err!=nil{return "",fmt.Errorf("artifact directory not found")}
+ resolvedExpected,err:=safeExistingSubdirectory(dataRoot,filepath.Join("artifacts",siteID));if err!=nil{return "",fmt.Errorf("artifact directory not found: %w",err)}
  resolved,err:=filepath.EvalSymlinks(record.Result.ArtifactDir);if err!=nil{return "",fmt.Errorf("artifact directory not found")}
  rel,err:=filepath.Rel(resolvedExpected,resolved);if err!=nil||rel==".."||strings.HasPrefix(rel,".."+string(filepath.Separator)){return "",fmt.Errorf("artifact directory escapes site storage")}
  info,err:=os.Stat(resolved);if err!=nil||!info.IsDir(){return "",fmt.Errorf("artifact directory is invalid")}
