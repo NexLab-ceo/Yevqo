@@ -5,7 +5,7 @@
  import Button from '$lib/components/Button.svelte';
 
  let sites=[],devices=[],loading=true,selectedKey='',rootDirectory='.',plan=null,result=null;
- let analyzing=false,building=false,allowProjectCode=false;
+ let analyzing=false,building=false,cancelling=false,allowProjectCode=false;
  let customInstallCommand='',customBuildCommand='';
  $: selectedSite=sites.find(x=>key(x)===selectedKey)||null;
  $: selectedDevice=selectedSite?devices.find(x=>Number(x.id)===Number(selectedSite.device_id)):null;
@@ -29,6 +29,14 @@
    if(!r.ok||!r.data?.ok){notify(r.error||r.data?.message||'Анализ проекта не выполнен','error');return}
    try{plan=JSON.parse(decode(r.data.payload));if(plan.root_directory)rootDirectory=plan.root_directory;notify('Анализ проекта завершён','success')}
    catch{notify('Агент вернул некорректный результат анализа','error')}
+ }
+ async function cancelBuild(){
+   if(!selectedSite||!building||cancelling)return;
+   cancelling=true;
+   const r=await sendCommand(selectedSite.device_id,'cancel_build',{});
+   cancelling=false;
+   if(!r.ok||!r.data?.ok){notify(r.error||r.data?.message||'Не удалось отменить сборку','error');return}
+   notify('Запрошена остановка процесса сборки','success');
  }
  async function build(){
    if(!selectedSite||!online||!plan||!allowProjectCode||building)return;
@@ -103,7 +111,7 @@
  {/if}
  {#if plan.warnings?.length}<div class="warning">{#each plan.warnings as w}<p>{w}</p>{/each}</div>{/if}
  <div class="consent"><label><input type="checkbox" bind:checked={allowProjectCode}/> Я доверяю этому репозиторию и разрешаю выполнение его build-скриптов с правами пользователя Agent.</label><small>Сборка запускает код проекта. Это не изолированная песочница.</small></div>
- <div class="actions"><Button variant="primary" disabled={!online||building||!allowProjectCode||(plan.needs_configuration&&!customInstallCommand.trim()&&!customBuildCommand.trim())} loading={building} on:click={build}>▶ Build project</Button><span class="muted">Сборка выполняется локально на Android/Termux с установленными инструментами.</span></div>
+ <div class="actions"><Button variant="primary" disabled={!online||building||!allowProjectCode||(plan.needs_configuration&&!customInstallCommand.trim()&&!customBuildCommand.trim())} loading={building} on:click={build}>▶ Build project</Button>{#if building}<Button disabled={cancelling} loading={cancelling} on:click={cancelBuild}>Cancel build</Button>{/if}<span class="muted">Сборка выполняется локально на Android/Termux с установленными инструментами.</span></div>
 </section>
 {/if}
 {#if result}
