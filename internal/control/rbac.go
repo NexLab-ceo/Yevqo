@@ -18,7 +18,7 @@ func CanWorkspaceAction(role, action string) bool {
 		case "device.read", "device.metrics",
 			"create_site", "start_site", "stop_site", "restart", "deploy", "rebuild", "stop", "rollback",
 			"git_pull", "get_logs", "get_metrics", "get_site_metrics", "analyze_site_build",
-			"build_site", "cancel_build", "list_build_history", "preview.deploy", "preview.delete", "list_site_releases", "rollback_site_release", "cancel_deployment_job":
+			"build_site", "cancel_build", "list_build_history", "get_build_history", "preview.deploy", "preview.delete", "list_site_releases", "rollback_site_release", "cancel_deployment_job":
 			return true
 		}
 	}
