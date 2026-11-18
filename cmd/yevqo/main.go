@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -96,13 +97,19 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	}
 	if err != nil { fmt.Fprintln(stderr, err); return 1 }
 	if command == "logs" && len(result.Payload) > 0 {
+		payloadBytes := result.Payload
+		// Agent payloads are []byte and therefore arrive as a base64 JSON string.
+		var encoded string
+		if json.Unmarshal(payloadBytes, &encoded) == nil {
+			if decoded, decodeErr := base64.StdEncoding.DecodeString(encoded); decodeErr == nil { payloadBytes = decoded }
+		}
 		var payload map[string]any
-		if json.Unmarshal(result.Payload, &payload) == nil {
+		if json.Unmarshal(payloadBytes, &payload) == nil {
 			for _, key := range []string{"content", "logs", "text"} {
 				if value, ok := payload[key].(string); ok { fmt.Fprint(stdout, value); return 0 }
 			}
 		}
-		fmt.Fprintln(stdout, string(result.Payload))
+		fmt.Fprintln(stdout, string(payloadBytes))
 		return 0
 	}
 	if result.Message != "" { fmt.Fprintln(stdout, result.Message) } else { fmt.Fprintln(stdout, "ok") }
