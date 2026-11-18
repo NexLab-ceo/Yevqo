@@ -63,10 +63,12 @@ func TestVeltrixManifestAndSafeCommands(t *testing.T) {
 func TestAndroidBuildEnvironmentUsesPersistentCachesAndFiltersSecrets(t *testing.T) {
  data:=t.TempDir()
  t.Setenv("BUILD_SECRET_SHOULD_NOT_PASS","do-not-leak")
+ t.Setenv("RUSTFLAGS","-C opt-level=2")
  env,err:=androidBuildEnv(data)
  if err!=nil{t.Fatal(err)}
  joined:=strings.Join(env,"\n")
  if strings.Contains(joined,"BUILD_SECRET_SHOULD_NOT_PASS"){t.Fatal("unapproved environment variable leaked into build")}
+ if !strings.Contains(joined,"RUSTFLAGS=-C opt-level=2"){t.Fatal("configured language toolchain flags were not preserved")}
  for _,key:=range []string{"GOCACHE=","GOMODCACHE=","CARGO_HOME=","NPM_CONFIG_CACHE=","PIP_CACHE_DIR=","GRADLE_USER_HOME="} {
   if !strings.Contains(joined,key){t.Errorf("persistent cache %s missing from build environment",key)}
  }
