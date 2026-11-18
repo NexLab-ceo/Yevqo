@@ -31,6 +31,9 @@ func (s *Server) handleSiteEnvironment(w http.ResponseWriter, r *http.Request, u
 		apiError(w, err)
 		return
 	}
+	if r.Method != http.MethodGet {
+		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
+	}
 
 	switch r.Method {
 	case http.MethodGet:
