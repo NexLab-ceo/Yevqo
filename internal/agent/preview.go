@@ -23,7 +23,17 @@ func (m *ProcessManager) DeployPreview(req shared.PreviewDeploy) (int, string, s
 	if req.Port < 1024 || req.Port > 65535 {
 		return 0, "", "", "", fmt.Errorf("preview port must be between 1024 and 65535")
 	}
-	return m.DeployGitSiteWithJob(context.Background(), "preview-"+req.PreviewID, req.SiteAction, false)
+	jobID, jobCtx, err := m.BeginDeploymentJob(req.PreviewID)
+	if err != nil { return 0, "", "", "", err }
+	pid, output, commit, date, deployErr := m.DeployGitSiteWithJob(jobCtx, jobID, req.SiteAction, false)
+	if deployErr != nil {
+		state := "failed"
+		if jobCtx.Err() == context.Canceled { state = "cancelled" }
+		m.FinishDeploymentJob(req.PreviewID, jobID, state, deployErr.Error())
+		return 0, output, commit, date, deployErr
+	}
+	m.FinishDeploymentJob(req.PreviewID, jobID, "healthy", "Preview is healthy")
+	return pid, output, commit, date, nil
 }
 
 // RemovePreview only accepts IDs from the reserved preview namespace.
