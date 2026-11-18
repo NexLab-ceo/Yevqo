@@ -10,8 +10,8 @@ import (
 
 func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 	templates := ListAppTemplates()
-	if len(templates) != 6 {
-		t.Fatalf("template catalog has %d entries, want 6", len(templates))
+	if len(templates) != 7 {
+		t.Fatalf("template catalog has %d entries, want 7", len(templates))
 	}
 	want := map[string]string{
 		"php-basic":"index.php",
@@ -20,6 +20,7 @@ func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 		"nodejs-api":"server.js",
 		"static-site":"index.html",
 		"go-http":"main.go",
+		"custom-app":"",
 	}
 	for _, template := range templates {
 		entry, ok := want[template.ID]
@@ -31,8 +32,12 @@ func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 			t.Fatalf("create %s: %v", template.ID, err)
 		}
 		siteRoot := filepath.Join(root, "sites", "template-demo")
-		if _, err := os.Stat(filepath.Join(siteRoot, entry)); err != nil {
-			t.Fatalf("%s entry point was not generated: %v", template.ID, err)
+		if entry != "" {
+			if _, err := os.Stat(filepath.Join(siteRoot, entry)); err != nil {
+				t.Fatalf("%s entry point was not generated: %v", template.ID, err)
+			}
+		} else if template.Runtime != "custom" {
+			t.Fatalf("%s has an empty entry point outside custom runtime", template.ID)
 		}
 		configBytes, err := os.ReadFile(filepath.Join(siteRoot, "yevqo.template.json"))
 		if err != nil { t.Fatalf("%s template config missing: %v", template.ID, err) }
