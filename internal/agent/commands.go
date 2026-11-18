@@ -271,6 +271,7 @@ func (h *CommandHandler) handlePreviewDeploy(cmd *shared.Command) *shared.Result
 	}
 	pid, output, commit, date, err := h.processes.DeployPreview(req)
 	if err != nil {
+		_ = h.processes.RemovePreview(req.PreviewID)
 		return errorResult(cmd.Id, err.Error())
 	}
 	payload, err := shared.Marshal(&shared.StartSiteResult{Pid: uint32(pid), Port: req.Port, CommitHash: commit, CommitDate: date})
