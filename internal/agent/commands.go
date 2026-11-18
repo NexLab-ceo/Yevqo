@@ -92,6 +92,10 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleSiteLifecycle(cmd, "restart")
 	case "deploy":
 		return h.handleSiteLifecycle(cmd, "deploy")
+	case "preview_deploy":
+		return h.handlePreviewDeploy(cmd)
+	case "preview_remove":
+		return h.handlePreviewRemove(cmd)
 	case "cancel_deployment_job":
 		return h.handleCancelDeploymentJob(cmd)
 	case "rebuild":
@@ -255,6 +259,37 @@ func (h *CommandHandler) handleSiteLifecycle(cmd *shared.Command, action string)
  h.processes.FinishDeploymentJob(req.SiteId, jobID, "healthy", "Deployment completed")
  payload, _ := shared.Marshal(&shared.StartSiteResult{Pid:uint32(pid), Port:req.Port, CommitHash:commitHash, CommitDate:commitDate})
  return &shared.Result{Id:cmd.Id, Ok:true, Message:fmt.Sprintf("%s completed (pid %d): %s", action, pid, output), Payload:payload}
+}
+
+func (h *CommandHandler) handlePreviewDeploy(cmd *shared.Command) *shared.Result {
+	var req shared.PreviewDeploy
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
+		return errorResult(cmd.Id, "invalid preview_deploy payload")
+	}
+	if !req.AllowProjectCode {
+		return errorResult(cmd.Id, "preview blocked: explicit allow_project_code=true consent is required")
+	}
+	pid, output, commit, date, err := h.processes.DeployPreview(req)
+	if err != nil {
+		return errorResult(cmd.Id, err.Error())
+	}
+	payload, err := shared.Marshal(&shared.StartSiteResult{Pid: uint32(pid), Port: req.Port, CommitHash: commit, CommitDate: date})
+	if err != nil {
+		_ = h.processes.RemovePreview(req.PreviewID)
+		return errorResult(cmd.Id, "could not encode preview result")
+	}
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: fmt.Sprintf("preview ready (pid %d): %s", pid, output), Payload: payload}
+}
+
+func (h *CommandHandler) handlePreviewRemove(cmd *shared.Command) *shared.Result {
+	var req shared.PreviewRemove
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
+		return errorResult(cmd.Id, "invalid preview_remove payload")
+	}
+	if err := h.processes.RemovePreview(req.PreviewID); err != nil {
+		return errorResult(cmd.Id, err.Error())
+	}
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: "preview removed"}
 }
 
 func (h *CommandHandler) handleCancelDeploymentJob(cmd *shared.Command) *shared.Result {
