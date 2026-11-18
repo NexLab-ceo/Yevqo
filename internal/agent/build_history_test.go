@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"veltrix/internal/shared"
 )
 
 func TestBuildHistoryPersistsNewestRecordsWithRetention(t *testing.T) {
@@ -39,6 +41,21 @@ func TestBuildHistoryPersistsNewestRecordsWithRetention(t *testing.T) {
 	if info.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("history directory permissions are too broad: %o", info.Mode().Perm())
 	}
+}
+
+
+func TestListBuildHistoryAgentCommand(t *testing.T) {
+ root:=t.TempDir()
+ result:=AndroidBuildResult{SiteID:"command-demo",Provider:"android-local",Stack:"nim",Success:true,FinishedAt:time.Now().UTC(),Output:"nim build passed"}
+ if err:=persistBuildHistory(root,"command-demo",result);err!=nil{t.Fatal(err)}
+ payload,err:=shared.Marshal(shared.ListBuildHistory{SiteId:"command-demo",Limit:5})
+ if err!=nil{t.Fatal(err)}
+ handler:=NewCommandHandler(&Config{DataRoot:root})
+ response:=handler.HandleCommand(&shared.Command{Id:"history-1",Action:"list_build_history",Payload:payload})
+ if !response.Ok||len(response.Payload)==0{t.Fatalf("history command failed: %#v",response)}
+ var body struct{Records []BuildHistoryRecord `json:"records"`}
+ if err:=shared.Unmarshal(response.Payload,&body);err!=nil{t.Fatal(err)}
+ if len(body.Records)!=1||body.Records[0].Result.Output!="nim build passed"{t.Fatalf("unexpected history response: %#v",body)}
 }
 
 func TestBuildHistoryRejectsInvalidSiteAndSymlink(t *testing.T) {
