@@ -162,3 +162,28 @@ func TestAndroidBuildReportsFailedProviderStep(t *testing.T) {
  if result.Success { t.Fatalf("expected failed provider step, got success: %+v", result) }
  if !strings.Contains(result.Error, "install failed") { t.Fatalf("unexpected build error: %q", result.Error) }
 }
+
+func TestConfiguredBuildCachePersistsAcrossRoots(t *testing.T){
+ data:=t.TempDir();siteA:=t.TempDir();siteB:=t.TempDir();cachePaths:=[]string{"node_modules/.cache"}
+ if err:=os.MkdirAll(filepath.Join(siteA,"node_modules",".cache"),0700);err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(filepath.Join(siteA,"node_modules",".cache","state"),[]byte("warm"),0600);err!=nil{t.Fatal(err)}
+ if err:=saveConfiguredBuildCaches(data,"demo",siteA,cachePaths);err!=nil{t.Fatal(err)}
+ if err:=restoreConfiguredBuildCaches(data,"demo",siteB,cachePaths);err!=nil{t.Fatal(err)}
+ got,err:=os.ReadFile(filepath.Join(siteB,"node_modules",".cache","state"));if err!=nil{t.Fatal(err)}
+ if string(got)!="warm"{t.Fatalf("cache content = %q",got)}
+}
+
+func TestConfiguredBuildCacheRejectsSymlinks(t *testing.T){
+ data:=t.TempDir();root:=t.TempDir();outside:=t.TempDir()
+ if err:=os.Symlink(outside,filepath.Join(root,"cache"));err!=nil{t.Skip(err)}
+ if err:=saveConfiguredBuildCaches(data,"demo",root,[]string{"cache"});err==nil{t.Fatal("expected cache symlink to be rejected")}
+}
+
+func TestCollectBuildArtifactsIncludeExclude(t *testing.T){
+ data:=t.TempDir();root:=t.TempDir()
+ if err:=os.MkdirAll(filepath.Join(root,"dist"),0700);err!=nil{t.Fatal(err)}
+ for name,body:=range map[string]string{"index.html":"ok","app.js":"js","app.js.map":"map"}{if err:=os.WriteFile(filepath.Join(root,"dist",name),[]byte(body),0600);err!=nil{t.Fatal(err)}}
+ dir,err:=collectBuildArtifacts(data,"demo",root,[]string{"dist/**"},[]string{"dist/*.map"});if err!=nil{t.Fatal(err)}
+ if _,err:=os.Stat(filepath.Join(dir,"dist","index.html"));err!=nil{t.Fatal(err)}
+ if _,err:=os.Stat(filepath.Join(dir,"dist","app.js.map"));!os.IsNotExist(err){t.Fatalf("excluded artifact exists: %v",err)}
+}
