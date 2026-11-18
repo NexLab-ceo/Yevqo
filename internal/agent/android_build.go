@@ -192,11 +192,11 @@ func androidBuildSteps(root string,req AndroidBuildRequest)([]androidBuildStep,e
 // invokes a shell, expands variables, or evaluates redirections. Any installed
 // compiler/build tool can be used, while shell launchers remain blocked.
 func parseManifestBuildCommand(root, name, raw string) (androidBuildStep,error) {
- if len(raw)>4096 { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command exceeds 4096 bytes",name) }
- if strings.ContainsAny(raw,";|&`$><\r\n") { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command contains unsupported shell syntax",name) }
+ if len(raw)>4096 { return androidBuildStep{},fmt.Errorf("yevqo.yml %s command exceeds 4096 bytes",name) }
+ if strings.ContainsAny(raw,";|&`$><\r\n") { return androidBuildStep{},fmt.Errorf("yevqo.yml %s command contains unsupported shell syntax",name) }
  fields,err:=splitBuildCommand(raw)
- if err!=nil{return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command: %w",name,err)}
- if len(fields)==0 { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command is empty",name) }
+ if err!=nil{return androidBuildStep{},fmt.Errorf("yevqo.yml %s command: %w",name,err)}
+ if len(fields)==0 { return androidBuildStep{},fmt.Errorf("yevqo.yml %s command is empty",name) }
  exe:=fields[0]
  if exe=="./gradlew" || exe=="gradlew" || exe=="./mvnw" || exe=="mvnw" {
   wrapper:=strings.TrimPrefix(exe,"./")
