@@ -3,6 +3,7 @@ package agent
 import (
  "fmt"
  "os"
+ "path/filepath"
  "strconv"
  "strings"
  "syscall"
@@ -38,7 +39,7 @@ func (m *ProcessManager) restoreProcesses() {
   }
   m.procs[r.SiteID]=&Process{SiteID:r.SiteID,PID:r.PID,Port:r.Port,Runtime:r.Runtime,LogPath:r.LogPath}
   go m.watchRestoredProcess(r)
-  if manifest,found,manifestErr:=readYevqoManifest(r.WorkingDir);manifestErr==nil&&found&&manifest.HealthcheckPath!=""{
+  if manifest,found:=readProcessYevqoManifest(m.DataRoot,r);found&&manifest.HealthcheckPath!=""{
    interval:=manifest.HealthcheckInterval;if interval<=0{interval=30*time.Second}
    go m.monitorSiteHealth(r.SiteID,r.PID,r.StartToken,r.Port,manifest.HealthcheckPath,interval)
   }
@@ -124,4 +125,19 @@ func killProcessGroup(pid, pgid int) error {
  }
  if processGroupAlive(pgid) { return fmt.Errorf("process group %d did not exit after SIGKILL", pgid) }
  return nil
+}
+
+func readProcessYevqoManifest(dataRoot string,record ProcessRecord)(yevqoManifest,bool){
+ siteRoot,err:=safeSiteDirectory(dataRoot,record.SiteID);if err!=nil{return yevqoManifest{},false}
+ current,err:=filepath.Abs(record.WorkingDir);if err!=nil{return yevqoManifest{},false}
+ root,err:=filepath.EvalSymlinks(siteRoot);if err!=nil{return yevqoManifest{},false}
+ for{
+  resolved,e:=filepath.EvalSymlinks(current);if e==nil{
+   rel,re:=filepath.Rel(root,resolved);if re==nil&&rel!=".."&&!strings.HasPrefix(rel,".."+string(filepath.Separator)){
+    if m,found,readErr:=readYevqoManifest(resolved);readErr==nil&&found{return m,true}
+   }
+  }
+  if current==root||filepath.Dir(current)==current{return yevqoManifest{},false}
+  parent:=filepath.Dir(current);rel,e:=filepath.Rel(root,parent);if e!=nil||rel==".."||strings.HasPrefix(rel,".."+string(filepath.Separator)){return yevqoManifest{},false};current=parent
+ }
 }
