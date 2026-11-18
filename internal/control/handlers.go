@@ -689,6 +689,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				var in struct { Keep int `json:"keep"` }
 				if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
 				if in.Keep < 1 || in.Keep > 50 { apiError(w, shared.ErrBadRequest("keep must be between 1 and 50")); return }
+				if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
 				ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute); defer cancel()
 				result, err := conn.SendCommand(ctx, "prune_site_releases", &shared.PruneSiteReleases{SiteId:st.SiteID, Keep:in.Keep})
 				if err != nil { apiError(w, shared.ErrInternal("release cleanup failed: "+err.Error())); return }
@@ -709,6 +710,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			if in.Action != "deploy" && in.Action != "rebuild" && in.Action != "restart" && in.Action != "stop" && in.Action != "rollback" {
 				apiError(w, shared.ErrBadRequest("unsupported site action")); return
 			}
+			if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, in.Action); err != nil { apiError(w, err); return }
 			if (in.Action == "deploy" || in.Action == "rebuild") && !in.AllowProjectCode {
 				apiError(w, shared.ErrBadRequest("explicit project-code consent is required before deployment")); return
 			}
@@ -739,7 +741,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				payload = &shared.StopSite{SiteId: st.SiteID}
 			}
 			if siteAction, ok := payload.(*shared.SiteAction); ok {
-				env, envErr := s.siteRuntimeEnvironment(r.Context(), user.ID, deviceID, siteID)
+				env, envErr := s.siteRuntimeEnvironment(r.Context(), dev.UserID, deviceID, siteID)
 				if envErr != nil { apiError(w, shared.ErrInternal("could not prepare protected site environment")); return }
 				siteAction.Env = env
 			}
@@ -793,6 +795,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodPatch {
+			if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
 			var in struct { Domain string `json:"domain"`; TunnelToken string `json:"tunnel_token"` }
 			if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 			domain:=strings.ToLower(strings.TrimSpace(in.Domain))
