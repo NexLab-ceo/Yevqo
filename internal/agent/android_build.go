@@ -322,9 +322,14 @@ func collectBuildArtifacts(dataDir,siteID,root string,include,exclude []string)(
  return target,nil
 }
 func yevqoGlobMatch(pattern,name string)bool{
- pattern=filepath.ToSlash(pattern)
- if strings.Contains(pattern,"**"){parts:=strings.Split(pattern,"**");if len(parts)==2{return strings.HasPrefix(name,strings.TrimSuffix(parts[0],"/"))&&strings.HasSuffix(name,parts[1])}}
- ok,_:=filepath.Match(filepath.FromSlash(pattern),filepath.FromSlash(name));return ok
+ pp:=strings.Split(filepath.ToSlash(pattern),"/");nn:=strings.Split(filepath.ToSlash(name),"/")
+ var match func(int,int)bool
+ match=func(i,j int)bool{
+  if i==len(pp){return j==len(nn)}
+  if pp[i]=="**"{if i==len(pp)-1{return true};for k:=j;k<=len(nn);k++{if match(i+1,k){return true}};return false}
+  if j>=len(nn){return false};ok,err:=filepath.Match(pp[i],nn[j]);return err==nil&&ok&&match(i+1,j+1)
+ }
+ return match(0,0)
 }
 
 func configuredCacheRoot(dataDir,siteID string)string{return filepath.Join(dataDir,"build-cache","sites",siteID)}
