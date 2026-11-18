@@ -53,6 +53,76 @@ Read the relevant source, migrations, package scripts, and CI workflows before m
 - Clearly label demo, planned, unavailable, and coming-soon functionality.
 - The user has asked for a staged approach: finish visual structure first when explicitly requested, then add interactions/backend in later stages. Do not silently expand a UI-only task into backend work.
 
+
+## Project progress tracking (mandatory)
+
+Maintain project progress in this same root-level `codex.md` on every development task. This file is the source of truth for the phase/status overview.
+
+### Phase model
+
+Use these phases consistently:
+
+- **P0 — Foundation:** repository/build setup, packaging, installation, Control Plane ↔ Agent communication, authentication, device pairing, core data model, safety boundaries.
+- **P1 — Core platform:** projects, sites/applications, process lifecycle, Git-based deployment, releases/rollback, domains/networking, logs.
+- **P2 — Platform capabilities:** monitoring/telemetry, databases, backups, templates/build providers, CLI, previews, teams/RBAC, audit, notifications, analytics.
+- **P3 — Product completion:** remaining integrations, UX consistency, operational hardening, documentation, upgrade testing, Android device validation, release readiness.
+
+A phase is not automatically complete because its headline features exist. Mark it **DONE** only when implementation and relevant automated checks are verified. Mark physical Android/Termux validation separately.
+
+### Status vocabulary
+
+Use only these labels in the progress ledger:
+
+- `DONE` — implemented and verified by relevant tests/checks.
+- `PARTIAL` — some functionality exists, but meaningful scope remains.
+- `TODO` — not implemented.
+- `VERIFY` — implementation may exist, but current code/tests/evidence have not been checked.
+- `BLOCKED` — cannot proceed because of a specific external dependency or decision; explain it.
+
+Never turn a planned feature into DONE based only on a UI, README statement, mock data, or an earlier conversation. Re-check the current repository and CI before changing a status.
+
+### Current progress snapshot
+
+This is a conservative starting snapshot based on the repository documentation and previously recorded implementation work. Re-verify the relevant source and workflows before relying on it or upgrading any status.
+
+| Phase / area | Initial status | Notes |
+|---|---|---|
+| P0 — Go Control Plane and Agent foundation | PARTIAL | Core services and Android/Termux packaging are present; re-check full install/upgrade and device runtime coverage. |
+| P0 — Android package build and CI | VERIFY | CI/package workflows exist; verify latest successful runs before claiming current green status. |
+| P0 — Device pairing and one-device Free limit | VERIFY | Preserve one connected device per Free account; reconnect same device; reject a second device. |
+| P1 — Project/site lifecycle | PARTIAL | Site creation, process lifecycle, logs, and lifecycle locking are documented; verify current implementation and tests. |
+| P1 — Git deployments, immutable releases, rollback | PARTIAL | Deployment/release flow is documented; verify edge cases and current test coverage. |
+| P1 — Domains and public routing | PARTIAL | Domain metadata and tunnel-related work exist; do not claim public routing is universally operational without end-to-end verification. |
+| P2 — Device monitoring telemetry | PARTIAL | Heartbeat and typed metrics are documented; metric availability depends on Android/device support. |
+| P2 — Database management | PARTIAL | PostgreSQL lifecycle and database connections are documented; MySQL/MariaDB, restore/export, and other items remain incomplete unless current code proves otherwise. |
+| P2 — Website/database backups and restore | PARTIAL | Website backup creation is documented; restore and remaining backup operations require verification/implementation. |
+| P2 — Build providers and templates | PARTIAL | Basic templates/native Termux path exist; remote Linux executor is not to be assumed. |
+| P2 — CLI and preview deployments | VERIFY | Check current commands, authorization, lifecycle, and Android-only limitations before updating. |
+| P2 — Team, RBAC, audit | VERIFY | Check endpoint coverage and enforcement in the API, not only UI visibility. |
+| P2 — AI Agents / Agent Builder | TODO | Do not imply real agent execution until model integration, permission enforcement, and execution lifecycle are implemented. |
+| P3 — Full Android device validation | TODO | Requires tests on a real supported Android + Termux device; CI cross-compilation is not a substitute. |
+| P3 — Release readiness | TODO | Requires a verified end-to-end checklist, upgrade checks, security review, and documented limitations. |
+
+### Mandatory update procedure for every task
+
+At the start of a task:
+1. Read this progress ledger and inspect the relevant current source, tests, migrations, and workflows.
+2. Identify the phase(s) and exact ledger rows affected.
+3. Do not assume the ledger is current; verify before implementation.
+
+Before finishing every task:
+1. Update the relevant row(s) in this file, including status and a concise evidence/remaining-work note.
+2. If a new feature area appears, add it under the appropriate phase rather than leaving it undocumented.
+3. Record meaningful completed work with a short dated entry in the **Progress history** below. Use the current date and reference the commit SHA when available.
+4. Update README or feature documentation too when user-facing behavior or setup changes; the ledger does not replace technical documentation.
+5. Commit the code and this progress-file update together whenever possible. If a separate documentation commit is necessary, state why.
+6. Never mark a feature DONE until its relevant tests/checks have passed. Record failed, skipped, and unavailable checks honestly.
+7. Keep the ledger concise and current. Do not append repetitive logs; update existing rows and add only meaningful history entries.
+
+### Progress history
+
+- 2026-11-18 — Added the initial Codex project instructions and established the P0–P3 progress ledger. This is a tracking baseline, not a claim that all listed areas have been re-verified.
+
 ## Implementation guidelines
 
 ### Go
