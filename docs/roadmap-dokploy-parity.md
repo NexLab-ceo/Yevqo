@@ -14,7 +14,7 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 - [x] Per-site stdout/stderr capture, bounded log rotation, live streaming, timestamps in the live viewer, search and severity filters.
 - [x] Deployment job lifecycle: queued, preparing, cloning, installing, building, starting, healthy, failed and cancelled.
 - [x] One active deployment per site, progress events and cancellation.
-- [x] Supported launch runtimes: PHP, Go, static and Node.js; custom argv start commands are supported without shell interpolation.
+- [x] Supported launch runtimes: PHP, Go, static and Node.js plus a Custom Language runtime that launches any installed Termux tool or in-site executable through validated argv; custom runtime requires an explicit start command and TCP readiness.
 - [x] Immutable staged Git deployment, build-before-activation and restoration of the previous release when candidate activation/health checks fail.
 - [x] Durable write-ahead deployment journal for Git activation and rollback; Agent startup restores the last confirmed process after an interrupted activation, and unresolved recovery records cannot be overwritten.
 - [x] Stable per-site reverse-proxy listener with blue-green immutable-release activation; candidate backends are health-checked before an atomic target swap, in-flight requests drain before the previous process is stopped, and the active backend port is restored after Agent restart.
