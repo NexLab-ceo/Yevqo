@@ -58,6 +58,9 @@
     let newEnvName = '';
     let newEnvValue = '';
     let savingEnv = false;
+    let envImportText = '';
+    let importingEnv = false;
+    let envSearch = '';
     let webhookEnabled = false;
     let webhookPath = '';
     let webhookSecret = '';
@@ -208,6 +211,48 @@
         if (!res.ok) { notify(res.error || 'Не удалось удалить переменную', 'error'); return; }
         envVariables = envVariables.filter(item => item.name !== name);
         notify('Переменная удалена', 'success');
+    }
+
+    function parseEnvImport(source) {
+        const entries = [], errors = [];
+        for (const [index, raw] of source.split(/\\r?\\n/).entries()) {
+            const line = raw.trim();
+            if (!line || line.startsWith('#')) continue;
+            const normalized = line.startsWith('export ') ? line.slice(7).trim() : line;
+            const separator = normalized.indexOf('=');
+            if (separator < 1) { errors.push(index + 1); continue; }
+            const name = normalized.slice(0, separator).trim();
+            let value = normalized.slice(separator + 1).trim();
+            if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+            if (!/^[A-Z_][A-Z0-9_]{0,63}$/.test(name) || /^(PATH|HOME|PREFIX|TMPDIR|PORT|HOST|DB_.*|VELTRIX_.*)$/.test(name)) { errors.push(index + 1); continue; }
+            entries.push({ name, value });
+        }
+        return { entries, errors };
+    }
+
+    async function importEnvironmentVariables() {
+        if (importingEnv || !envImportText.trim()) return;
+        const parsed = parseEnvImport(envImportText);
+        if (!parsed.entries.length) { notify('Не найдено корректных переменных для импорта', 'error'); return; }
+        if (parsed.errors.length && !confirm('Строки ' + parsed.errors.join(', ') + ' будут пропущены. Импортировать ' + parsed.entries.length + ' переменных?')) return;
+        importingEnv = true;
+        let saved = 0;
+        for (const item of parsed.entries) {
+            const res = await saveSiteEnvironment(deviceId, siteId, item.name, item.value);
+            if (!res.ok) {
+                importingEnv = false;
+                notify('Импорт остановлен на ' + item.name + ': ' + (res.error || 'ошибка сохранения') + '. Успешно: ' + saved, 'error');
+                const refreshed = await listSiteEnvironment(deviceId, siteId);
+                if (refreshed.ok) envVariables = refreshed.data.variables || [];
+                return;
+            }
+            saved += 1;
+        }
+        importingEnv = false;
+        envImportText = '';
+        const refreshed = await listSiteEnvironment(deviceId, siteId);
+        if (refreshed.ok) envVariables = refreshed.data.variables || [];
+        notify('Импортировано переменных: ' + saved, 'success');
     }
 
     async function addScheduledTask() {
@@ -777,33 +822,53 @@
         </Card>
     {:else if activeTab === 'environment'}
         <Card>
-            <h2 class="details-title">Environment</h2>
-            <p class="muted">Секреты хранятся с AES-GCM шифрованием и передаются только процессу этого сайта при запуске, перезапуске и деплое. Сохранённые значения повторно не раскрываются.</p>
-            <div class="env-editor">
-                <div class="env-add">
-                    <input class="input" bind:value={newEnvName} placeholder="VARIABLE_NAME" maxlength="64" autocomplete="off" />
-                    <input class="input" bind:value={newEnvValue} placeholder="Value" type="password" autocomplete="new-password" />
-                    <Button variant="primary" loading={savingEnv} disabled={!online || !newEnvName.trim() || !newEnvValue} on:click={saveEnvironmentVariable}>Add / Update</Button>
-                </div>
-                {#if !online}<p class="muted">Подключите Agent, чтобы применить изменения при следующем запуске приложения.</p>{/if}
-                {#if envVariables.length}
-                    <div class="env-list">{#each envVariables as variable}
-                        <div class="env-row"><code>{variable.name}</code><span>••••••••••</span><Button size="sm" on:click={() => removeEnvironmentVariable(variable.name)}>Удалить</Button></div>
-                    {/each}</div>
-                {:else}<p class="muted">Пользовательские переменные ещё не добавлены.</p>{/if}
+            <div class="env-header">
+                <div><h2 class="details-title">Environment Variables</h2><p class="muted">Переменные приложения хранятся отдельно от исходного кода и шифруются AES-GCM.</p></div>
+                <span class="env-count">{envVariables.length} variables</span>
             </div>
+            <div class="env-notice"><strong>Область действия</strong><span>Сейчас один набор переменных используется и при Build, и при Runtime. Значения из подключённых баз данных управляются отдельно и имеют приоритет.</span></div>
+            <div class="env-add-panel">
+                <h3>Add / Update variable</h3>
+                <div class="env-add">
+                    <input class="input" bind:value={newEnvName} placeholder="VARIABLE_NAME" maxlength="64" autocomplete="off" aria-label="Имя переменной" />
+                    <input class="input" bind:value={newEnvValue} placeholder="Value (может быть пустым)" type="password" autocomplete="new-password" aria-label="Значение переменной" />
+                    <Button variant="primary" loading={savingEnv} disabled={!newEnvName.trim() || savingEnv} on:click={saveEnvironmentVariable}>Save variable</Button>
+                </div>
+                <p class="muted">Сохранение доступно даже когда Agent офлайн. Новые значения применятся при следующем запуске или деплое приложения.</p>
+            </div>
+            <div class="env-import-panel">
+                <div><h3>Import from .env</h3><p class="muted">Вставь содержимое файла .env. Поддерживаются KEY=value, export KEY=value и комментарии #.</p></div>
+                <textarea class="env-import-input" bind:value={envImportText} rows="6" spellcheck="false" placeholder="APP_ENV=production&#10;API_BASE_URL=https://example.com&#10;# comment&#10;FEATURE_FLAG=true"></textarea>
+                <div class="env-import-actions"><span class="muted">Существующие ключи будут обновлены.</span><Button disabled={!envImportText.trim() || importingEnv} loading={importingEnv} on:click={importEnvironmentVariables}>Import variables</Button></div>
+            </div>
+            <div class="env-list-head">
+                <h3>Stored variables</h3>
+                <input class="input env-search" bind:value={envSearch} placeholder="Search variables…" aria-label="Поиск переменных" />
+            </div>
+            {#if envVariables.filter(item => item.name.toLowerCase().includes(envSearch.toLowerCase())).length}
+                <div class="env-list">{#each envVariables.filter(item => item.name.toLowerCase().includes(envSearch.toLowerCase())) as variable}
+                    <div class="env-row"><div class="env-variable-name"><code>{variable.name}</code><small>Encrypted · masked</small></div><span class="env-masked" aria-label="Значение скрыто">••••••••••••</span><Button size="sm" on:click={() => { newEnvName = variable.name; newEnvValue = ''; document.querySelector('.env-add-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>Update</Button><Button size="sm" variant="danger" on:click={() => removeEnvironmentVariable(variable.name)}>Delete</Button></div>
+                {/each}</div>
+            {:else if envVariables.length}
+                <p class="muted">Ничего не найдено по запросу «{envSearch}».</p>
+            {:else}<div class="env-empty"><strong>No environment variables yet</strong><span>Добавь первую переменную или импортируй готовый .env.</span></div>{/if}
+            <p class="env-security-note">Значения намеренно не возвращаются в браузер после сохранения — поэтому показать или скопировать ранее сохранённый секрет нельзя. Чтобы заменить значение, укажи новое для существующего ключа.</p>
             {#if connections.length}
-                {#each connections as connection}
-                    <div class="env-group">
-                        <strong>{connection.database} · {connection.username}</strong>
-                        <div class="env-row"><code>DB_HOST</code><code>{connection.host}</code></div>
-                        <div class="env-row"><code>DB_PORT</code><code>{connection.port}</code></div>
-                        <div class="env-row"><code>DB_DATABASE</code><code>{connection.database}</code></div>
-                        <div class="env-row"><code>DB_USERNAME</code><code>{connection.username}</code></div>
-                        <div class="env-row"><code>DB_PASSWORD</code><code>••••••••••</code></div>
-                    </div>
-                {/each}
-            {:else}<p class="muted">Управляемые базы данных не подключены.</p>{/if}
+                <div class="env-managed">
+                    <h3>Managed database variables</h3>
+                    <p class="muted">Эти параметры создаются подключениями баз данных и не редактируются здесь.</p>
+                    {#each connections as connection}
+                        <div class="env-group">
+                            <strong>{connection.database} · {connection.username}</strong>
+                            <div class="env-row"><code>DB_HOST</code><code>{connection.host}</code></div>
+                            <div class="env-row"><code>DB_PORT</code><code>{connection.port}</code></div>
+                            <div class="env-row"><code>DB_DATABASE</code><code>{connection.database}</code></div>
+                            <div class="env-row"><code>DB_USERNAME</code><code>{connection.username}</code></div>
+                            <div class="env-row"><code>DB_PASSWORD</code><code>••••••••••</code></div>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
         </Card>
     {:else if activeTab === 'build'}
         <Card>
@@ -994,7 +1059,26 @@
 .task-create{display:grid;gap:8px;margin:14px 0;padding:12px;border:1px solid #253149;border-radius:9px;background:#0b1220}.task-command{width:100%;font:11px/1.5 ui-monospace,monospace;resize:vertical}.task-create-actions{display:flex;gap:8px}.task-create-actions .input{flex:1}.task-list{display:grid;gap:8px}.task-item{display:grid;gap:7px;padding:12px;border:1px solid #253149;border-radius:9px;background:#0b1220}.task-item-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.task-item-head>div:first-child{display:flex;align-items:center;gap:9px}.task-item-head strong{font-size:11px}.task-state{font-size:9px;color:#4ade80}.task-state.task-failed,.task-failed{color:#f87171}.task-buttons{display:flex;gap:6px}.task-item code{font-size:10px;color:#cbd5e1;overflow-wrap:anywhere}.task-item small{font-size:9px;color:#64748b}.task-output-toggle{justify-self:start;background:transparent;border:0;color:#a5b4fc;font-size:10px}.task-output{max-height:220px;overflow:auto;padding:10px;background:#050a13;border-radius:7px;color:#94a3b8;font-size:10px;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:560px){.task-create-actions{flex-direction:column}.task-item-head{align-items:flex-start;flex-direction:column}}
 .metrics-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.process-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.process-metrics>div{display:grid;gap:5px;padding:10px;border:1px solid #253149;border-radius:8px;background:#0b1220}.process-metrics span{font-size:9px;color:#64748b}.process-metrics strong{font-size:15px;color:#e2e8f0}@media(max-width:560px){.process-metrics{grid-template-columns:1fr}}
 .webhook-panel{display:grid;gap:9px;margin-top:18px;padding:14px;border:1px solid #334155;border-radius:10px;background:#0b1220}.webhook-panel h3{font-size:13px}.webhook-state{color:#4ade80;font-size:11px}.webhook-url{display:flex;align-items:center;justify-content:space-between;gap:8px}.webhook-url code,.webhook-secret code{overflow-wrap:anywhere;color:#c7d2fe;font-size:11px}.webhook-consent{display:flex;gap:8px;align-items:flex-start;color:#fcd34d;font-size:11px}.webhook-secret{display:grid;gap:8px;padding:10px;border:1px solid #854d0e;border-radius:8px}.webhook-secret small{color:#94a3b8;font-size:10px;line-height:1.5}
-.env-editor{display:grid;gap:10px;margin:12px 0}.env-add{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px}.env-list{display:grid;gap:6px}.env-list .env-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid #253149;border-radius:8px;background:#0b1220}.env-list .env-row code{flex:1;color:#c7d2fe}.env-list .env-row span{color:#64748b;font-size:10px}@media(max-width:700px){.env-add{grid-template-columns:1fr}.env-list .env-row{flex-wrap:wrap}}
+.env-header,.env-list-head,.env-import-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.env-count{font-size:11px;color:#a1a1aa;border:1px solid #27272a;border-radius:6px;padding:5px 8px;white-space:nowrap}
+.env-notice{display:grid;gap:5px;padding:12px 14px;margin:14px 0;border:1px solid #334155;border-radius:8px;background:#111827}
+.env-notice strong,.env-add-panel h3,.env-import-panel h3,.env-list-head h3,.env-managed h3{font-size:12px;color:#fafafa;margin:0}
+.env-notice span{font-size:11px;color:#a1a1aa;line-height:1.5}
+.env-add-panel,.env-import-panel{display:grid;gap:10px;padding:14px;margin:12px 0;border:1px solid #27272a;border-radius:9px;background:#0c0c0e}
+.env-add-panel .muted,.env-import-panel .muted{margin:0}
+.env-add{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px}
+.env-import-input{width:100%;box-sizing:border-box;resize:vertical;min-height:110px;background:#09090b;color:#e4e4e7;border:1px solid #3f3f46;border-radius:7px;padding:11px;font:11px/1.6 ui-monospace,SFMono-Regular,monospace}
+.env-import-actions{flex-wrap:wrap}
+.env-list-head{margin:20px 0 9px}.env-search{max-width:230px}
+.env-list{display:grid;gap:6px}.env-list .env-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid #27272a;border-radius:8px;background:#0b0b0d}
+.env-variable-name{display:grid;gap:3px;flex:1;min-width:120px}.env-variable-name code{color:#c7d2fe;font-size:11px}.env-variable-name small{color:#71717a;font-size:9px}
+.env-masked{color:#64748b;font-size:11px;letter-spacing:1px}
+.env-empty{display:grid;gap:5px;text-align:center;padding:28px 12px;border:1px dashed #3f3f46;border-radius:8px;color:#a1a1aa;font-size:11px}.env-empty strong{color:#e4e4e7;font-size:12px}
+.env-security-note{font-size:10px;line-height:1.6;color:#71717a;margin-top:14px}
+.env-managed{border-top:1px solid #27272a;margin-top:20px;padding-top:16px;display:grid;gap:8px}
+.env-group{display:grid;gap:6px;margin:8px 0;padding:12px;border:1px solid #27272a;border-radius:8px}.env-group>strong{font-size:11px;color:#e4e4e7}
+@media(max-width:700px){.env-add{grid-template-columns:1fr}.env-list .env-row{flex-wrap:wrap}.env-search{max-width:100%;width:100%}.env-list-head{align-items:stretch;flex-direction:column}}
+.env-add{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px}.env-list{display:grid;gap:6px}.env-list .env-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid #253149;border-radius:8px;background:#0b1220}.env-list .env-row code{flex:1;color:#c7d2fe}.env-list .env-row span{color:#64748b;font-size:10px}@media(max-width:700px){.env-add{grid-template-columns:1fr}.env-list .env-row{flex-wrap:wrap}}
     .deploy-consent{display:grid;gap:5px;margin:12px 0;padding:10px 12px;border:1px solid #854D0E;background:#21190D;border-radius:8px}
     .deploy-consent label{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#FDE68A;line-height:1.5}
     .deploy-consent input{accent-color:#F59E0B;margin:2px 0 0}
