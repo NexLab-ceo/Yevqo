@@ -296,6 +296,21 @@ func (db *DB) GetDeviceByID(ctx context.Context, id int64) (*shared.Device, erro
 	return d, nil
 }
 
+// WorkspaceOwnerIDs returns the workspaces the actor can access, including their own.
+func (db *DB) WorkspaceOwnerIDs(ctx context.Context, actorID int64) ([]int64, error) {
+	owners := []int64{actorID}
+	rows, err := db.conn.QueryContext(ctx, `SELECT owner_user_id FROM workspace_members WHERE member_user_id=? AND status='active' ORDER BY owner_user_id`, actorID)
+	if err != nil { return nil, fmt.Errorf("list workspace memberships: %w", err) }
+	defer rows.Close()
+	for rows.Next() {
+		var ownerID int64
+		if err := rows.Scan(&ownerID); err != nil { return nil, err }
+		owners = append(owners, ownerID)
+	}
+	if err := rows.Err(); err != nil { return nil, err }
+	return owners, nil
+}
+
 // WorkspaceRole returns the effective role for an actor in an owner's workspace.
 func (db *DB) WorkspaceRole(ctx context.Context, ownerID, actorID int64) (string, bool, error) {
 	if ownerID == actorID { return "Owner", true, nil }
