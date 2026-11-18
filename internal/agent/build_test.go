@@ -65,10 +65,10 @@ func TestAnalyzeNodeProjectRespectsLockfileAndScripts(t *testing.T) {
  if plan.Install!="npm ci"||plan.Build!="npm run build"||plan.Start!=""{t.Fatalf("unexpected locked plan: %+v",plan)}
 }
 
-func TestAnalyzeCustomManifestEnablesUnknownLanguage(t *testing.T) {
+func TestAnalyzeCustomYevqoConfigEnablesUnknownLanguage(t *testing.T) {
  root:=project(t,"src/main.nim")
  manifest:="version: 1\nbuild:\n  provider: custom\n  install: nimble install -y\n  command: nim c -o app src/main.nim\n"
- if err:=os.WriteFile(filepath.Join(root,"veltrix.yaml"),[]byte(manifest),0644);err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(filepath.Join(root,"yevqo.yml"),[]byte(manifest),0644);err!=nil{t.Fatal(err)}
  plan,err:=AnalyzeProject(root)
  if err!=nil{t.Fatal(err)}
  if plan.Stack!="custom"||plan.NeedsConfig||plan.Install!="nimble install -y"||plan.Build!="nim c -o app src/main.nim"{t.Fatalf("custom language manifest was not applied: %+v",plan)}
