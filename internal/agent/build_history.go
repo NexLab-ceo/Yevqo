@@ -72,10 +72,10 @@ func persistBuildHistory(dataRoot, siteID string, result AndroidBuildResult) err
 		_ = os.Remove(temp)
 		return fmt.Errorf("finalize build history record: %w", err)
 	}
-	return pruneBuildHistory(dir, buildHistoryRetention)
+	return pruneBuildHistory(dataRoot,siteID,dir,buildHistoryRetention)
 }
 
-func pruneBuildHistory(dir string, keep int) error {
+func pruneBuildHistory(dataRoot,siteID,dir string, keep int) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
@@ -91,7 +91,14 @@ func pruneBuildHistory(dir string, keep int) error {
 		return nil
 	}
 	for _, name := range names[:len(names)-keep] {
-		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
+  path:=filepath.Join(dir,name)
+  if raw,readErr:=os.ReadFile(path);readErr==nil{
+   var record BuildHistoryRecord
+   if json.Unmarshal(raw,&record)==nil&&record.SiteID==siteID&&record.Result.ArtifactDir!=""{
+    if cleanupErr:=removeBuildArtifactDirectory(dataRoot,siteID,record.Result.ArtifactDir);cleanupErr!=nil{return fmt.Errorf("prune artifacts for build %s: %w",record.ID,cleanupErr)}
+   }
+  }
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("prune build history %s: %w", name, err)
 		}
 	}
@@ -215,4 +222,12 @@ func ReadBuildArtifactChunk(dataRoot,siteID,buildID,relativePath string,offset i
  file,err:=os.Open(resolved);if err!=nil{return nil,0,false,err};defer file.Close()
  buf:=make([]byte,limit);n,readErr:=file.ReadAt(buf,offset);if readErr!=nil&&readErr!=io.EOF{return nil,info.Size(),false,readErr}
  return buf[:n],info.Size(),offset+int64(n)>=info.Size(),nil
+}
+
+func removeBuildArtifactDirectory(dataRoot,siteID,path string)error{
+ root,err:=safeExistingSubdirectory(dataRoot,filepath.Join("artifacts",siteID));if os.IsNotExist(err){return nil};if err!=nil{return err}
+ resolved,err:=filepath.EvalSymlinks(path);if err!=nil{if os.IsNotExist(err){return nil};return err}
+ rel,err:=filepath.Rel(root,resolved);if err!=nil||rel=="."||rel==".."||strings.HasPrefix(rel,".."+string(filepath.Separator)){return fmt.Errorf("refusing to remove artifact path outside site storage")}
+ info,err:=os.Lstat(path);if err!=nil{if os.IsNotExist(err){return nil};return err};if info.Mode()&os.ModeSymlink!=0||!info.IsDir(){return fmt.Errorf("artifact path is not a real directory")}
+ return os.RemoveAll(path)
 }
