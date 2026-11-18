@@ -106,28 +106,33 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
    switch k{case "project","build","run","environment","healthcheck","artifacts","cache","resources","deploy":default:return m,false,fmt.Errorf("yevqo.yml:%d: unsupported section %q",line,k)}
    section=k;listKey="";continue
   }
-  if ind==4{p:=strings.SplitN(v,":",2);if len(p)!=2{return m,false,fmt.Errorf("yevqo.yml:%d: expected key: value",line)};k,val:=strings.TrimSpace(p[0]),strings.TrimSpace(p[1]);full:=section+"."+k
-   if seen[full]{return m,false,fmt.Errorf("yevqo.yml:%d: duplicate key %q",line,full)};seen[full]=true
-   val=strings.Trim(strings.TrimSpace(strings.SplitN(val," #",2)[0]),"\"'")
-   switch full{
-   case "healthcheck.path":m.HealthcheckPath=val
-   case "healthcheck.interval":d,e:=time.ParseDuration(val);if e!=nil||d<time.Second||d>time.Minute{return m,false,fmt.Errorf("healthcheck.interval must be 1s..1m")};m.HealthcheckInterval=d
-   case "resources.memory":n,e:=parseYevqoMemory(val);if e!=nil{return m,false,e};m.MemoryBytes=n
-   case "deploy.restart":x,e:=strconv.ParseBool(val);if e!=nil{return m,false,fmt.Errorf("deploy.restart must be boolean")};m.DeployRestart=x
-   case "artifacts.include","artifacts.exclude","cache.paths":if val!=""{return m,false,fmt.Errorf("%s must be a list",full)};listKey=full
-   case "cache.enabled":x,e:=strconv.ParseBool(val);if e!=nil{return m,false,fmt.Errorf("cache.enabled must be boolean")};m.CacheEnabled=x
-   default:return m,false,fmt.Errorf("yevqo.yml:%d: unsupported key %q",line,full)
-   };continue
-  }
-  if ind==2&&strings.HasPrefix(v,"- "){if listKey==""{return m,false,fmt.Errorf("yevqo.yml:%d: unexpected list item",line)};x:=strings.Trim(strings.TrimSpace(strings.SplitN(strings.TrimPrefix(v,"- ")," #",2)[0]),"\"'");if x==""{return m,false,fmt.Errorf("yevqo.yml:%d: empty list item",line)}
-   switch listKey{case "artifacts.include":m.ArtifactsInclude=append(m.ArtifactsInclude,x);case "artifacts.exclude":m.ArtifactsExclude=append(m.ArtifactsExclude,x);case "cache.paths":m.CachePaths=append(m.CachePaths,x)};continue
+  if ind==4{
+   if !strings.HasPrefix(v,"- ")||listKey==""{return m,false,fmt.Errorf("yevqo.yml:%d: expected list item",line)}
+   x:=strings.Trim(strings.TrimSpace(strings.SplitN(strings.TrimPrefix(v,"- ")," #",2)[0]),"\"'");if x==""{return m,false,fmt.Errorf("yevqo.yml:%d: empty list item",line)}
+   switch listKey{case "artifacts.include":m.ArtifactsInclude=append(m.ArtifactsInclude,x);case "artifacts.exclude":m.ArtifactsExclude=append(m.ArtifactsExclude,x);case "cache.paths":m.CachePaths=append(m.CachePaths,x)}
+   continue
   }
   if ind!=2{return m,false,fmt.Errorf("yevqo.yml:%d: invalid indentation",line)}
   p:=strings.SplitN(v,":",2);if len(p)!=2{return m,false,fmt.Errorf("yevqo.yml:%d: expected key: value",line)};k,val:=strings.TrimSpace(p[0]),strings.TrimSpace(p[1])
   if section=="environment"{if !validYevqoEnvironmentKey(k){return m,false,fmt.Errorf("invalid or reserved environment key %q",k)};if _,ok:=m.Environment[k];ok{return m,false,fmt.Errorf("duplicate environment key %q",k)};m.Environment[k]=strings.Trim(strings.TrimSpace(strings.SplitN(val," #",2)[0]),"\"'");continue}
   full:=section+"."+k;if seen[full]{return m,false,fmt.Errorf("yevqo.yml:%d: duplicate key %q",line,full)};seen[full]=true;val=strings.Trim(strings.TrimSpace(strings.SplitN(val," #",2)[0]),"\"'")
-  switch full{case "project.name":m.Name=val;case "project.runtime":m.Runtime=val;case "project.root":m.Root=val;case "build.provider":m.Provider=val;case "build.install":m.Install=val;case "build.command":m.Build=val;case "run.command":m.Start=val;case "run.port":n,e:=strconv.Atoi(val);if e!=nil||n<1||n>65535{return m,false,fmt.Errorf("run.port must be 1..65535")};m.Port=n;default:return m,false,fmt.Errorf("yevqo.yml:%d: unsupported key %q",line,full)}
-  listKey=""
+  switch full{
+  case "project.name":m.Name=val
+  case "project.runtime":m.Runtime=val
+  case "project.root":m.Root=val
+  case "build.provider":m.Provider=val
+  case "build.install":m.Install=val
+  case "build.command":m.Build=val
+  case "run.command":m.Start=val
+  case "run.port":n,e:=strconv.Atoi(val);if e!=nil||n<1||n>65535{return m,false,fmt.Errorf("run.port must be 1..65535")};m.Port=n
+  case "healthcheck.path":m.HealthcheckPath=val
+  case "healthcheck.interval":d,e:=time.ParseDuration(val);if e!=nil||d<time.Second||d>time.Minute{return m,false,fmt.Errorf("healthcheck.interval must be 1s..1m")};m.HealthcheckInterval=d
+  case "resources.memory":n,e:=parseYevqoMemory(val);if e!=nil{return m,false,e};m.MemoryBytes=n
+  case "deploy.restart":x,e:=strconv.ParseBool(val);if e!=nil{return m,false,fmt.Errorf("deploy.restart must be boolean")};m.DeployRestart=x
+  case "cache.enabled":x,e:=strconv.ParseBool(val);if e!=nil{return m,false,fmt.Errorf("cache.enabled must be boolean")};m.CacheEnabled=x
+  case "artifacts.include","artifacts.exclude","cache.paths":if val!=""{return m,false,fmt.Errorf("%s must be a YAML list",full)};listKey=full
+  default:return m,false,fmt.Errorf("yevqo.yml:%d: unsupported key %q",line,full)
+  }
  }
  if e:=sc.Err();e!=nil{return m,false,e};if !version{return m,false,fmt.Errorf("yevqo.yml must declare version: 1")};if len(seen)==0&&len(m.Environment)==0{return m,false,fmt.Errorf("yevqo.yml has no configuration")}
  if m.HealthcheckPath!=""&&(!strings.HasPrefix(m.HealthcheckPath,"/")||strings.ContainsAny(m.HealthcheckPath,"\r\n?#")){return m,false,fmt.Errorf("healthcheck.path must be an absolute path without query or fragment")}
