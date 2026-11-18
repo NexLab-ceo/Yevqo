@@ -162,7 +162,7 @@ jobs:
           dpkg-deb --contents "$ALL" > /tmp/veltrix-all.contents
           dpkg-deb --contents "$AGENT" > /tmp/veltrix-agent.contents
           grep -q '/bin/veltrix-control$' /tmp/veltrix-all.contents
-          grep -q '/bin/veltrix-agent
+          grep -q '/bin/veltrix-agent$' /tmp/veltrix-all.contents
           grep -q '/bin/veltrix-update-all$' /tmp/veltrix-all.contents
           grep -q '/bin/veltrix-agent$' /tmp/veltrix-agent.contents
           grep -q '/bin/veltrix-setup-agent$' /tmp/veltrix-agent.contents
