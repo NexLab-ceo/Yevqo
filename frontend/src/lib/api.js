@@ -175,6 +175,11 @@ export async function adminStats() {
 
 
 // === Workspace ===
+export async function listWorkspaceMembers() { return request('GET', '/api/workspace/members'); }
+export async function inviteWorkspaceMember(email, role) { return request('POST', '/api/workspace/members', { email, role }); }
+export async function removeWorkspaceMember(id) { return request('DELETE', `/api/workspace/members/${id}`); }
+export async function listWorkspaceInvitations() { return request('GET', '/api/workspace/invitations'); }
+export async function acceptWorkspaceInvitation(id) { return request('POST', '/api/workspace/invitations', { id }); }
 export async function listProjects() { return request('GET', '/api/projects'); }
 export async function createProject(name, description = '') { return request('POST', '/api/projects', { name, description }); }
 export async function getProject(id) { return request('GET', `/api/projects/${id}`); }
