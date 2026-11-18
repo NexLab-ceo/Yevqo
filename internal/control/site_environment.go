@@ -25,13 +25,16 @@ func validSiteEnvKey(key string) bool {
 }
 
 func (s *Server) handleSiteEnvironment(w http.ResponseWriter, r *http.Request, user *shared.User, deviceID int64, siteID string) {
-	var owned int
-	err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`, deviceID, siteID, user.ID).Scan(&owned)
-	if err != nil || owned != 1 { apiError(w, shared.ErrNotFound("site not found")); return }
+	dev, err := s.db.GetDeviceByID(r.Context(), deviceID)
+	if err != nil { apiError(w, shared.ErrNotFound("site not found")); return }
+	if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil {
+		apiError(w, err)
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:
-		rows, err := s.db.conn.QueryContext(r.Context(), `SELECT name FROM site_environment_vars WHERE user_id=? AND device_id=? AND site_id=? ORDER BY name`, user.ID, deviceID, siteID)
+		rows, err := s.db.conn.QueryContext(r.Context(), `SELECT name FROM site_environment_vars WHERE user_id=? AND device_id=? AND site_id=? ORDER BY name`, dev.UserID, deviceID, siteID)
 		if err != nil { apiError(w, shared.ErrInternal("could not load environment variables")); return }
 		defer rows.Close()
 		items := make([]map[string]interface{}, 0)
@@ -50,14 +53,14 @@ func (s *Server) handleSiteEnvironment(w http.ResponseWriter, r *http.Request, u
 		if len(in.Value) > 16384 || strings.IndexByte(in.Value, 0) >= 0 { apiError(w, shared.ErrBadRequest("environment value must be at most 16 KiB and cannot contain NUL")); return }
 		nonce, ciphertext, err := encryptCredential(s.credentialKey, []byte(in.Value))
 		if err != nil { apiError(w, shared.ErrInternal("could not encrypt environment value")); return }
-		_, err = s.db.conn.ExecContext(r.Context(), `INSERT INTO site_environment_vars(user_id,device_id,site_id,name,nonce,ciphertext) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE nonce=VALUES(nonce),ciphertext=VALUES(ciphertext),updated_at=CURRENT_TIMESTAMP`, user.ID, deviceID, siteID, in.Name, nonce, ciphertext)
+		_, err = s.db.conn.ExecContext(r.Context(), `INSERT INTO site_environment_vars(user_id,device_id,site_id,name,nonce,ciphertext) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE nonce=VALUES(nonce),ciphertext=VALUES(ciphertext),updated_at=CURRENT_TIMESTAMP`, dev.UserID, deviceID, siteID, in.Name, nonce, ciphertext)
 		if err != nil { apiError(w, shared.ErrInternal("could not save environment variable")); return }
 		_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(user.ID), DeviceID: shared.PtrInt64(deviceID), Action: "site_environment_updated", Details: map[string]interface{}{"site_id": siteID, "key": in.Name}, IP: clientIP(r)})
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "name": in.Name, "masked": true})
 	case http.MethodDelete:
 		name := strings.TrimSpace(r.URL.Query().Get("name"))
 		if !validSiteEnvKey(name) { apiError(w, shared.ErrBadRequest("environment key is invalid")); return }
-		res, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM site_environment_vars WHERE user_id=? AND device_id=? AND site_id=? AND name=?`, user.ID, deviceID, siteID, name)
+		res, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM site_environment_vars WHERE user_id=? AND device_id=? AND site_id=? AND name=?`, dev.UserID, deviceID, siteID, name)
 		if err != nil { apiError(w, shared.ErrInternal("could not delete environment variable")); return }
 		n, _ := res.RowsAffected()
 		if n == 0 { apiError(w, shared.ErrNotFound("environment variable not found")); return }
