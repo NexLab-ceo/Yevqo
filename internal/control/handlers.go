@@ -298,8 +298,8 @@ func (s *Server) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 		apiError(w, err)
 		return
 	}
-	if dev.UserID != user.ID {
-		apiError(w, shared.ErrForbidden("not your device"))
+	if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil {
+		apiError(w, err)
 		return
 	}
 
@@ -307,6 +307,10 @@ func (s *Server) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && len(parts) == 1:
 		s.handleGetDevice(w, r, dev)
 	case r.Method == http.MethodDelete && len(parts) == 1:
+		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.delete"); err != nil {
+			apiError(w, err)
+			return
+		}
 		s.handleDeleteDevice(w, r, dev)
 	case r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "cmd":
 		s.handleSendCommand(w, r, dev)
@@ -383,6 +387,15 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 	payload, err := parsePayload(req.Action, req.Payload)
 	if err != nil {
 		apiError(w, shared.ErrBadRequest(err.Error()))
+		return
+	}
+	user := UserFromContext(r.Context())
+	if user == nil {
+		apiError(w, shared.ErrUnauthorized("not logged in"))
+		return
+	}
+	if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, req.Action); err != nil {
+		apiError(w, err)
 		return
 	}
 
@@ -534,7 +547,8 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 		deviceID, err := parseSiteGitRouteID(parts[0])
 		if err != nil { apiError(w, err); return }
 		dev, err := s.db.GetDeviceByID(r.Context(), deviceID)
-		if err != nil || dev.UserID != user.ID { apiError(w, shared.ErrNotFound("site not found")); return }
+		if err != nil { apiError(w, shared.ErrNotFound("site not found")); return }
+		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
 		if !validBackupSiteID(parts[1]) { apiError(w, shared.ErrBadRequest("invalid site id")); return }
 		conn, online := s.hub.Get(deviceID)
 		if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
@@ -588,8 +602,12 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 	siteID := parts[1]
 
 	dev, err := s.db.GetDeviceByID(r.Context(), deviceID)
-	if err != nil || dev.UserID != user.ID {
+	if err != nil {
 		apiError(w, shared.ErrForbidden("not your device"))
+		return
+	}
+	if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil {
+		apiError(w, err)
 		return
 	}
 
