@@ -55,7 +55,14 @@ func TestListBuildHistoryAgentCommand(t *testing.T) {
  if !response.Ok||len(response.Payload)==0{t.Fatalf("history command failed: %#v",response)}
  var body struct{Records []BuildHistoryRecord `json:"records"`}
  if err:=shared.Unmarshal(response.Payload,&body);err!=nil{t.Fatal(err)}
- if len(body.Records)!=1||body.Records[0].Result.Output!="nim build passed"{t.Fatalf("unexpected history response: %#v",body)}
+ if len(body.Records)!=1||body.Records[0].Result.Output!=""||body.Records[0].OutputBytes==0{t.Fatalf("history listing should return metadata only: %#v",body)}
+ detailPayload,err:=shared.Marshal(shared.GetBuildHistory{SiteId:"command-demo",ID:body.Records[0].ID})
+ if err!=nil{t.Fatal(err)}
+ detail:=handler.HandleCommand(&shared.Command{Id:"history-2",Action:"get_build_history",Payload:detailPayload})
+ if !detail.Ok||len(detail.Payload)==0{t.Fatalf("history detail command failed: %#v",detail)}
+ var full BuildHistoryRecord
+ if err:=shared.Unmarshal(detail.Payload,&full);err!=nil{t.Fatal(err)}
+ if full.Result.Output!="nim build passed"{t.Fatalf("history detail log missing: %#v",full)}
 }
 
 func TestBuildHistoryRejectsInvalidSiteAndSymlink(t *testing.T) {
