@@ -28,6 +28,7 @@ type BuildPlan struct {
 		Warnings     []string `json:"warnings,omitempty"`
 	ProjectName string `json:"project_name,omitempty"`
 	Runtime string `json:"runtime,omitempty"`
+ Output string `json:"build_output,omitempty"`
 	Capabilities BuildCapabilities `json:"capabilities"`
 	AndroidEnvironment AndroidBuildEnvironment `json:"android_environment"`
 }
@@ -35,7 +36,7 @@ type BuildPlan struct {
 // AnalyzeProject inspects only the immediate project root. It does not execute
 // scripts, parse arbitrary build plugins, or follow symlinks.
 type yevqoManifest struct {
- Name, Runtime, Root, Provider, Install, Build, Start string
+ Name, Runtime, Root, Provider, Install, Build, Output, Start string
  Port int
  Environment map[string]string
  HealthcheckPath string
@@ -80,6 +81,7 @@ func AnalyzeProject(root string) (BuildPlan, error) {
  if manifest.Provider == "static" { plan.Stack = "static"; plan.NeedsConfig = false }
  plan.ProjectName = manifest.Name
  plan.Runtime = manifest.Runtime
+ plan.Output = manifest.Output
  if manifest.Install != "" { plan.Install = manifest.Install }
  if manifest.Build != "" { plan.Build = manifest.Build }
  if manifest.Start != "" { plan.Start = manifest.Start }
@@ -124,6 +126,7 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
   case "build.provider":m.Provider=val
   case "build.install":m.Install=val
   case "build.command":m.Build=val
+  case "build.output":m.Output=val
   case "run.command":m.Start=val
   case "run.port":n,e:=strconv.Atoi(val);if e!=nil||n<1||n>65535{return m,false,fmt.Errorf("run.port must be 1..65535")};m.Port=n
   case "healthcheck.path":m.HealthcheckPath=val
@@ -137,7 +140,7 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
  }
  if e:=sc.Err();e!=nil{return m,false,e};if !version{return m,false,fmt.Errorf("yevqo.yml must declare version: 1")};if len(seen)==0&&len(m.Environment)==0{return m,false,fmt.Errorf("yevqo.yml has no configuration")}
  if m.HealthcheckPath!=""&&(!validHealthCheckPath(m.HealthcheckPath)||strings.ContainsAny(m.HealthcheckPath,"?#")){return m,false,fmt.Errorf("healthcheck.path must be an absolute path without query or fragment")}
- for _,p:=range append(append(append([]string{},m.CachePaths...),m.ArtifactsInclude...),m.ArtifactsExclude...){if filepath.IsAbs(p)||strings.Contains(p,"\\")||filepath.Clean(p)=="."||filepath.Clean(p)==".."||strings.HasPrefix(filepath.Clean(p),".."+string(filepath.Separator)){return m,false,fmt.Errorf("yevqo.yml paths must stay inside project root")}}
+ for _,p:=range append(append(append(append([]string{},m.CachePaths...),m.ArtifactsInclude...),m.ArtifactsExclude...),m.Output){if filepath.IsAbs(p)||strings.Contains(p,"\\")||filepath.Clean(p)=="."||filepath.Clean(p)==".."||strings.HasPrefix(filepath.Clean(p),".."+string(filepath.Separator)){return m,false,fmt.Errorf("yevqo.yml paths must stay inside project root")}}
  return m,true,nil
 }
 func validYevqoEnvironmentKey(k string)bool{if k==""||len(k)>64{return false};for i,r:=range k{if !((r>='A'&&r<='Z')||r=='_'||(i>0&&r>='0'&&r<='9')){return false}};switch k{case "PATH","HOME","PREFIX","TMPDIR","LD_PRELOAD","LD_LIBRARY_PATH","PORT","HOST":return false};return !strings.HasPrefix(k,"DB_")&&!strings.HasPrefix(k,"VELTRIX_")}
