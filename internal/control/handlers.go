@@ -589,7 +589,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 	if len(parts)==3 && parts[2]=="install-cloudflared" {
 		if r.Method!=http.MethodPost { http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return }
 		deviceID,err:=parseSiteGitRouteID(parts[0]);if err!=nil{apiError(w,err);return}
-		dev,err:=s.db.GetDeviceByID(r.Context(),deviceID);if err!=nil||dev.UserID!=user.ID{apiError(w,shared.ErrForbidden("not your device"));return}
+		dev,err:=s.db.GetDeviceByID(r.Context(),deviceID);if err!=nil{apiError(w,shared.ErrNotFound("device not found"));return};if authErr:=s.authorizeWorkspace(r.Context(),dev.UserID,user.ID,"device.read");authErr!=nil{apiError(w,authErr);return}
 		conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("устройство не в сети"));return}
 		ctx,cancel:=context.WithTimeout(r.Context(),3*time.Minute);defer cancel()
 		result,err:=conn.SendCommand(ctx,"install_cloudflared",map[string]interface{}{})
