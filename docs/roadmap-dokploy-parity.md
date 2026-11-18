@@ -63,12 +63,12 @@ This roadmap tracks useful Dokploy capabilities adapted to Android/Termux. It do
 
 ## P2 — Platform capabilities
 
-- [ ] App templates and one-click starters. (Initial built-in runtime starters are exposed in the device create-site dialog; framework/Git templates and full one-click build/deploy remain open. See [app templates](app-templates.md).)
-- [ ] Preview deployments and staging environments.
-- [ ] Build plugins/providers. Provider registry and explicit platform/executor preflight are implemented for Android local, Dockerfile, Nixpacks and Railpack; actual provider execution and registration UI remain open.
-- [ ] Remote Linux build executor for Dockerfile/Nixpacks/Railpack. Android/Termux is explicitly rejected for these providers; remote executor transport, enrollment, scheduling and isolated job execution remain open.
-- [ ] Multi-device orchestration and per-device capabilities. Account registration is quota-aware: Free is strictly limited to one phone (referral bonuses do not bypass the cap), while commercial allowances are configurable. Device registration is serialized per account in MySQL so concurrent Agent connections cannot exceed the quota; existing paired devices can reconnect without consuming another slot. Agent handshakes report OS, architecture and detected local runtimes/tools; the Control Plane persists and displays these per-device capabilities as informational inventory only (never as an authorization signal). Unpairing closes the live Agent socket.
-- [ ] Granular team permissions, audit log and API/CLI polish.
+- [ ] App templates and one-click starters. Implemented slice: shared PHP, Node.js HTTP and Static catalog exposed by the authenticated Control Plane API; the device UI loads that catalog; Agent scaffolds files and persists `yevqo.template.json`; legacy Go starter remains compatible. Full framework/Git templates and template-driven Git build/deploy remain open. See [app templates](app-templates.md).
+- [ ] Preview deployments and staging environments. No end-to-end preview lifecycle is implemented yet.
+- [ ] Build plugins/providers. Provider catalog and platform preflight exist, but provider selection is not yet persisted per site and the build pipeline is not wired to remote providers.
+- [ ] Remote Linux build executor for Dockerfile/Nixpacks/Railpack. Android/Termux is explicitly rejected for these providers; SSH enrollment, credential storage, job leasing, isolated builds, artifact return and UI remain open.
+- [ ] Multi-device orchestration and per-device capabilities. Account registration is quota-aware: Free is strictly limited to one phone (referral bonuses do not bypass the cap), while commercial allowances are configurable. Device registration is serialized per account in MySQL; existing paired devices can reconnect. Agent handshakes report OS, architecture and detected local runtimes/tools. The Control Plane now lists active workspace device memberships, but cross-device task scheduling, paid-plan worker selection, queueing and failover remain open.
+- [ ] Permissions, audit log and CLI. Implemented slice: Owner/Admin/Developer API role checks for device/site operations, member invitation/acceptance/removal APIs and UI, append-only audit event writes plus an Owner/Admin audit endpoint/UI, and a session-authenticated `yevqo deploy|stop|logs` CLI. Remaining: complete RBAC enforcement for every resource/module, Admin workspace delegation, full audit coverage for all mutations and validated CLI distribution.
 
 ## Process model (Termux)
 
