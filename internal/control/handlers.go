@@ -4,6 +4,7 @@ package control
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/gorilla/websocket"
 	"fmt"
