@@ -296,6 +296,19 @@ func (db *DB) GetDeviceByID(ctx context.Context, id int64) (*shared.Device, erro
 	return d, nil
 }
 
+// WorkspaceRole returns the effective role for an actor in an owner's workspace.
+func (db *DB) WorkspaceRole(ctx context.Context, ownerID, actorID int64) (string, bool, error) {
+	if ownerID == actorID { return "Owner", true, nil }
+	var role string
+	err := db.conn.QueryRowContext(ctx,
+		`SELECT role FROM workspace_members WHERE owner_user_id=? AND member_user_id=? AND status='active'`,
+		ownerID, actorID,
+	).Scan(&role)
+	if err == sql.ErrNoRows { return "", false, nil }
+	if err != nil { return "", false, fmt.Errorf("lookup workspace membership: %w", err) }
+	return role, true, nil
+}
+
 func (db *DB) ListDevicesByUser(ctx context.Context, userID int64) ([]shared.Device, error) {
 	query := `
 		SELECT id, user_id, device_id, hostname, tailscale_ip, agent_version,
