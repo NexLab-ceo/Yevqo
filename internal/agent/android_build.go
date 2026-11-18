@@ -341,9 +341,18 @@ func syncConfiguredBuildCaches(srcRoot,dstRoot string,paths []string,save bool)e
  return nil
 }
 func copyBuildCachePath(src,dst string)error{
+ if err:=ensureNoSymlinkParents(dst);err!=nil{return err}
  info,err:=os.Lstat(src);if err!=nil{return err};if info.Mode()&os.ModeSymlink!=0{return fmt.Errorf("cache path may not be a symlink")}
  if info.IsDir(){if err:=os.MkdirAll(dst,0700);err!=nil{return err};entries,err:=os.ReadDir(src);if err!=nil{return err};for _,e:=range entries{if err:=copyBuildCachePath(filepath.Join(src,e.Name()),filepath.Join(dst,e.Name()));err!=nil{return err}};return nil}
  if !info.Mode().IsRegular(){return nil};if info.Size()>256<<20{return fmt.Errorf("single cache file exceeds 256 MiB")}
  if err:=os.MkdirAll(filepath.Dir(dst),0700);err!=nil{return err};in,err:=os.Open(src);if err!=nil{return err};defer in.Close()
  out,err:=os.OpenFile(dst,os.O_CREATE|os.O_TRUNC|os.O_WRONLY,0600);if err!=nil{return err};_,copyErr:=io.Copy(out,io.LimitReader(in,256<<20+1));closeErr:=out.Close();if copyErr!=nil{return copyErr};return closeErr
+}
+
+func ensureNoSymlinkParents(path string)error{
+ abs,err:=filepath.Abs(path);if err!=nil{return err}
+ current:=string(filepath.Separator)
+ volume:=filepath.VolumeName(abs);if volume!=""{current=volume+string(filepath.Separator);abs=strings.TrimPrefix(abs,current)}
+ for _,part:=range strings.Split(abs,string(filepath.Separator)){if part==""{continue};current=filepath.Join(current,part);info,e:=os.Lstat(current);if os.IsNotExist(e){continue};if e!=nil{return e};if info.Mode()&os.ModeSymlink!=0{return fmt.Errorf("refusing cache path through symlink")}}
+ return nil
 }
