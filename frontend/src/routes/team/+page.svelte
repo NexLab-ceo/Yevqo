@@ -1,17 +1,111 @@
 <script>
- import {user} from '$lib/stores.js';
+ import { onMount } from 'svelte';
+ import { user } from '$lib/stores.js';
+ import { listWorkspaceMembers, inviteWorkspaceMember, removeWorkspaceMember, listWorkspaceInvitations, acceptWorkspaceInvitation } from '$lib/api.js';
+ import { notify } from '$lib/stores.js';
+ import Button from '$lib/components/Button.svelte';
+
  const roles=[
- {name:'Owner',desc:'Полный контроль workspace, billing и удаления ресурсов'},
- {name:'Administrator',desc:'Управление проектами, устройствами, сайтами и настройками'},
- {name:'Developer',desc:'Развёртывание и управление назначенными сайтами'},
- {name:'Moderator',desc:'Просмотр активности, логов и очереди модерации'},
- {name:'Viewer',desc:'Только просмотр разрешённых ресурсов'}
+  {name:'Owner',desc:'Полный контроль workspace и всех ресурсов'},
+  {name:'Admin',desc:'Управление устройствами, сайтами, конфигурацией, участниками и аудитом'},
+  {name:'Developer',desc:'Создание сайтов, deployments, управление процессами и просмотр логов'}
  ];
+ let members=[], invitations=[], loading=true, busy=false;
+ let email='', role='developer';
+
+ onMount(load);
+ async function load(){
+  loading=true;
+  const [m,i]=await Promise.all([listWorkspaceMembers(),listWorkspaceInvitations()]);
+  if(m.ok)members=m.data.members||[];else notify(m.error||'Не удалось загрузить участников','error');
+  if(i.ok)invitations=i.data.invitations||[];else notify(i.error||'Не удалось загрузить приглашения','error');
+  loading=false;
+ }
+ async function invite(){
+  if(!email.trim())return;
+  busy=true;const r=await inviteWorkspaceMember(email,role);busy=false;
+  if(!r.ok){notify(r.error||'Не удалось отправить приглашение','error');return}
+  email='';notify('Приглашение отправлено','success');await load();
+ }
+ async function remove(member){
+  if(!confirm('Удалить участника из workspace?'))return;
+  const r=await removeWorkspaceMember(member.id);
+  if(!r.ok){notify(r.error||'Не удалось удалить участника','error');return}
+  notify('Участник удалён','success');await load();
+ }
+ async function accept(invitation){
+  const r=await acceptWorkspaceInvitation(invitation.id);
+  if(!r.ok){notify(r.error||'Не удалось принять приглашение','error');return}
+  notify('Вы присоединились к workspace','success');await load();
+ }
 </script>
-<div class="page-header"><div><div class="eyebrow">WORKSPACE MANAGEMENT</div><h1 class="page-title">Team & Permissions</h1><p class="page-desc">Роли и границы доступа в VELTRIX workspace.</p></div></div>
-<section class="panel"><h2>Current workspace owner</h2><div class="member"><span class="avatar">{($user?.username||'U').slice(0,1).toUpperCase()}</span><span><strong>{$user?.username}</strong><small>{$user?.email}</small></span><span class="role owner">Owner</span></div></section>
-<section class="panel"><h2>Role model</h2>{#each roles as role}<div class="role-row"><strong>{role.name}</strong><span>{role.desc}</span></div>{/each}</section>
-<div class="notice">Приглашения и совместный доступ пока отключены: сначала нужно завершить workspace membership и проверку ролей на каждом API-ресурсе. Нельзя выдавать доступ только на уровне интерфейса.</div>
+
+<div class="page-header">
+ <div><div class="eyebrow">WORKSPACE MANAGEMENT</div><h1 class="page-title">Team & Permissions</h1><p class="page-desc">Участники, приглашения и реальные серверные роли доступа.</p></div>
+ <Button on:click={load}>↻ Обновить</Button>
+</div>
+
+<section class="panel">
+ <h2>Текущий workspace</h2>
+ <div class="member owner-row"><span class="avatar">{($user?.username||'U').slice(0,1).toUpperCase()}</span><span class="member-main"><strong>{$user?.username}</strong><small>{$user?.email}</small></span><span class="role owner">Owner</span></div>
+</section>
+
+<section class="panel">
+ <h2>Пригласить участника</h2>
+ <div class="invite-form">
+  <input class="input" type="email" bind:value={email} placeholder="user@example.com" />
+  <select class="input" bind:value={role}><option value="admin">Admin</option><option value="developer">Developer</option></select>
+  <Button variant="primary" on:click={invite} loading={busy}>Пригласить</Button>
+ </div>
+ <p class="hint">Пользователь должен сначала зарегистрировать аккаунт NexLab. Приглашение появится у него в Team & Permissions.</p>
+</section>
+
+<section class="panel">
+ <h2>Участники</h2>
+ {#if loading}<div class="empty">Загрузка…</div>{:else if !members.length}<div class="empty">Пока нет участников.</div>{:else}
+  {#each members as member (member.id)}
+   <div class="member-row">
+    <div class="member-main"><strong>{member.username}</strong><small>{member.email} · {member.status}</small></div>
+    <span class:admin={member.role==='admin'} class:developer={member.role==='developer'} class="role">{member.role}</span>
+    <Button variant="ghost" size="sm" on:click={()=>remove(member)}>Удалить</Button>
+   </div>
+  {/each}
+ {/if}
+</section>
+
+{#if invitations.length}
+<section class="panel">
+ <h2>Входящие приглашения</h2>
+ {#each invitations as invitation (invitation.id)}
+  <div class="member-row">
+   <div class="member-main"><strong>{invitation.owner_username}</strong><small>{invitation.owner_email} · роль {invitation.role}</small></div>
+   <Button variant="primary" size="sm" on:click={()=>accept(invitation)}>Принять</Button>
+  </div>
+ {/each}
+</section>
+{/if}
+
+<section class="panel">
+ <h2>Ролевая модель</h2>
+ {#each roles as item}
+  <div class="role-row"><strong>{item.name}</strong><span>{item.desc}</span></div>
+ {/each}
+</section>
+
 <style>
-.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}.panel{padding:16px;background:#101727;border:1px solid #253149;border-radius:11px;margin-bottom:12px}.panel h2{font-size:12px;margin-bottom:12px}.member{display:flex;align-items:center;gap:10px}.avatar{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;background:#242b50;color:#c7d2fe;font-size:12px;font-weight:700}.member>span:nth-child(2){display:grid;gap:3px;flex:1}.member strong,.role-row strong{font-size:10px}.member small,.role-row span{font-size:9px;color:#64748b}.role{font-size:9px;padding:4px 7px;border-radius:6px}.owner{background:#25264a;color:#a5b4fc}.role-row{display:grid;grid-template-columns:130px 1fr;gap:12px;padding:10px 0;border-top:1px solid #253149}.notice{padding:12px;border:1px solid #334155;border-radius:9px;background:#101727;color:#94a3b8;font-size:10px;line-height:1.6}
+.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}
+.panel{padding:16px;background:#101727;border:1px solid #253149;border-radius:11px;margin-bottom:12px}
+.panel h2{font-size:12px;margin-bottom:12px}
+.member,.member-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #1e293b}
+.member-row:last-child{border-bottom:0}
+.avatar{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;background:#242b50;color:#c7d2fe;font-size:12px;font-weight:700}
+.member-main{display:grid;gap:3px;flex:1;min-width:0}
+.member strong,.member-row strong,.role-row strong{font-size:10px}
+.member small,.member-row small,.role-row span,.hint{font-size:9px;color:#64748b}
+.role{font-size:9px;padding:4px 7px;border-radius:6px;background:#1e293b;color:#cbd5e1}
+.owner{background:#25264a;color:#a5b4fc}.admin{background:#183b36;color:#6ee7b7}.developer{background:#26334b;color:#93c5fd}
+.invite-form{display:grid;grid-template-columns:minmax(160px,1fr) 130px auto;gap:8px}
+.hint{line-height:1.6;margin-top:10px}
+.role-row{display:grid;grid-template-columns:100px 1fr;gap:12px;padding:10px 0;border-top:1px solid #253149}
+@media(max-width:600px){.invite-form{grid-template-columns:1fr}.member-row{flex-wrap:wrap}}
 </style>
