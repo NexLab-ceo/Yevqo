@@ -382,7 +382,18 @@ func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port in
 		return 0, fmt.Errorf("site root directory resolves outside the site")
 	}
 
-	// Refuse a port already occupied by another process.
+	// Apply non-secret runtime defaults from the canonical manifest.
+ manifest,manifestFound,manifestErr:=readYevqoManifest(absPath)
+ if manifestErr!=nil{return 0,manifestErr}
+ if manifestFound{
+  if startCommand==""&&manifest.Start!=""{startCommand=manifest.Start}
+  if manifest.Port>0&&port!=manifest.Port{return 0,fmt.Errorf("requested port %d does not match yevqo.yml run.port %d",port,manifest.Port)}
+  merged:=make(map[string]string,len(manifest.Environment)+len(extraEnv))
+  for k,v:=range manifest.Environment{merged[k]=v}
+  for k,v:=range extraEnv{merged[k]=v}
+  extraEnv=merged
+ }
+ // Refuse a port already occupied by another process.
 	listener, listenErr := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if listenErr != nil { return 0, fmt.Errorf("port %d is already in use", port) }
 	_ = listener.Close()
@@ -492,7 +503,10 @@ func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port in
 	pid := cmd.Process.Pid
 	readinessTimeout := 5 * time.Second
 	if runtime == "nodejs" { readinessTimeout = 20 * time.Second }
-	if err := waitForTCP(port, readinessTimeout); err != nil || !isAlive(pid) {
+	var readinessErr error
+ if manifestFound && manifest.HealthcheckPath!="" { readinessErr=waitForHTTP(port,manifest.HealthcheckPath,readinessTimeout) } else { readinessErr=waitForTCP(port,readinessTimeout) }
+ if readinessErr != nil || !isAlive(pid) {
+  err:=readinessErr
 		// A process that never becomes ready must not remain unmanaged.
 		if isAlive(pid) {
 			if stopErr := killProcessGroup(pid, pid); stopErr != nil {
@@ -1160,6 +1174,14 @@ func (m *ProcessManager) BuildSite(req AndroidBuildRequest) AndroidBuildResult {
 		return AndroidBuildResult{Provider: "android-local", Stack: req.Stack, Error: err.Error()}
 	}
 	req.SiteRoot = siteRoot
+ if manifest,found,manifestErr:=readYevqoManifest(siteRoot);manifestErr!=nil{return AndroidBuildResult{SiteID:req.SiteID,Provider:"android-local",Stack:req.Stack,Error:manifestErr.Error()}}else if found{
+  projectRoot:=manifest.Root;if projectRoot==""{projectRoot="."}
+  req.RootDir=projectRoot
+  if req.InstallCommand==""{req.InstallCommand=manifest.Install}
+  if req.BuildCommand==""{req.BuildCommand=manifest.Build}
+  if req.Environment==nil{req.Environment=manifest.Environment}
+  if manifest.MemoryBytes>0{req.MinAvailableMemoryBytes=manifest.MemoryBytes}
+ }
 	if m.BuildRunner == nil {
 		m.BuildRunner = NewAndroidBuildRunner(m.DataRoot)
 	}
