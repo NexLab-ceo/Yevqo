@@ -987,6 +987,9 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 				m.UpdateDeploymentJob(req.SiteId, jobID, state, progress, message)
 			},
 		})
+		if historyErr := persistBuildHistory(m.DataRoot, req.SiteId, build); historyErr != nil {
+			output.WriteString("Build history warning: " + historyErr.Error() + "\n")
+		}
 		output.WriteString("\n")
 		output.WriteString(build.Output)
 		if !build.Success {
@@ -1160,5 +1163,9 @@ func (m *ProcessManager) BuildSite(req AndroidBuildRequest) AndroidBuildResult {
 	if m.BuildRunner == nil {
 		m.BuildRunner = NewAndroidBuildRunner(m.DataRoot)
 	}
-	return m.BuildRunner.Run(context.Background(), req)
+	result := m.BuildRunner.Run(context.Background(), req)
+	if historyErr := persistBuildHistory(m.DataRoot, req.SiteID, result); historyErr != nil {
+		result.HistoryWarning = historyErr.Error()
+	}
+	return result
 }
