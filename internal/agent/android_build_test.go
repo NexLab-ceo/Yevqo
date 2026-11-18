@@ -52,10 +52,34 @@ func TestVeltrixManifestAndSafeCommands(t *testing.T) {
  if err:=os.WriteFile(filepath.Join(root,"veltrix.yaml"),[]byte(manifest),0600);err!=nil{t.Fatal(err)}
  plan,err:=AnalyzeProject(root);if err!=nil{t.Fatal(err)}
  if plan.Stack!="nodejs"||plan.Root!="app"||plan.Install!="npm install"||plan.Build!="npm run build"||plan.Start!="npm run start"||plan.Port!=3000{t.Fatalf("manifest was not applied: %+v",plan)}
- step,err:=parseManifestBuildCommand("build","npm run build")
+ step,err:=parseManifestBuildCommand(root,"build","npm run build")
  if err!=nil||step.exe!="npm"||len(step.args)!=2{t.Fatalf("valid command rejected: %#v %v",step,err)}
- if _,err:=parseManifestBuildCommand("build","npm run build && curl bad");err==nil{t.Fatal("shell operators must be rejected")}
- if _,err:=parseManifestBuildCommand("build","sh -c id");err==nil{t.Fatal("shell executables must not be allowlisted")}
+ if _,err:=parseManifestBuildCommand(root,"build","npm run build && curl bad");err==nil{t.Fatal("shell operators must be rejected")}
+ if _,err:=parseManifestBuildCommand(root,"build","sh -c id");err==nil{t.Fatal("shell executables must be rejected")}
+}
+
+
+func TestUniversalBuildCommandSupportsInstalledToolchains(t *testing.T) {
+ root:=t.TempDir()
+ bin:=t.TempDir()
+ tool:=filepath.Join(bin,"nim")
+ if err:=os.WriteFile(tool,[]byte("#!/bin/sh\nprintf '%s\\n' \"custom compiler ran\"\n"),0700);err!=nil{t.Fatal(err)}
+ t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+ step,err:=parseManifestBuildCommand(root,"build",`nim c -o "build/my app" src/main.nim`)
+ if err!=nil{t.Fatal(err)}
+ if step.exe!="nim"||len(step.args)!=5||step.args[3]!="build/my app"{t.Fatalf("unexpected argv: %#v",step)}
+ result:=NewAndroidBuildRunner(t.TempDir()).Run(context.Background(),AndroidBuildRequest{
+  SiteID:"universal",SiteRoot:root,Stack:"custom",BuildCommand:"nim compile src/main.nim",
+  AllowProjectCode:true,Timeout:time.Second,MaxLogBytes:1024,
+ })
+ if !result.Success||!strings.Contains(result.Output,"custom compiler ran"){t.Fatalf("custom toolchain did not run: %+v",result)}
+}
+
+func TestUniversalBuildCommandRejectsShellAndMalformedQuotes(t *testing.T) {
+ root:=t.TempDir()
+ for _,command:=range []string{"sh -c id","bash -c id","npm run build && rm -rf .","nim \"unterminated"} {
+  if _,err:=parseManifestBuildCommand(root,"build",command);err==nil{t.Errorf("unsafe or malformed command accepted: %q",command)}
+ }
 }
 
 func TestNodeBuildSkipsMissingBuildScript(t *testing.T) {
