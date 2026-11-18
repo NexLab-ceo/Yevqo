@@ -90,13 +90,13 @@ This is a conservative starting snapshot based on the repository documentation a
 | P0 — Go Control Plane and Agent foundation | PARTIAL | Core services and Android/Termux packaging are present; re-check full install/upgrade and device runtime coverage. |
 | P0 — Android package build and CI | VERIFY | CI/package workflows exist; verify latest successful runs before claiming current green status. |
 | P0 — Device pairing and one-device Free limit | VERIFY | Preserve one connected device per Free account; reconnect same device; reject a second device. |
-| P1 — Project/site lifecycle | PARTIAL | Site creation, process lifecycle, logs, and lifecycle locking are documented; verify current implementation and tests. |
+| P1 — Project/site lifecycle | PARTIAL | Built-in runtimes plus Custom Language runtime; arbitrary installed Termux tools and in-site executables can be launched with explicit shell-free start commands. Full end-to-end runtime coverage remains open. |
 | P1 — Git deployments, immutable releases, rollback | PARTIAL | Deployment/release flow is documented; verify edge cases and current test coverage. |
 | P1 — Domains and public routing | PARTIAL | Domain metadata and tunnel-related work exist; do not claim public routing is universally operational without end-to-end verification. |
 | P2 — Device monitoring telemetry | PARTIAL | Heartbeat and typed metrics are documented; metric availability depends on Android/device support. |
 | P2 — Database management | PARTIAL | PostgreSQL lifecycle and database connections are documented; MySQL/MariaDB, restore/export, and other items remain incomplete unless current code proves otherwise. |
 | P2 — Website/database backups and restore | PARTIAL | Website backup creation is documented; restore and remaining backup operations require verification/implementation. |
-| P2 — Build providers and templates | PARTIAL | Six first-party starters cover Static, PHP website/API, Node.js HTTP/API and Go; Go tests, Android ARM64 cross-compilation, frontend build and Debian package verification passed. Remote Linux executor and framework/Git templates remain open. |
+| P2 — Build providers and templates | PARTIAL | Automatic detection covers Node, Python, Go, Rust, PHP, Java/JVM, .NET, Ruby, C/C++/Make/CMake, Swift, Elixir, Scala, Zig, Dart, Deno, Erlang, Haskell, OCaml, Crystal, Perl, Nim and Lua; universal argv commands support other installed toolchains. Persistent caches, process-group cancellation, custom runtime and seven starters are implemented; CI pending. Physical Termux/toolchain compatibility and Build History/Artifact Manager remain to verify/finish. Remote Linux executor remains outside Android-only scope. |
 | P2 — CLI and preview deployments | VERIFY | Check current commands, authorization, lifecycle, and Android-only limitations before updating. |
 | P2 — Team, RBAC, audit | VERIFY | Check endpoint coverage and enforcement in the API, not only UI visibility. |
 | P2 — AI Agents / Agent Builder | TODO | Do not imply real agent execution until model integration, permission enforcement, and execution lifecycle are implemented. |
@@ -123,6 +123,7 @@ Before finishing every task:
 
 - 2026-11-18 — Added the initial Codex project instructions and established the P0–P3 progress ledger. This is a tracking baseline, not a claim that all listed areas have been re-verified.
 - 2026-11-18 — Expanded first-party App Templates with PHP and Node.js JSON API starters, stable template-ID selection in the device UI, regression tests, and updated template documentation. Pull request checks passed (run 44344232085); Android build/package workflow passed, including Go tests, ARM64 cross-compilation, frontend build, and both Debian package verifications (run 44344231782).
+- 2026-11-18 — Expanded Yevqo Engine with broader language detection, universal shell-free argv commands for installed Termux toolchains and project-local executables, persistent per-language caches, build process-group cancellation, and a Custom Language site runtime that can deploy with an explicit start command. Added regression tests and updated Build Engine/template docs; CI validation pending.
 
 ## Implementation guidelines
 
