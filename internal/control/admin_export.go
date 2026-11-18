@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"veltrix/internal/shared"
@@ -19,9 +20,10 @@ func (s *Server) handleAdminUsersCSV(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.db.conn.QueryContext(r.Context(), `
-		SELECT id, username, email, status, referral_code, referred_by,
-		       bonus_devices, max_devices, created_at, last_seen
-		FROM users ORDER BY created_at DESC, id DESC`)
+		SELECT u.id, u.username, u.email, u.status, u.referred_by,
+		       u.bonus_devices, u.max_devices, u.created_at, u.last_seen,
+		       (SELECT COUNT(*) FROM users referred WHERE referred.referred_by=u.id) AS referral_count
+		FROM users u ORDER BY u.created_at DESC, u.id DESC`)
 	if err != nil {
 		apiError(w, shared.ErrInternal("could not export users"))
 		return
@@ -34,19 +36,19 @@ func (s *Server) handleAdminUsersCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 
 	writer := csv.NewWriter(w)
-	if err := writer.Write([]string{"id", "username", "email", "status", "referral_code", "referred_by", "bonus_devices", "max_devices", "created_at", "last_seen"}); err != nil {
+	if err := writer.Write([]string{"id", "username", "email", "status", "referred_by", "bonus_devices", "max_devices", "referral_count", "created_at", "last_seen"}); err != nil {
 		return
 	}
 
 	count := 0
 	for rows.Next() {
-		var id, bonusDevices, maxDevices int64
-		var username, email, status, referralCode string
+		var id, bonusDevices, maxDevices, referralCount int64
+		var username, email, status string
 		var referredBy sql.NullInt64
 		var createdAt time.Time
 		var lastSeen sql.NullTime
-		if err := rows.Scan(&id, &username, &email, &status, &referralCode, &referredBy,
-			&bonusDevices, &maxDevices, &createdAt, &lastSeen); err != nil {
+		if err := rows.Scan(&id, &username, &email, &status, &referredBy,
+			&bonusDevices, &maxDevices, &createdAt, &lastSeen, &referralCount); err != nil {
 			return
 		}
 
@@ -60,9 +62,9 @@ func (s *Server) handleAdminUsersCSV(w http.ResponseWriter, r *http.Request) {
 		}
 		record := []string{
 			strconv.FormatInt(id, 10), csvSafeCell(username), csvSafeCell(email),
-			csvSafeCell(status), csvSafeCell(referralCode), referredByValue,
+			csvSafeCell(status), referredByValue,
 			strconv.FormatInt(bonusDevices, 10), strconv.FormatInt(maxDevices, 10),
-			createdAt.UTC().Format(time.RFC3339), lastSeenValue,
+			strconv.FormatInt(referralCount, 10), createdAt.UTC().Format(time.RFC3339), lastSeenValue,
 		}
 		if err := writer.Write(record); err != nil {
 			return
@@ -89,11 +91,15 @@ func (s *Server) handleAdminUsersCSV(w http.ResponseWriter, r *http.Request) {
 }
 
 func csvSafeCell(value string) string {
-	if value == "" {
+	// Spreadsheet applications may ignore leading whitespace/control
+	// characters before formula markers. Preserve the original cell while
+	// prefixing an apostrophe whenever its first meaningful byte is unsafe.
+	trimmed := strings.TrimLeft(value, " \\t\\r\\n")
+	if trimmed == "" {
 		return value
 	}
-	switch value[0] {
-	case '=', '+', '-', '@', '\t', '\r':
+	switch trimmed[0] {
+	case '=', '+', '-', '@':
 		return "'" + value
 	default:
 		return value
