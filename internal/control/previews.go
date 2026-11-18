@@ -72,7 +72,7 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 			key,err:=newPreviewKey(); if err!=nil { apiError(w,shared.ErrInternal("could not allocate preview ID")); return }
 			port,err:=previewPort(); if err!=nil { apiError(w,shared.ErrInternal("could not allocate preview port")); return }
 			previewID:="preview_"+key
-			_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO preview_deployments(user_id,device_id,site_id,preview_key,source_branch,source_commit,runtime,path,port,status,expires_at) VALUES(?,?,?,?,?,?,?,?,?,'building',DATE_ADD(NOW(),INTERVAL 24 HOUR))`,user.ID,deviceID,siteID,key,branch,in.Commit,site.Runtime,"sites/"+previewID,port)
+			_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO preview_deployments(user_id,device_id,site_id,preview_key,source_branch,source_commit,runtime,path,port,status,expires_at) VALUES(?,?,?,?,?,?,?,?,?,'building',DATE_ADD(UTC_TIMESTAMP(),INTERVAL 24 HOUR))`,user.ID,deviceID,siteID,key,branch,in.Commit,site.Runtime,"sites/"+previewID,port)
 			if err!=nil { apiError(w,shared.ErrInternal("could not reserve preview")); return }
 			action:=shared.PreviewDeploy{PreviewID:previewID,SiteAction:shared.SiteAction{SiteId:previewID,Path:"sites/"+previewID,Port:port,Runtime:site.Runtime,GitURL:cfg.GitURL,GitBranch:branch,GitCommit:in.Commit,BuildCommand:cfg.BuildCommand,RootDir:cfg.RootDir,GitToken:cfg.GitToken,HealthCheckPath:cfg.HealthCheckPath,CloneTimeoutSeconds:cfg.CloneTimeoutSeconds,BuildTimeoutSeconds:cfg.BuildTimeoutSeconds,HealthCheckTimeoutSeconds:cfg.HealthCheckTimeoutSeconds,StartCommand:cfg.StartCommand,AllowProjectCode:true}}
 			ctx,cancel:=context.WithTimeout(r.Context(),25*time.Minute); defer cancel()

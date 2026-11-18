@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"veltrix/internal/shared"
@@ -13,6 +14,7 @@ import (
 // preview site ID gives it its own directory, process registry entry, logs,
 // release pointer and port; production site state is never touched.
 func (m *ProcessManager) DeployPreview(req shared.PreviewDeploy) (int, string, string, string, error) {
+	if runtime.GOOS != "android" { return 0, "", "", "", fmt.Errorf("Preview Deployments are supported only on Android/Termux") }
 	if !validPreviewID(req.PreviewID) {
 		return 0, "", "", "", fmt.Errorf("invalid preview id")
 	}
@@ -26,6 +28,7 @@ func (m *ProcessManager) DeployPreview(req shared.PreviewDeploy) (int, string, s
 
 // RemovePreview only accepts IDs from the reserved preview namespace.
 func (m *ProcessManager) RemovePreview(previewID string) error {
+	if runtime.GOOS != "android" { return fmt.Errorf("Preview Deployments are supported only on Android/Termux") }
 	if !validPreviewID(previewID) {
 		return fmt.Errorf("invalid preview id")
 	}
