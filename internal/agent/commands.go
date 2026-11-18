@@ -84,6 +84,10 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleListBuildHistory(cmd)
 	case "get_build_history":
 		return h.handleGetBuildHistory(cmd)
+ case "list_build_artifacts":
+  return h.handleListBuildArtifacts(cmd)
+ case "read_build_artifact_chunk":
+  return h.handleReadBuildArtifactChunk(cmd)
 	case "cancel_build":
 		return h.handleCancelBuild(cmd)
 	case "start_site":
@@ -229,6 +233,19 @@ func (h *CommandHandler) handleGetBuildHistory(cmd *shared.Command) *shared.Resu
 		return errorResult(cmd.Id, "could not encode build history record")
 	}
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: "build history record loaded", Payload: payload}
+}
+
+func (h *CommandHandler) handleListBuildArtifacts(cmd *shared.Command)*shared.Result{
+ var req shared.ListBuildArtifacts;if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid list_build_artifacts payload")}
+ files,err:=ListBuildArtifacts(h.cfg.DataRoot,req.SiteId,req.BuildID);if err!=nil{return errorResult(cmd.Id,err.Error())}
+ payload,err:=shared.Marshal(map[string]any{"files":files});if err!=nil{return errorResult(cmd.Id,"could not encode artifact list")}
+ return &shared.Result{Id:cmd.Id,Ok:true,Message:"build artifacts listed",Payload:payload}
+}
+func (h *CommandHandler) handleReadBuildArtifactChunk(cmd *shared.Command)*shared.Result{
+ var req shared.ReadBuildArtifactChunk;if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid read_build_artifact_chunk payload")}
+ data,total,eof,err:=ReadBuildArtifactChunk(h.cfg.DataRoot,req.SiteId,req.BuildID,req.Path,req.Offset,req.Limit);if err!=nil{return errorResult(cmd.Id,err.Error())}
+ payload,err:=shared.Marshal(map[string]any{"data":data,"total_bytes":total,"eof":eof,"offset":req.Offset});if err!=nil{return errorResult(cmd.Id,"could not encode artifact chunk")}
+ return &shared.Result{Id:cmd.Id,Ok:true,Message:"artifact chunk loaded",Payload:payload}
 }
 
 func (h *CommandHandler) handleCancelBuild(cmd *shared.Command) *shared.Result {
