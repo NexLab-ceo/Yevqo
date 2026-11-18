@@ -384,15 +384,13 @@ func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port in
 
 	// Apply non-secret runtime defaults from the canonical manifest.
  manifest,manifestFound,manifestErr:=readYevqoManifest(absPath)
+ manifestEnvironment:=map[string]string{}
  if manifestErr!=nil{return 0,manifestErr}
  if manifestFound{
   if manifest.Root!=""&&manifest.Root!="."{resolvedRoot,rootErr:=safeAndroidBuildRoot(absPath,manifest.Root);if rootErr!=nil{return 0,fmt.Errorf("resolve yevqo.yml project.root: %w",rootErr)};absPath=resolvedRoot}
   if startCommand==""&&manifest.Start!=""{startCommand=manifest.Start}
   if manifest.Port>0&&port!=manifest.Port{return 0,fmt.Errorf("requested port %d does not match yevqo.yml run.port %d",port,manifest.Port)}
-  merged:=make(map[string]string,len(manifest.Environment)+len(extraEnv))
-  for k,v:=range manifest.Environment{merged[k]=v}
-  for k,v:=range extraEnv{merged[k]=v}
-  extraEnv=merged
+  manifestEnvironment=manifest.Environment
  }
  if runtime!="php"&&runtime!="go"&&runtime!="static"&&runtime!="nodejs"&&!(runtime=="custom"&&startCommand!=""){return 0,fmt.Errorf("unsupported runtime: %s (custom runtime requires a start command)",runtime)}
  // Refuse a port already occupied by another process.
@@ -465,6 +463,12 @@ func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port in
 	} else {
 		if envErr := m.saveSiteEnvironment(siteID, extraEnv); envErr != nil { logFile.Close(); return 0, fmt.Errorf("persist protected site environment: %w", envErr) }
 	}
+ // Config-defined values are defaults; protected values explicitly set in the
+ // dashboard take precedence and remain stored in the encrypted site secret store.
+ if len(manifestEnvironment)>0{
+  if extraEnv==nil{extraEnv=map[string]string{}}
+  for key,value:=range manifestEnvironment{if _,exists:=extraEnv[key];!exists{extraEnv[key]=value}}
+ }
 	// Environment values are injected into this site's process only; no .env file is modified.
 	env := append([]string{}, os.Environ()...)
 	for key, value := range extraEnv {
