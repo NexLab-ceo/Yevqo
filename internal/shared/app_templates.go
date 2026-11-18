@@ -17,6 +17,7 @@ var firstPartyAppTemplates = []AppTemplate{
 	{ID:"nodejs-api", Name:"Node.js JSON API", Description:"Node.js JSON API with a built-in health endpoint", Runtime:"nodejs", EntryPoint:"server.js"},
 	{ID:"static-site", Name:"Static Website", Description:"Static HTML website served by the local PHP development server", Runtime:"static", EntryPoint:"index.html"},
 	{ID:"go-http", Name:"Go HTTP", Description:"Go HTTP starter with a standard-library server; build before starting", Runtime:"go", EntryPoint:"main.go"},
+	{ID:"custom-app", Name:"Custom Language App", Description:"Blank project for any installed Termux toolchain; configure build and start commands", Runtime:"custom", EntryPoint:""},
 }
 
 // ListAppTemplates returns a defensive copy of the built-in template catalog.
