@@ -20,8 +20,10 @@ and projects in other languages can provide their own executable plus argv comma
 - **Build cache:** persistent per-tool caches under `<agent-data>/build-cache`
   for Go, Rust/Cargo, Node/npm, Python/pip, Deno, Gradle, Composer, Ruby, Dart,
   .NET and Julia. Existing explicitly configured cache paths are preserved.
-- **Result:** reports provider, stack, timestamps, duration, bounded logs,
-  truncation state, artifact directory and failure reason.
+- **Result and history:** reports provider, stack, timestamps, duration, bounded logs,
+  truncation state, artifact directory and failure reason. Completed manual and Git
+  deployment builds are stored locally per site with private file permissions; the
+  latest 10 records (including bounded logs) are available in the Build Engine page.
 
 ## Automatic language detection
 
