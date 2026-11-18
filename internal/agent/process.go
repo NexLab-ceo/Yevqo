@@ -1010,7 +1010,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
    PackageTool:plan.PackageTool, InstallCommand:installCommand, BuildCommand:buildCommand,
    AllowProjectCode:true, Timeout:buildTimeout, MaxLogBytes:10<<20,
   }
-  if manifestFound{buildReq.Environment=manifest.Environment;buildReq.ArtifactInclude=manifest.ArtifactsInclude;buildReq.ArtifactExclude=manifest.ArtifactsExclude;buildReq.CacheEnabled=manifest.CacheEnabled;buildReq.CachePaths=manifest.CachePaths;buildReq.MinAvailableMemoryBytes=manifest.MemoryBytes}
+  if manifestFound{buildReq.Environment=manifest.Environment;buildReq.ArtifactInclude=manifest.ArtifactsInclude;if len(buildReq.ArtifactInclude)==0&&manifest.Output!=""{buildReq.ArtifactInclude=[]string{filepath.ToSlash(filepath.Join(manifest.Output,"**"))}};buildReq.ArtifactExclude=manifest.ArtifactsExclude;buildReq.CacheEnabled=manifest.CacheEnabled;buildReq.CachePaths=manifest.CachePaths;buildReq.MinAvailableMemoryBytes=manifest.MemoryBytes}
   buildReq.OnStep=func(name string,index,total int){
    progress:=40;if total>0{progress+=index*25/total}
    state:="building";message:="Running build step: "+name
@@ -1203,6 +1203,7 @@ func (m *ProcessManager) BuildSite(req AndroidBuildRequest) AndroidBuildResult {
   if req.Environment==nil{req.Environment=manifest.Environment}
   if manifest.MemoryBytes>0{req.MinAvailableMemoryBytes=manifest.MemoryBytes}
   req.ArtifactInclude=manifest.ArtifactsInclude
+  if len(req.ArtifactInclude)==0&&manifest.Output!=""{req.ArtifactInclude=[]string{filepath.ToSlash(filepath.Join(manifest.Output,"**"))}}
   req.ArtifactExclude=manifest.ArtifactsExclude
   req.CacheEnabled=manifest.CacheEnabled
   req.CachePaths=manifest.CachePaths
