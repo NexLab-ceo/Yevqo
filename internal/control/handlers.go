@@ -601,6 +601,14 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 
 	rest := strings.TrimPrefix(r.URL.Path, "/api/sites/")
 	parts := strings.Split(rest, "/")
+	if len(parts) >= 3 && parts[2] == "previews" {
+		deviceID, err := parseSiteGitRouteID(parts[0])
+		if err != nil { apiError(w, err); return }
+		previewKey := ""
+		if len(parts) == 4 { previewKey = parts[3] } else if len(parts) != 3 { apiError(w, shared.ErrBadRequest("invalid preview route")); return }
+		s.handleSitePreviews(w, r, user, deviceID, parts[1], previewKey)
+		return
+	}
 	if len(parts) == 3 && parts[2] == "metrics" {
 		deviceID, err := parseSiteGitRouteID(parts[0])
 		if err != nil { apiError(w, err); return }
