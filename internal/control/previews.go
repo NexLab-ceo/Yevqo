@@ -77,7 +77,18 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 			action:=shared.PreviewDeploy{PreviewID:previewID,SiteAction:shared.SiteAction{SiteId:previewID,Path:"sites/"+previewID,Port:port,Runtime:site.Runtime,GitURL:cfg.GitURL,GitBranch:branch,GitCommit:in.Commit,BuildCommand:cfg.BuildCommand,RootDir:cfg.RootDir,GitToken:cfg.GitToken,HealthCheckPath:cfg.HealthCheckPath,CloneTimeoutSeconds:cfg.CloneTimeoutSeconds,BuildTimeoutSeconds:cfg.BuildTimeoutSeconds,HealthCheckTimeoutSeconds:cfg.HealthCheckTimeoutSeconds,StartCommand:cfg.StartCommand,AllowProjectCode:true}}
 			ctx,cancel:=context.WithTimeout(r.Context(),25*time.Minute); defer cancel()
 			result,err:=conn.SendCommand(ctx,"preview_deploy",&action)
-			if err!=nil || result==nil || !result.Ok { msg:="preview deployment failed"; if result!=nil&&result.Message!="" { msg=result.Message }; _,_=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='failed',error_message=? WHERE device_id=? AND site_id=? AND preview_key=?`,truncatePreviewError(msg),deviceID,siteID,key); writeJSON(w,http.StatusOK,map[string]interface{}{"ok":false,"key":key,"status":"failed","message":msg}); return }
+			if err!=nil || result==nil || !result.Ok {
+				msg:="preview deployment failed"
+				if result!=nil&&result.Message!="" { msg=result.Message }
+				// The request may have timed out while the Agent was still deploying.
+				// Use an independent bounded context to avoid leaving an orphan process.
+				cleanupCtx,cleanupCancel:=context.WithTimeout(context.Background(),30*time.Second)
+				_,_=conn.SendCommand(cleanupCtx,"preview_remove",&shared.PreviewRemove{PreviewID:previewID})
+				cleanupCancel()
+				_,_=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='failed',error_message=? WHERE device_id=? AND site_id=? AND preview_key=?`,truncatePreviewError(msg),deviceID,siteID,key)
+				writeJSON(w,http.StatusOK,map[string]interface{}{"ok":false,"key":key,"status":"failed","message":msg})
+				return
+			}
 			var started shared.StartSiteResult; if err:=shared.Unmarshal(result.Payload,&started); err!=nil { _,_=conn.SendCommand(r.Context(),"preview_remove",&shared.PreviewRemove{PreviewID:previewID}); _,_=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='failed',error_message='invalid Agent response' WHERE device_id=? AND site_id=? AND preview_key=?`,deviceID,siteID,key); apiError(w,shared.ErrInternal("invalid preview response")); return }
 			_,err=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='ready',pid=? WHERE device_id=? AND site_id=? AND preview_key=?`,started.Pid,deviceID,siteID,key)
 			if err!=nil { _,_=conn.SendCommand(r.Context(),"preview_remove",&shared.PreviewRemove{PreviewID:previewID}); apiError(w,shared.ErrInternal("could not save preview status")); return }
