@@ -75,6 +75,7 @@ type AndroidBuildRequest struct {
  OnStep func(name string, index, total int) `json:"-"`
 }
 type AndroidBuildResult struct {
+ SiteID string `json:"site_id"`
  Success bool `json:"success"`
  Provider string `json:"provider"`
  Stack string `json:"stack"`
@@ -85,6 +86,7 @@ type AndroidBuildResult struct {
  OutputTruncated bool `json:"output_truncated"`
  ArtifactDir string `json:"artifact_dir,omitempty"`
  Error string `json:"error,omitempty"`
+ HistoryWarning string `json:"history_warning,omitempty"`
 }
 type androidBuildStep struct{name,exe string;args []string}
 type AndroidBuildRunner struct{mu sync.Mutex;busy bool;activeCancel context.CancelFunc;DataDir string}
@@ -92,7 +94,7 @@ func NewAndroidBuildRunner(dataDir string)*AndroidBuildRunner{return &AndroidBui
 
 // Run is a serialized, timeout-bounded local runner. It never invokes a shell.
 func(r *AndroidBuildRunner)Run(parent context.Context,req AndroidBuildRequest)AndroidBuildResult{
- started:=time.Now();out:=AndroidBuildResult{Provider:"android-local",Stack:req.Stack,StartedAt:started}
+ started:=time.Now();out:=AndroidBuildResult{SiteID:req.SiteID,Provider:"android-local",Stack:req.Stack,StartedAt:started}
  finish:=func(err error,log *boundedBuildLog)AndroidBuildResult{out.FinishedAt=time.Now();out.DurationMillis=out.FinishedAt.Sub(started).Milliseconds();if log!=nil{out.Output=log.String();out.OutputTruncated=log.truncated};if err!=nil{out.Error=err.Error()}else{out.Success=true};return out}
  if !req.AllowProjectCode{return finish(errors.New("build blocked: explicit allow_project_code=true consent is required"),nil)}
  if !validSiteID(req.SiteID){return finish(errors.New("invalid site id"),nil)}
