@@ -10,11 +10,15 @@ a database migration.
 | --- | --- | --- |
 | Static Website | `static` | `index.html` |
 | PHP Website | `php` | `index.php` |
+| PHP JSON API | `php` | `index.php` |
 | Node.js HTTP | `nodejs` | `package.json`, `server.js` |
+| Node.js JSON API | `nodejs` | `package.json`, `server.js` |
 | Go HTTP Application | `go` | `go.mod`, `main.go`, compiled `veltrix-app` |
 
-The device's **Добавить сайт** dialog exposes these starter choices. Site ID and port
-validation remain in the existing UI and Agent. The Agent rejects an existing site
+The device's **Добавить сайт** dialog exposes each template by its stable template ID, so
+PHP and Node.js variants remain independently selectable even though they share a runtime.
+The PHP JSON API returns a small JSON response; the Node.js JSON API also exposes
+`/health`. Site ID and port validation remain in the existing UI and Agent. The Agent rejects an existing site
 directory instead of overwriting user files. The Go starter is a runnable `net/http`
 application that reads `PORT`; the UI invokes the existing Android build provider before
 starting it, so it does not leave the user with an unbuilt README-only placeholder.
