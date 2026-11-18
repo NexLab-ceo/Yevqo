@@ -221,9 +221,10 @@ type AndroidBuildSite struct {
 }
 
 type CreateSite struct {
-	SiteId  string `json:"site_id"`
-	Port    uint32 `json:"port"`
+	SiteId string `json:"site_id"`
+	Port uint32 `json:"port"`
 	Runtime string `json:"runtime"`
+	TemplateID string `json:"template_id,omitempty"`
 }
 
 type StartSite struct {
