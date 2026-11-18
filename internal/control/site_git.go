@@ -86,6 +86,9 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 		apiError(w, err)
 		return
 	}
+	if r.Method != http.MethodGet {
+		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
+	}
 
 	switch r.Method {
 	case http.MethodGet:
