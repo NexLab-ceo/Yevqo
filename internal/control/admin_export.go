@@ -94,7 +94,7 @@ func csvSafeCell(value string) string {
 	// Spreadsheet applications may ignore leading whitespace/control
 	// characters before formula markers. Preserve the original cell while
 	// prefixing an apostrophe whenever its first meaningful byte is unsafe.
-	trimmed := strings.TrimLeft(value, " \\t\\r\\n")
+	trimmed := strings.TrimLeft(value, " \t\r\n")
 	if trimmed == "" {
 		return value
 	}
