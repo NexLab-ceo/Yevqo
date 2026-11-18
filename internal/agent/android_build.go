@@ -87,7 +87,7 @@ type AndroidBuildResult struct {
  Error string `json:"error,omitempty"`
 }
 type androidBuildStep struct{name,exe string;args []string}
-type AndroidBuildRunner struct{mu sync.Mutex;busy bool;DataDir string}
+type AndroidBuildRunner struct{mu sync.Mutex;busy bool;activeCancel context.CancelFunc;DataDir string}
 func NewAndroidBuildRunner(dataDir string)*AndroidBuildRunner{return &AndroidBuildRunner{DataDir:dataDir}}
 
 // Run is a serialized, timeout-bounded local runner. It never invokes a shell.
@@ -104,17 +104,37 @@ func(r *AndroidBuildRunner)Run(parent context.Context,req AndroidBuildRequest)An
  if env.FreeDiskBytes>0&&env.FreeDiskBytes<minDisk{return finish(fmt.Errorf("insufficient free disk: %d bytes; need at least %d",env.FreeDiskBytes,minDisk),nil)}
  steps,err:=androidBuildSteps(root,req);if err!=nil{return finish(err,nil)}
  timeout:=req.Timeout;if timeout<=0{timeout=20*time.Minute};if timeout>2*time.Hour{timeout=2*time.Hour}
- ctx,cancel:=context.WithTimeout(parent,timeout);defer cancel()
+ ctx,cancel:=context.WithTimeout(parent,timeout)
+ r.mu.Lock();r.activeCancel=cancel;r.mu.Unlock()
+ defer func(){cancel();r.mu.Lock();r.activeCancel=nil;r.mu.Unlock()}()
  maxLog:=req.MaxLogBytes;if maxLog<=0{maxLog=10<<20};if maxLog>50<<20{maxLog=50<<20};log:=&boundedBuildLog{limit:maxLog}
  for index,s:=range steps{if req.OnStep != nil { req.OnStep(s.name, index, len(steps)) }; if err:=ctx.Err();err!=nil{return finish(err,log)};if _,err:=exec.LookPath(s.exe);err!=nil{return finish(fmt.Errorf("required Termux tool %q is not installed",s.exe),log)}
   fmt.Fprintf(log,"$ %s %s\n",s.exe,strings.Join(s.args," "))
   buildEnv,envErr:=androidBuildEnv(r.DataDir)
   if envErr!=nil{return finish(fmt.Errorf("prepare build caches: %w",envErr),log)}
   cmd:=exec.CommandContext(ctx,s.exe,s.args...);cmd.Dir=root;cmd.Env=buildEnv;cmd.Stdout=log;cmd.Stderr=log
+  cmd.SysProcAttr=&syscall.SysProcAttr{Setpgid:true}
+  cmd.WaitDelay=3*time.Second
+  cmd.Cancel=func()error{
+   if cmd.Process==nil||!isAlive(cmd.Process.Pid){return os.ErrProcessDone}
+   if killErr:=killProcessGroup(cmd.Process.Pid,cmd.Process.Pid);killErr!=nil {
+    if !isAlive(cmd.Process.Pid){return os.ErrProcessDone}
+    return killErr
+   }
+   return nil
+  }
   if err:=cmd.Run();err!=nil{if ctx.Err()!=nil{return finish(ctx.Err(),log)};return finish(fmt.Errorf("%s failed: %w",s.name,err),log)}
  }
  out.ArtifactDir=root;return finish(nil,log)
 }
+// Cancel requests termination of the active build process group.
+func(r *AndroidBuildRunner)Cancel()bool{
+ r.mu.Lock();cancel:=r.activeCancel;r.mu.Unlock()
+ if cancel==nil{return false}
+ cancel()
+ return true
+}
+
 func safeAndroidBuildRoot(siteRoot,rootDir string)(string,error){
  if siteRoot==""{return "",errors.New("site root is required")};site,err:=filepath.Abs(siteRoot);if err!=nil{return "",err};site,err=filepath.EvalSymlinks(site);if err!=nil{return "",fmt.Errorf("resolve site root: %w",err)}
  if rootDir==""{rootDir="."};if filepath.IsAbs(rootDir)||strings.Contains(rootDir,"\\"){return "",errors.New("root directory must be relative")}
