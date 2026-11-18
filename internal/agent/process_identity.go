@@ -38,6 +38,10 @@ func (m *ProcessManager) restoreProcesses() {
   }
   m.procs[r.SiteID]=&Process{SiteID:r.SiteID,PID:r.PID,Port:r.Port,Runtime:r.Runtime,LogPath:r.LogPath}
   go m.watchRestoredProcess(r)
+  if manifest,found,manifestErr:=readYevqoManifest(r.WorkingDir);manifestErr==nil&&found&&manifest.HealthcheckPath!=""{
+   interval:=manifest.HealthcheckInterval;if interval<=0{interval=30*time.Second}
+   go m.monitorSiteHealth(r.SiteID,r.PID,r.StartToken,r.Port,manifest.HealthcheckPath,interval)
+  }
  }
 }
 
