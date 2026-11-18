@@ -70,15 +70,44 @@ custom Install and Build fields, or define them in the project-root `yevqo.yml`:
 
 ```yaml
 version: 1
+
 project:
+  name: example-app
   root: .
+  runtime: nodejs
+
 build:
   provider: custom
-  install: "nimble install -y"
-  command: "nim c -o build/app src/main.nim"
+  install: "npm ci"
+  command: "npm run build"
+
 run:
-  command: "./build/app"
-  port: 8080
+  command: "npm run start"
+  port: 3000
+
+environment:
+  NODE_ENV: production
+
+healthcheck:
+  path: /health
+  interval: 30s
+
+artifacts:
+  include:
+    - dist/**
+  exclude:
+    - dist/*.map
+
+cache:
+  enabled: true
+  paths:
+    - .cache
+
+resources:
+  memory: 512MiB
+
+deploy:
+  restart: true
 ```
 
 Supported configuration includes:
