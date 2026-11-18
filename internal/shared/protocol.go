@@ -225,6 +225,11 @@ type ListBuildHistory struct {
 	Limit int `json:"limit,omitempty"`
 }
 
+type GetBuildHistory struct {
+	SiteId string `json:"site_id"`
+	ID string `json:"id"`
+}
+
 // PreviewDeploy is intentionally separate from production SiteAction routing.
 type PreviewDeploy struct {
 	PreviewID string `json:"preview_id"`
