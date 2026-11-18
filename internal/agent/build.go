@@ -40,7 +40,7 @@ func AnalyzeProject(root string) (BuildPlan, error) {
  if err != nil { return BuildPlan{}, err }
  if !found { return analyzeProjectMarkers(abs) }
  if manifest.Provider != "" {
-  switch manifest.Provider { case "auto","veltrix","custom","static","android-local","dockerfile","nixpacks": default: return BuildPlan{}, fmt.Errorf("unsupported veltrix.yaml build.provider %q", manifest.Provider) }
+  switch manifest.Provider { case "auto","veltrix","custom","static","android-local","dockerfile","nixpacks","railpack": default: return BuildPlan{}, fmt.Errorf("unsupported veltrix.yaml build.provider %q", manifest.Provider) }
  }
  manifestRoot := manifest.Root
  if manifestRoot == "" { manifestRoot = "." }
@@ -57,7 +57,7 @@ func AnalyzeProject(root string) (BuildPlan, error) {
  plan.Evidence = append(plan.Evidence, "veltrix.yaml")
  if manifest.Provider != "" && manifest.Provider != "auto" {
   plan.Provider = manifest.Provider
-  if (manifest.Provider == "dockerfile" || manifest.Provider == "nixpacks") && (plan.AndroidEnvironment.Android || plan.AndroidEnvironment.Termux) {
+  if (manifest.Provider == "dockerfile" || manifest.Provider == "nixpacks" || manifest.Provider == "railpack") && (plan.AndroidEnvironment.Android || plan.AndroidEnvironment.Termux) {
    plan.NeedsConfig = true
    plan.Warnings = append(plan.Warnings, manifest.Provider+" builds are disabled on the Android local provider")
   }
@@ -130,7 +130,7 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 		}
 		return plan, nil
 	}
-	if has("nixpacks.toml") {
+	if has("railpack.json") {\n\t\tplan.Stack, plan.Confidence = "detected-by-railpack", "high"\n\t\tplan.Evidence = append(plan.Evidence, "railpack.json")\n\t\tplan.Provider, plan.NeedsConfig = "railpack", true\n\t\tplan.Warnings = append(plan.Warnings, "Railpack builds require a registered remote Linux build executor; they are not run on Android/Termux.")\n\t\treturn plan, nil\n\t}\n\tif has("nixpacks.toml") {
 		plan.Stack, plan.Confidence = "detected-by-nixpacks", "high"
 		plan.Evidence = append(plan.Evidence, "nixpacks.toml")
 		if androidEnv.Android || androidEnv.Termux {
