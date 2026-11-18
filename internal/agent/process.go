@@ -986,6 +986,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
   merged:=make(map[string]string,len(manifest.Environment)+len(req.Env));for k,v:=range manifest.Environment{merged[k]=v};for k,v:=range req.Env{merged[k]=v};req.Env=merged
   if manifest.Root!=""&&manifest.Root!="."{buildDir,err=safeAndroidBuildRoot(stageDir,filepath.Join(rootDir,manifest.Root));if err!=nil{return 0,truncateDeployOutput(output.String()),commit,commitDate,err};rootDir=filepath.Join(rootDir,manifest.Root)}
  }
+ if req.Runtime=="custom"&&strings.TrimSpace(req.StartCommand)==""{return 0,truncateDeployOutput(output.String()),commit,commitDate,fmt.Errorf("custom runtime requires an explicit start command or run.command in yevqo.yml")}
 	expectedStack := map[string]string{"php":"php", "go":"go", "static":"static", "nodejs":"nodejs"}[req.Runtime]
 	if req.Runtime != "custom" && plan.Stack != expectedStack && !(req.Runtime == "php" && plan.Stack == "unknown") {
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("detected stack %q does not match configured runtime %q", plan.Stack, req.Runtime)
@@ -1059,7 +1060,6 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	if startErr != nil {
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("release activation failed: %w", startErr)
 	}
- if req.Runtime=="custom"&&strings.TrimSpace(req.StartCommand)==""{return 0,truncateDeployOutput(output.String()),commit,commitDate,fmt.Errorf("custom runtime requires an explicit start command or run.command in yevqo.yml")}
  if manifestFound&&manifest.DeployRestartSet{
   policy:="never";if manifest.DeployRestart{policy="always"}
   if policyErr:=m.setRestartPolicyLocked(req.SiteId,policy);policyErr!=nil{return 0,truncateDeployOutput(output.String()),commit,commitDate,fmt.Errorf("release activated but restart policy could not be saved: %w",policyErr)}
