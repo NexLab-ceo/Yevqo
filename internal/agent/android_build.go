@@ -303,7 +303,7 @@ func collectBuildArtifacts(dataDir,siteID,root string,include,exclude []string)(
  siteBase,err:=ensureSafeSubdirectory(base,siteID,0700);if err!=nil{return "",err}
  target,err:=os.MkdirTemp(siteBase,time.Now().UTC().Format("20060102T150405.000000000Z")+"-");if err!=nil{return "",err}
  copied:=0;var totalBytes int64
- err:=filepath.WalkDir(root,func(path string,d os.DirEntry,walkErr error)error{
+ err=filepath.WalkDir(root,func(path string,d os.DirEntry,walkErr error)error{
   if walkErr!=nil{return walkErr};if path==root{return nil}
   rel,err:=filepath.Rel(root,path);if err!=nil{return err};rel=filepath.ToSlash(rel)
   if d.Type()&os.ModeSymlink!=0{return nil}
