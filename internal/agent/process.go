@@ -386,6 +386,7 @@ func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port in
  manifest,manifestFound,manifestErr:=readYevqoManifest(absPath)
  if manifestErr!=nil{return 0,manifestErr}
  if manifestFound{
+  if manifest.Root!=""&&manifest.Root!="."{resolvedRoot,rootErr:=safeAndroidBuildRoot(absPath,manifest.Root);if rootErr!=nil{return 0,fmt.Errorf("resolve yevqo.yml project.root: %w",rootErr)};absPath=resolvedRoot}
   if startCommand==""&&manifest.Start!=""{startCommand=manifest.Start}
   if manifest.Port>0&&port!=manifest.Port{return 0,fmt.Errorf("requested port %d does not match yevqo.yml run.port %d",port,manifest.Port)}
   merged:=make(map[string]string,len(manifest.Environment)+len(extraEnv))
