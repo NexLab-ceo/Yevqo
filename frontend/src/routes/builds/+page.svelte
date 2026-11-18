@@ -25,6 +25,7 @@
  }
  onMount(load);
  async function loadHistory(target=selectedSite){
+   artifactFiles=[];artifactBuildID='';
    if(!target){buildHistory=[];return}
    const device=devices.find(x=>Number(x.id)===Number(target.device_id));
    if(device?.status!=='online'){buildHistory=[];return}
@@ -67,7 +68,7 @@
  }
  async function analyze(){
    if(!selectedSite||!online||analyzing)return;
-   analyzing=true;plan=null;result=null;customInstallCommand='';customBuildCommand='';
+   analyzing=true;plan=null;result=null;artifactFiles=[];artifactBuildID='';customInstallCommand='';customBuildCommand='';
    const r=await sendCommand(selectedSite.device_id,'analyze_site_build',{site_id:selectedSite.site.site_id,root_dir:rootDirectory||'.'});
    analyzing=false;
    if(!r.ok||!r.data?.ok){notify(r.error||r.data?.message||'Анализ проекта не выполнен','error');return}
@@ -87,7 +88,7 @@
    if(plan.needs_configuration&&!customInstallCommand.trim()&&!customBuildCommand.trim()){
      notify('Для неизвестного стека укажи install или build команду','error');return;
    }
-   building=true;result=null;
+   building=true;result=null;artifactFiles=[];artifactBuildID='';
    const r=await sendCommand(selectedSite.device_id,'build_site',{
      site_id:selectedSite.site.site_id,root_dir:rootDirectory||'.',stack:plan.needs_configuration?'custom':plan.stack,
      package_tool:plan.package_tool||'',
