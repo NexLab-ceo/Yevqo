@@ -183,3 +183,10 @@ executable file inside the release directory through an explicit shell-free
 so the Agent readiness check can verify it. The Agent injects `HOST=127.0.0.1`
 and `PORT` into custom runtime processes. Custom runtime restarts and rollbacks
 reuse the saved start command.
+
+
+## Per-site Environment Variables
+
+Each site has an **Environment** tab. Custom variables are stored in the Control Plane database encrypted with AES-GCM; the list endpoint returns names and masked state only, never plaintext values. Existing values can be replaced by saving the same key again, but cannot be revealed or copied back from the UI. Environment changes are saved while the Agent is offline and are injected into the next supported build/deploy/runtime operation.
+
+The tab supports single-key add/update, deletion, search, and bulk import of .env text (KEY=value, export KEY=value, and comment lines). Imports are sent as individual authenticated writes; if one fails, already-saved entries remain and the UI reports the partial count. Managed database variables remain separately controlled by database connections and cannot be shadowed by custom DB_* keys. The current implementation uses one custom variable set for both Build and Runtime; separate scopes are not implemented yet.
