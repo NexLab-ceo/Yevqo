@@ -23,7 +23,8 @@ and projects in other languages can provide their own executable plus argv comma
 - **Result and history:** reports provider, stack, timestamps, duration, bounded logs,
   truncation state, artifact directory and failure reason. Completed manual and Git
   deployment builds are stored locally per site with private file permissions; the
-  latest 10 records (including bounded logs) are available in the Build Engine page.
+  latest 10 metadata records are listed in the Build Engine page, and a selected log
+  is fetched on demand to avoid transferring every historical log at once.
 
 ## Automatic language detection
 
