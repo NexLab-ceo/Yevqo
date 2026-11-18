@@ -26,7 +26,7 @@ func TestCLICommandsCallAuthenticatedControlPlane(t *testing.T) {
 				}
 				w.Header().Set("Content-Type", "application/json")
 				if command == "logs" {
-					_, _ = w.Write([]byte(`{"ok":true,"payload":{"content":"log line\n"}}`))
+					_, _ = w.Write([]byte(`{"ok":true,"payload":"eyJjb250ZW50IjoibG9nIGxpbmVcbiJ9"}`))
 				} else {
 					_, _ = w.Write([]byte(`{"ok":true,"message":"done"}`))
 				}
