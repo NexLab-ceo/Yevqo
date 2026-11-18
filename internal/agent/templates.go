@@ -50,6 +50,10 @@ func (m *ProcessManager) CreateSiteFromTemplate(siteID string, port int, templat
 		case "php": templateID = "php-basic"
 		case "nodejs": templateID = "nodejs-http"
 		case "static": templateID = "static-site"
+		case "go":
+			// Preserve the existing Go starter flow; Go is not part of the
+			// requested PHP/Node/Static template catalog.
+			return m.CreateSite(siteID, port, runtime)
 		default: return fmt.Errorf("no starter template is available for runtime %q", runtime)
 		}
 	}
