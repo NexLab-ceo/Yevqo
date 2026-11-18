@@ -250,7 +250,12 @@ func androidBuildEnv(dataDir string)([]string,error){
   "ANDROID_ROOT":true,"ANDROID_DATA":true,"ANDROID_HOME":true,"ANDROID_NDK_HOME":true,
   "JAVA_HOME":true,"GOROOT":true,"GOPATH":true,"GOCACHE":true,"GOMODCACHE":true,"CGO_ENABLED":true,
   "CARGO_HOME":true,"RUSTUP_HOME":true,"PKG_CONFIG_PATH":true,"CPATH":true,"LIBRARY_PATH":true,
-  "CFLAGS":true,"CXXFLAGS":true,"LDFLAGS":true,"GEM_HOME":true,"GEM_PATH":true,"BUNDLE_PATH":true,
+  "CFLAGS":true,"CXXFLAGS":true,"LDFLAGS":true,"CC":true,"CXX":true,"AR":true,"GOFLAGS":true,"GOOS":true,"GOARCH":true,
+  "RUSTFLAGS":true,"CARGO_BUILD_TARGET":true,"PYTHONPATH":true,"PYTHONUSERBASE":true,"VIRTUAL_ENV":true,
+  "JAVA_TOOL_OPTIONS":true,"MAVEN_OPTS":true,"GRADLE_OPTS":true,"KOTLIN_HOME":true,"SCALA_HOME":true,
+  "MIX_ENV":true,"MIX_HOME":true,"ERL_AFLAGS":true,"DART_SDK":true,"FLUTTER_ROOT":true,
+  "LUA_PATH":true,"LUA_CPATH":true,"PERL5LIB":true,"R_LIBS_USER":true,"CRYSTAL_PATH":true,
+  "GEM_HOME":true,"GEM_PATH":true,"BUNDLE_PATH":true,"BUNDLE_WITHOUT":true,
   "COMPOSER_HOME":true,"COMPOSER_CACHE_DIR":true,"PIP_CACHE_DIR":true,"NPM_CONFIG_CACHE":true,"PNPM_HOME":true,"BUN_INSTALL":true,
   "DENO_DIR":true,"DOTNET_ROOT":true,"DOTNET_CLI_HOME":true,"MAVEN_HOME":true,"GRADLE_USER_HOME":true,"PUB_CACHE":true,"JULIA_DEPOT_PATH":true,
  }
