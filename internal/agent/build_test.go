@@ -51,6 +51,29 @@ func TestAnalyzeProject(t *testing.T) {
 	}
 }
 
+
+func TestAnalyzeNodeProjectRespectsLockfileAndScripts(t *testing.T) {
+ root:=project(t,"package.json")
+ if err:=os.WriteFile(filepath.Join(root,"package.json"),[]byte(`{"scripts":{"start":"node server.js"}}`),0644);err!=nil{t.Fatal(err)}
+ plan,err:=AnalyzeProject(root)
+ if err!=nil{t.Fatal(err)}
+ if plan.Install!="npm install --no-audit --no-fund"||plan.Build!=""||plan.Start!="npm run start"{t.Fatalf("unexpected no-lock/no-build plan: %+v",plan)}
+ if err:=os.WriteFile(filepath.Join(root,"package-lock.json"),[]byte("{}"),0644);err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(filepath.Join(root,"package.json"),[]byte(`{"scripts":{"build":"vite build"}}`),0644);err!=nil{t.Fatal(err)}
+ plan,err=AnalyzeProject(root)
+ if err!=nil{t.Fatal(err)}
+ if plan.Install!="npm ci"||plan.Build!="npm run build"||plan.Start!=""{t.Fatalf("unexpected locked plan: %+v",plan)}
+}
+
+func TestAnalyzeCustomManifestEnablesUnknownLanguage(t *testing.T) {
+ root:=project(t,"src/main.nim")
+ manifest:="version: 1\nbuild:\n  provider: custom\n  install: nimble install -y\n  command: nim c -o app src/main.nim\n"
+ if err:=os.WriteFile(filepath.Join(root,"veltrix.yaml"),[]byte(manifest),0644);err!=nil{t.Fatal(err)}
+ plan,err:=AnalyzeProject(root)
+ if err!=nil{t.Fatal(err)}
+ if plan.Stack!="custom"||plan.NeedsConfig||plan.Install!="nimble install -y"||plan.Build!="nim c -o app src/main.nim"{t.Fatalf("custom language manifest was not applied: %+v",plan)}
+}
+
 func TestAnalyzeProjectRejectsFileRoot(t *testing.T) {
 	root := project(t, "README.md")
 	if err := os.WriteFile(filepath.Join(root,"not-dir"), []byte("x"), 0o644); err != nil { t.Fatal(err) }
