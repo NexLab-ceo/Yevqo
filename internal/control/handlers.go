@@ -226,6 +226,15 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GET /api/templates returns the same catalog used by the Agent scaffolder.
+func (s *Server) handleAppTemplates(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "templates": shared.ListAppTemplates()})
+}
+
 // ============================================================
 // GET /api/devices
 // ============================================================
