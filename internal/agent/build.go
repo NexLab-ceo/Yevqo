@@ -136,7 +136,7 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
   }
  }
  if e:=sc.Err();e!=nil{return m,false,e};if !version{return m,false,fmt.Errorf("yevqo.yml must declare version: 1")};if len(seen)==0&&len(m.Environment)==0{return m,false,fmt.Errorf("yevqo.yml has no configuration")}
- if m.HealthcheckPath!=""&&(!strings.HasPrefix(m.HealthcheckPath,"/")||strings.ContainsAny(m.HealthcheckPath,"\r\n?#")){return m,false,fmt.Errorf("healthcheck.path must be an absolute path without query or fragment")}
+ if m.HealthcheckPath!=""&&(!validHealthCheckPath(m.HealthcheckPath)||strings.ContainsAny(m.HealthcheckPath,"?#")){return m,false,fmt.Errorf("healthcheck.path must be an absolute path without query or fragment")}
  for _,p:=range append(append(append([]string{},m.CachePaths...),m.ArtifactsInclude...),m.ArtifactsExclude...){if filepath.IsAbs(p)||strings.Contains(p,"\\")||filepath.Clean(p)==".."||strings.HasPrefix(filepath.Clean(p),".."+string(filepath.Separator)){return m,false,fmt.Errorf("yevqo.yml paths must stay inside project root")}}
  return m,true,nil
 }
