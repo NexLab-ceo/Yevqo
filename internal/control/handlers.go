@@ -435,7 +435,7 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 	case *shared.StopSite: details["site_id"] = p.SiteId
 	case *shared.GitPull: details["site_id"] = p.SiteId
 	}
-	_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(dev.UserID), DeviceID: shared.PtrInt64(dev.ID), Action: req.Action, Details: details, IP: clientIP(r)})
+	_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(user.ID), DeviceID: shared.PtrInt64(dev.ID), Action: req.Action, Details: details, IP: clientIP(r)})
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"ok":        result.Ok,
