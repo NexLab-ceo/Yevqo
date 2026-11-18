@@ -115,8 +115,9 @@ func safeAndroidBuildRoot(siteRoot,rootDir string)(string,error){
 func androidBuildSteps(root string,req AndroidBuildRequest)([]androidBuildStep,error){
  if req.InstallCommand != "" || req.BuildCommand != "" {
   steps:=make([]androidBuildStep,0,2)
-  if req.InstallCommand!="" { step,err:=parseManifestBuildCommand("install",req.InstallCommand);if err!=nil{return nil,err};steps=append(steps,step) }
-  if req.BuildCommand!="" { step,err:=parseManifestBuildCommand("build",req.BuildCommand);if err!=nil{return nil,err};steps=append(steps,step) }
+  if req.InstallCommand!="" { step,err:=parseManifestBuildCommand(root,"install",req.InstallCommand);if err!=nil{return nil,err};steps=append(steps,step) }
+  if req.BuildCommand!="" { step,err:=parseManifestBuildCommand(root,"build",req.BuildCommand);if err!=nil{return nil,err};steps=append(steps,step) }
+  if len(steps)==0 { return nil,errors.New("custom build requires at least one install or build command") }
   return steps,nil
  }
  switch req.Stack{
@@ -154,17 +155,66 @@ func androidBuildSteps(root string,req AndroidBuildRequest)([]androidBuildStep,e
  }
 }
 
-func parseManifestBuildCommand(name, raw string) (androidBuildStep,error) {
+// parseManifestBuildCommand accepts a single executable plus argv. It never
+// invokes a shell, expands variables, or evaluates redirections. Any installed
+// compiler/build tool can be used, while shell launchers remain blocked.
+func parseManifestBuildCommand(root, name, raw string) (androidBuildStep,error) {
+ if len(raw)>4096 { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command exceeds 4096 bytes",name) }
  if strings.ContainsAny(raw,";|&`$><\r\n") { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command contains unsupported shell syntax",name) }
- fields:=strings.Fields(raw)
+ fields,err:=splitBuildCommand(raw)
+ if err!=nil{return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command: %w",name,err)}
  if len(fields)==0 { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command is empty",name) }
- exe:=filepath.Base(fields[0])
- allowed:=map[string]bool{"npm":true,"npx":true,"pnpm":true,"yarn":true,"bun":true,"python":true,"python3":true,"pip":true,"pip3":true,"go":true,"cargo":true,"composer":true,"php":true,"bundle":true,"mvn":true,"gradle":true,"dotnet":true}
- if !allowed[exe] { return androidBuildStep{},fmt.Errorf("veltrix.yaml %s command executable %q is not allowlisted",name,exe) }
+ exe:=fields[0]
+ if exe=="./gradlew" || exe=="gradlew" || exe=="./mvnw" || exe=="mvnw" {
+  wrapper:=strings.TrimPrefix(exe,"./")
+  if _,err:=os.Stat(filepath.Join(root,wrapper));err!=nil{return androidBuildStep{},fmt.Errorf("project wrapper %q is missing",wrapper)}
+  if _,err:=exec.LookPath("bash");err!=nil{return androidBuildStep{},errors.New("bash is required to run the project wrapper")}
+  return androidBuildStep{name:name,exe:"bash",args:append([]string{"./"+wrapper},fields[1:]...)},nil
+ }
+ if strings.ContainsAny(exe,"/\\") || exe=="." || exe==".." { return androidBuildStep{},fmt.Errorf("executable must be a tool available on Termux PATH") }
+ base:=strings.ToLower(filepath.Base(exe))
+ switch base {
+ case "sh","bash","dash","ash","zsh","fish","ksh","csh","tcsh","cmd","powershell","pwsh":
+  return androidBuildStep{},fmt.Errorf("shell executable %q is disabled; provide the compiler or build tool directly",exe)
+ }
+ for _,arg:=range fields[1:] { if strings.ContainsAny(arg,"\r\n") { return androidBuildStep{},errors.New("arguments must not contain newlines") } }
  return androidBuildStep{name:name,exe:exe,args:fields[1:]},nil
 }
 
-func androidBuildEnv()[]string{allow:=map[string]bool{"PATH":true,"PREFIX":true,"HOME":true,"TMPDIR":true,"LANG":true,"LC_ALL":true,"TERM":true,"ANDROID_ROOT":true,"ANDROID_DATA":true};var env []string;for _,v:=range os.Environ(){k,_,_:=strings.Cut(v,"=");if allow[k]{env=append(env,v)}};return env}
+func splitBuildCommand(raw string)([]string,error){
+ var fields []string
+ var b strings.Builder
+ var quote rune
+ escaped:=false
+ token:=false
+ for _,r:=range raw{
+  if escaped { b.WriteRune(r);escaped=false;token=true;continue }
+  if r=='\\' && quote!='\'' { escaped=true;token=true;continue }
+  if quote!=0 { if r==quote { quote=0 } else { b.WriteRune(r) };token=true;continue }
+  if r=='\''||r=='"' { quote=r;token=true;continue }
+  if r==' '||r=='\t' { if token { fields=append(fields,b.String());b.Reset();token=false };continue }
+  b.WriteRune(r);token=true
+ }
+ if escaped { return nil,errors.New("trailing escape") }
+ if quote!=0 { return nil,errors.New("unterminated quote") }
+ if token { fields=append(fields,b.String()) }
+ return fields,nil
+}
+
+func androidBuildEnv()[]string{
+ allow:=map[string]bool{
+  "PATH":true,"PREFIX":true,"HOME":true,"TMPDIR":true,"LANG":true,"LC_ALL":true,"TERM":true,
+  "ANDROID_ROOT":true,"ANDROID_DATA":true,"ANDROID_HOME":true,"ANDROID_NDK_HOME":true,
+  "JAVA_HOME":true,"GOROOT":true,"GOPATH":true,"CGO_ENABLED":true,
+  "CARGO_HOME":true,"RUSTUP_HOME":true,"PKG_CONFIG_PATH":true,"CPATH":true,"LIBRARY_PATH":true,
+  "CFLAGS":true,"CXXFLAGS":true,"LDFLAGS":true,"GEM_HOME":true,"GEM_PATH":true,"BUNDLE_PATH":true,
+  "COMPOSER_HOME":true,"PIP_CACHE_DIR":true,"NPM_CONFIG_CACHE":true,"PNPM_HOME":true,"BUN_INSTALL":true,
+  "DENO_DIR":true,"DOTNET_ROOT":true,"DOTNET_CLI_HOME":true,"MAVEN_HOME":true,"GRADLE_USER_HOME":true,
+ }
+ var env []string
+ for _,v:=range os.Environ(){k,_,_:=strings.Cut(v,"=");if allow[k]{env=append(env,v)}}
+ return env
+}
 type boundedBuildLog struct{mu sync.Mutex;data []byte;limit int;truncated bool}
 func(w *boundedBuildLog)Write(p []byte)(int,error){w.mu.Lock();defer w.mu.Unlock();n:=len(p);left:=w.limit-len(w.data);if left>0{if len(p)>left{w.data=append(w.data,p[:left]...);w.truncated=true}else{w.data=append(w.data,p...)}}else{w.truncated=true};return n,nil}
 func(w *boundedBuildLog)String()string{w.mu.Lock();defer w.mu.Unlock();return string(w.data)}
