@@ -988,7 +988,6 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
   if manifest.Port>0&&int(req.Port)!=manifest.Port{return 0,truncateDeployOutput(output.String()),commit,commitDate,fmt.Errorf("deployment port %d does not match yevqo.yml run.port %d",req.Port,manifest.Port)}
   if req.HealthCheckPath==""{req.HealthCheckPath=manifest.HealthcheckPath}
   if req.StartCommand==""{req.StartCommand=manifest.Start}
-  merged:=make(map[string]string,len(manifest.Environment)+len(req.Env));for k,v:=range manifest.Environment{merged[k]=v};for k,v:=range req.Env{merged[k]=v};req.Env=merged
   if manifest.Root!=""&&manifest.Root!="."{buildDir,err=safeAndroidBuildRoot(stageDir,filepath.Join(rootDir,manifest.Root));if err!=nil{return 0,truncateDeployOutput(output.String()),commit,commitDate,err};rootDir=filepath.Join(rootDir,manifest.Root)}
  }
  if req.Runtime=="custom"&&strings.TrimSpace(req.StartCommand)==""{return 0,truncateDeployOutput(output.String()),commit,commitDate,fmt.Errorf("custom runtime requires an explicit start command or run.command in yevqo.yml")}
