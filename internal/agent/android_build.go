@@ -35,7 +35,15 @@ type AndroidBuildEnvironment struct {
 // DetectAndroidBuildEnvironment performs read-only host inspection.
 func DetectAndroidBuildEnvironment(dataDir string) AndroidBuildEnvironment {
  e:=AndroidBuildEnvironment{Android:runtime.GOOS=="android"||fileContains("/proc/version","Android"),Termux:strings.Contains(os.Getenv("PREFIX"),"com.termux"),Architecture:runtime.GOARCH,CPUs:runtime.NumCPU(),RootAvailable:os.Geteuid()==0,AvailableTools:[]string{}}
- for _,n:=range []string{"git","node","npm","pnpm","yarn","bun","python","python3","pip","go","cargo","php","composer","java","gradle"} {if _,err:=exec.LookPath(n);err==nil{e.AvailableTools=append(e.AvailableTools,n)}}
+ for _,n:=range []string{
+  "git","node","npm","pnpm","yarn","bun","deno",
+  "python","python3","pip","pip3","uv","poetry","pipenv",
+  "go","cargo","rustc","gcc","g++","clang","clang++","make","cmake","ninja","pkg-config",
+  "php","composer","ruby","gem","bundle","perl","cpanm","R",
+  "java","javac","mvn","gradle","sbt","kotlinc",
+  "dotnet","swift","dart","elixir","mix","erl","rebar3","ghc","cabal",
+  "zig","nim","nimble","crystal","shards","lua","luarocks","ocaml","dune","julia",
+ } {if _,err:=exec.LookPath(n);err==nil{e.AvailableTools=append(e.AvailableTools,n)}}
  _,dockerErr:=exec.LookPath("docker"); e.DockerAvailable=dockerErr==nil
  _,podmanErr:=exec.LookPath("podman"); e.PodmanAvailable=podmanErr==nil
  _,nixpacksErr:=exec.LookPath("nixpacks"); e.NixpacksAvailable=nixpacksErr==nil
