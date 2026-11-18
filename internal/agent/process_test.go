@@ -39,6 +39,17 @@ func TestCreateSiteGeneratesRunnableGoStarter(t *testing.T) {
 	}
 }
 
+
+func TestCustomRuntimeRequiresExplicitStartCommand(t *testing.T) {
+ root:=t.TempDir()
+ manager:=NewProcessManager(root)
+ if err:=manager.CreateSite("custom-app",8124,"custom");err!=nil{t.Fatal(err)}
+ _,err:=manager.StartSiteWithEnvAndCommand("custom-app",filepath.Join("sites","custom-app"),8124,"custom",nil,"")
+ if err==nil||!strings.Contains(err.Error(),"custom runtime requires a start command") {
+  t.Fatalf("expected custom runtime start command requirement, got %v",err)
+ }
+}
+
 func TestCreateSiteIsNonDestructive(t *testing.T) {
 	root := t.TempDir()
 	manager := NewProcessManager(root)
