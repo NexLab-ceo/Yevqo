@@ -220,6 +220,11 @@ type AndroidBuildSite struct {
 	MaxLogBytes int `json:"max_log_bytes,omitempty"`
 }
 
+type ListBuildHistory struct {
+	SiteId string `json:"site_id"`
+	Limit int `json:"limit,omitempty"`
+}
+
 // PreviewDeploy is intentionally separate from production SiteAction routing.
 type PreviewDeploy struct {
 	PreviewID string `json:"preview_id"`
