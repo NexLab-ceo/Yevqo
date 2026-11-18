@@ -33,6 +33,7 @@ func (m *ProcessManager) CreateSiteFromTemplate(siteID string, port int, templat
 		case "nodejs": templateID = "nodejs-http"
 		case "static": templateID = "static-site"
 		case "go": templateID = "go-http"
+		case "custom": templateID = "custom-app"
 		default: return fmt.Errorf("no starter template is available for runtime %q", runtime)
 		}
 	}
