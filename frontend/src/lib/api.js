@@ -192,6 +192,7 @@ export async function listDatabases() { return request('GET', '/api/databases');
 
 // === Operations ===
 export async function listLogs(limit = 100) { return request('GET', `/api/logs?limit=${limit}`); }
+export async function listAuditLogs(limit = 100) { return request('GET', `/api/audit-logs?limit=${limit}`); }
 export async function listNotifications() { return request('GET', '/api/notifications'); }
 export async function markNotificationRead(id) { return request('POST', '/api/notifications', { id }); }
 export async function getSettings() { return request('GET', '/api/settings'); }
