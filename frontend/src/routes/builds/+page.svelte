@@ -5,7 +5,7 @@
  import Button from '$lib/components/Button.svelte';
 
  let sites=[],devices=[],loading=true,selectedKey='',rootDirectory='.',plan=null,result=null;
- let buildHistory=[],historyLoading=false;
+ let buildHistory=[],historyLoading=false,artifactFiles=[],artifactLoading=false,artifactBuildID='';
  let analyzing=false,building=false,cancelling=false,allowProjectCode=false;
  let customInstallCommand='',customBuildCommand='';
  $: selectedSite=sites.find(x=>key(x)===selectedKey)||null;
@@ -39,8 +39,31 @@
    if(!selectedSite)return;
    const r=await sendCommand(selectedSite.device_id,'get_build_history',{site_id:selectedSite.site.site_id,id:record.id});
    if(!r.ok||!r.data?.ok){notify(r.error||r.data?.message||'Не удалось открыть лог сборки','error');return}
-   try{result=JSON.parse(decode(r.data.payload))}
+   try{result=JSON.parse(decode(r.data.payload));await loadArtifacts(record)}
    catch{notify('Не удалось прочитать запись сборки','error')}
+ }
+ async function loadArtifacts(record){
+   artifactFiles=[];artifactBuildID=record?.id||'';
+   if(!selectedSite||!record?.id||!record.result?.artifact_dir||record.result.artifact_dir===record.result.root_directory)return;
+   artifactLoading=true;
+   const r=await sendCommand(selectedSite.device_id,'list_build_artifacts',{site_id:selectedSite.site.site_id,build_id:record.id});
+   artifactLoading=false;
+   if(!r.ok||!r.data?.ok){notify(r.error||r.data?.message||'Не удалось получить список артефактов','error');return}
+   try{const p=JSON.parse(decode(r.data.payload));artifactFiles=p.files||[]}
+   catch{notify('Некорректный список артефактов','error')}
+ }
+ async function downloadArtifact(file){
+   if(!selectedSite||!artifactBuildID||!file?.path)return;
+   const chunks=[];let offset=0,eof=false;
+   while(!eof){
+    const r=await sendCommand(selectedSite.device_id,'read_build_artifact_chunk',{site_id:selectedSite.site.site_id,build_id:artifactBuildID,path:file.path,offset,limit:262144});
+    if(!r.ok||!r.data?.ok){notify(r.error||r.data?.message||'Не удалось скачать артефакт','error');return}
+    let p;try{p=JSON.parse(decode(r.data.payload))}catch{notify('Некорректный фрагмент артефакта','error');return}
+    const raw=atob(p.data||'');const bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+    chunks.push(bytes);offset+=bytes.length;eof=!!p.eof;
+    if(bytes.length===0&&!eof){notify('Загрузка артефакта остановлена: пустой фрагмент','error');return}
+   }
+   const blob=new Blob(chunks,{type:'application/octet-stream'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=file.path.split('/').pop()||'artifact';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
  }
  async function analyze(){
    if(!selectedSite||!online||analyzing)return;
@@ -160,9 +183,19 @@
  {#if result.duration_ms}<p class="muted">Время: {(result.duration_ms/1000).toFixed(1)} сек.</p>{/if}
  <pre class="terminal">{result.output||'(сборщик не вернул лог)'}</pre>
  {#if result.output_truncated}<p class="muted">Вывод ограничен настроенным лимитом.</p>{/if}
+ {#if result.success && result.artifact_dir}
+  <div class="artifacts"><div class="artifacts-head"><strong>Build artifacts</strong><span class="muted">{artifactFiles.length} files</span></div>
+   {#if artifactLoading}<p class="muted">Загружаем список артефактов…</p>
+   {:else if artifactFiles.length}
+    {#each artifactFiles as file (file.path)}
+     <div class="artifact-row"><span><strong>{file.path}</strong><small>{(file.size_bytes/1024).toFixed(1)} KB</small></span><Button on:click={()=>downloadArtifact(file)}>Download</Button></div>
+    {/each}
+   {:else}<p class="muted">Для этой сборки нет опубликованных файлов артефактов.</p>{/if}
+  </div>
+ {/if}
 </section>
 {/if}
 <style>
-.eyebrow,.section-kicker{font-size:9px;letter-spacing:.15em;color:#818cf8;font-weight:750}.builder-shell,.panel{border:1px solid #27272A;background:#111114;border-radius:12px;padding:18px;margin-bottom:14px}.builder-toolbar,.panel-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}.builder-toolbar>div:first-child{display:grid;gap:5px}.builder-toolbar strong{font-size:12px}.target-controls{display:flex;gap:8px;min-width:45%}.target-select{min-width:220px;flex:1}.root-input{max-width:160px}.target-meta{display:flex;flex-wrap:wrap;gap:15px;border-top:1px solid #27272A;margin-top:16px;padding-top:13px;color:#A1A1AA;font-size:10px}.target-meta>span:first-child{display:flex;align-items:center;gap:6px}.target-meta i{width:6px;height:6px;border-radius:50%;background:#71717A}.target-meta .online i{background:#22C55E}.target-meta .offline i{background:#F59E0B}.actions{display:flex;align-items:center;gap:12px;margin-top:16px}.muted{font-size:10px;color:#71717A;line-height:1.6}.panel-heading h2{font-size:15px;margin:5px 0 0}.confidence{font-size:9px;color:#A1A1AA;background:#18181B;border:1px solid #27272A;border-radius:6px;padding:5px 8px}.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:15px 0}.summary-grid>div{display:grid;gap:7px;padding:11px;background:#09090B;border:1px solid #27272A;border-radius:8px;min-width:0}.summary-grid small,.commands small{font-size:8px;color:#71717A;letter-spacing:.08em}.summary-grid strong{font-size:11px;overflow-wrap:anywhere}.commands{display:grid;gap:8px;margin:15px 0}.commands>div{display:grid;gap:6px;padding:10px;border:1px solid #27272A;background:#09090B;border-radius:8px}.commands code{font-size:10px;color:#D4D4D8;overflow-wrap:anywhere}.environment{border-top:1px solid #27272A;padding-top:13px;margin-top:14px}.environment h3{font-size:12px;margin:0}.custom-build{display:grid;gap:9px;padding:13px;margin:14px 0;border:1px solid #3F3F46;border-radius:8px;background:#09090B}.custom-build h3{font-size:12px;margin:0}.custom-build label{display:grid;gap:6px;font-size:10px;color:#A1A1AA}.custom-build input{width:100%;font-family:ui-monospace,monospace;font-size:11px}.consent{display:grid;gap:6px;margin-top:16px;padding:12px;background:#18181B;border:1px solid #3F3F46;border-radius:8px}.consent label{display:flex;align-items:flex-start;gap:8px;font-size:10px;color:#D4D4D8}.consent input{accent-color:#3B82F6;margin:0}.consent small{font-size:9px;color:#A1A1AA;margin-left:22px}.warning{padding:10px 12px;border:1px solid #854D0E;background:#291D0B;color:#FCD34D;border-radius:8px;font-size:10px;margin-top:12px}.warning p{margin:3px 0}.history-list{display:grid;gap:6px;margin-top:12px}.history-item{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;text-align:left;background:#09090B;border:1px solid #27272A;border-radius:8px;color:#D4D4D8;cursor:pointer}.history-item>span:nth-child(2){display:grid;gap:4px;flex:1}.history-item strong{font-size:11px}.history-item small{font-size:9px;color:#71717A}.history-item .success{font-size:9px;font-weight:700}.history-item .failure{font-size:9px;font-weight:700}.terminal{white-space:pre-wrap;overflow:auto;max-height:460px;background:#09090B;border:1px solid #27272A;border-radius:8px;padding:13px;font:10px/1.6 ui-monospace,monospace;color:#D4D4D8}.success{color:#4ADE80}.failure,.error{color:#F87171}.error{font-size:11px}
+.eyebrow,.section-kicker{font-size:9px;letter-spacing:.15em;color:#818cf8;font-weight:750}.builder-shell,.panel{border:1px solid #27272A;background:#111114;border-radius:12px;padding:18px;margin-bottom:14px}.builder-toolbar,.panel-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}.builder-toolbar>div:first-child{display:grid;gap:5px}.builder-toolbar strong{font-size:12px}.target-controls{display:flex;gap:8px;min-width:45%}.target-select{min-width:220px;flex:1}.root-input{max-width:160px}.target-meta{display:flex;flex-wrap:wrap;gap:15px;border-top:1px solid #27272A;margin-top:16px;padding-top:13px;color:#A1A1AA;font-size:10px}.target-meta>span:first-child{display:flex;align-items:center;gap:6px}.target-meta i{width:6px;height:6px;border-radius:50%;background:#71717A}.target-meta .online i{background:#22C55E}.target-meta .offline i{background:#F59E0B}.actions{display:flex;align-items:center;gap:12px;margin-top:16px}.muted{font-size:10px;color:#71717A;line-height:1.6}.panel-heading h2{font-size:15px;margin:5px 0 0}.confidence{font-size:9px;color:#A1A1AA;background:#18181B;border:1px solid #27272A;border-radius:6px;padding:5px 8px}.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:15px 0}.summary-grid>div{display:grid;gap:7px;padding:11px;background:#09090B;border:1px solid #27272A;border-radius:8px;min-width:0}.summary-grid small,.commands small{font-size:8px;color:#71717A;letter-spacing:.08em}.summary-grid strong{font-size:11px;overflow-wrap:anywhere}.commands{display:grid;gap:8px;margin:15px 0}.commands>div{display:grid;gap:6px;padding:10px;border:1px solid #27272A;background:#09090B;border-radius:8px}.commands code{font-size:10px;color:#D4D4D8;overflow-wrap:anywhere}.environment{border-top:1px solid #27272A;padding-top:13px;margin-top:14px}.environment h3{font-size:12px;margin:0}.custom-build{display:grid;gap:9px;padding:13px;margin:14px 0;border:1px solid #3F3F46;border-radius:8px;background:#09090B}.custom-build h3{font-size:12px;margin:0}.custom-build label{display:grid;gap:6px;font-size:10px;color:#A1A1AA}.custom-build input{width:100%;font-family:ui-monospace,monospace;font-size:11px}.consent{display:grid;gap:6px;margin-top:16px;padding:12px;background:#18181B;border:1px solid #3F3F46;border-radius:8px}.consent label{display:flex;align-items:flex-start;gap:8px;font-size:10px;color:#D4D4D8}.consent input{accent-color:#3B82F6;margin:0}.consent small{font-size:9px;color:#A1A1AA;margin-left:22px}.warning{padding:10px 12px;border:1px solid #854D0E;background:#291D0B;color:#FCD34D;border-radius:8px;font-size:10px;margin-top:12px}.warning p{margin:3px 0}.history-list{display:grid;gap:6px;margin-top:12px}.history-item{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;text-align:left;background:#09090B;border:1px solid #27272A;border-radius:8px;color:#D4D4D8;cursor:pointer}.history-item>span:nth-child(2){display:grid;gap:4px;flex:1}.history-item strong{font-size:11px}.history-item small{font-size:9px;color:#71717A}.history-item .success{font-size:9px;font-weight:700}.history-item .failure{font-size:9px;font-weight:700}.terminal{white-space:pre-wrap;overflow:auto;max-height:460px;background:#09090B;border:1px solid #27272A;border-radius:8px;padding:13px;font:10px/1.6 ui-monospace,monospace;color:#D4D4D8}.success{color:#4ADE80}.failure,.error{color:#F87171}.error{font-size:11px}.artifacts{margin-top:14px;border-top:1px solid #27272A;padding-top:12px}.artifacts-head,.artifact-row{display:flex;align-items:center;justify-content:space-between;gap:12px}.artifacts-head{margin-bottom:8px}.artifacts-head strong{font-size:11px}.artifact-row{padding:8px 0;border-bottom:1px solid #27272A}.artifact-row>span{display:grid;gap:4px;min-width:0}.artifact-row strong{font-size:10px;overflow-wrap:anywhere}.artifact-row small{font-size:9px;color:#71717A}
 @media(max-width:760px){.builder-toolbar,.panel-heading{align-items:stretch;flex-direction:column}.target-controls{min-width:0;flex-direction:column}.target-select{min-width:0}.root-input{max-width:none}.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.actions{align-items:flex-start;flex-direction:column}}
 </style>
