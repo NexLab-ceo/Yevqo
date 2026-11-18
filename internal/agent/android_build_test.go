@@ -89,6 +89,17 @@ func TestUniversalBuildCommandSupportsInstalledToolchains(t *testing.T) {
  if !result.Success||!strings.Contains(result.Output,"custom compiler ran"){t.Fatalf("custom toolchain did not run: %+v",result)}
 }
 
+
+func TestUniversalBuildSupportsProjectLocalExecutable(t *testing.T) {
+ root:=t.TempDir()
+ script:=filepath.Join(root,"build.sh")
+ if err:=os.WriteFile(script,[]byte("#!/bin/sh\nprintf 'local build ran\\n'\n"),0755);err!=nil{t.Fatal(err)}
+ step,err:=parseManifestBuildCommand(root,"build","./build.sh --release")
+ if err!=nil{t.Fatal(err)}
+ if step.exe!=script||len(step.args)!=1||step.args[0]!="--release"{t.Fatalf("unexpected local executable step: %#v",step)}
+ if _,err:=parseManifestBuildCommand(root,"build","./../outside");err==nil{t.Fatal("project executable traversal was accepted")}
+}
+
 func TestUniversalBuildCommandRejectsShellAndMalformedQuotes(t *testing.T) {
  root:=t.TempDir()
  for _,command:=range []string{"sh -c id","bash -c id","npm run build && rm -rf .","nim \"unterminated"} {
