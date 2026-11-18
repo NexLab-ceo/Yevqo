@@ -80,6 +80,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleAnalyzeSiteBuild(cmd)
 	case "build_site":
 		return h.handleBuildSite(cmd)
+	case "cancel_build":
+		return h.handleCancelBuild(cmd)
 	case "start_site":
 		return h.handleStartSite(cmd)
 	case "stop_site":
@@ -191,6 +193,13 @@ func (h *CommandHandler) handleBuildSite(cmd *shared.Command) *shared.Result {
 	if err != nil { return errorResult(cmd.Id, "could not encode build result") }
 	if !result.Success { return &shared.Result{Id: cmd.Id, Ok: false, Message: result.Error, Payload: payload} }
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: "Android local build completed", Payload: payload}
+}
+
+func (h *CommandHandler) handleCancelBuild(cmd *shared.Command) *shared.Result {
+	if err := h.processes.CancelBuild(); err != nil {
+		return errorResult(cmd.Id, err.Error())
+	}
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: "build cancellation requested"}
 }
 
 func (h *CommandHandler) handleCreateSite(cmd *shared.Command) *shared.Result {
