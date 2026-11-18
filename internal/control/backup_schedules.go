@@ -85,6 +85,7 @@ func (s *Server) backupSchedulerLoop() {
 		case <-ticker.C:
 			s.runDueBackupSchedules()
 			s.runDueScheduledTasks()
+			s.runDuePreviewExpiry()
 		}
 	}
 }

@@ -53,7 +53,7 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 			defer rows.Close()
 			type item struct { Key string `json:"key"`; Branch string `json:"branch"`; Commit string `json:"commit"`; Runtime string `json:"runtime"`; Port uint32 `json:"port"`; PID *uint32 `json:"pid,omitempty"`; Status string `json:"status"`; Error string `json:"error,omitempty"`; ExpiresAt *time.Time `json:"expires_at,omitempty"`; CreatedAt time.Time `json:"created_at"`; URL string `json:"url,omitempty"` }
 			items := []item{}
-			for rows.Next() { var v item; if err := rows.Scan(&v.Key,&v.Branch,&v.Commit,&v.Runtime,&v.Port,&v.PID,&v.Status,&v.Error,&v.ExpiresAt,&v.CreatedAt); err != nil { apiError(w, shared.ErrInternal("could not read previews")); return }; if dev.TailscaleIP != "" { v.URL = fmt.Sprintf("http://%s:%d",dev.TailscaleIP,v.Port) }; items=append(items,v) }
+			for rows.Next() { var v item; if err := rows.Scan(&v.Key,&v.Branch,&v.Commit,&v.Runtime,&v.Port,&v.PID,&v.Status,&v.Error,&v.ExpiresAt,&v.CreatedAt); err != nil { apiError(w, shared.ErrInternal("could not read previews")); return }; v.URL = fmt.Sprintf("http://127.0.0.1:%d",v.Port); items=append(items,v) }
 			if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read previews")); return }
 			writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"previews":items})
 			return
@@ -81,7 +81,7 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 			var started shared.StartSiteResult; if err:=shared.Unmarshal(result.Payload,&started); err!=nil { _,_=conn.SendCommand(r.Context(),"preview_remove",&shared.PreviewRemove{PreviewID:previewID}); _,_=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='failed',error_message='invalid Agent response' WHERE device_id=? AND site_id=? AND preview_key=?`,deviceID,siteID,key); apiError(w,shared.ErrInternal("invalid preview response")); return }
 			_,err=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='ready',pid=? WHERE device_id=? AND site_id=? AND preview_key=?`,started.Pid,deviceID,siteID,key)
 			if err!=nil { _,_=conn.SendCommand(r.Context(),"preview_remove",&shared.PreviewRemove{PreviewID:previewID}); apiError(w,shared.ErrInternal("could not save preview status")); return }
-			url:=""; if dev.TailscaleIP!="" { url=fmt.Sprintf("http://%s:%d",dev.TailscaleIP,port) }
+			url:=fmt.Sprintf("http://127.0.0.1:%d",port)
 			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),DeviceID:shared.PtrInt64(deviceID),Action:"preview_create",Details:map[string]interface{}{"site_id":siteID,"preview_key":key,"branch":branch},IP:clientIP(r)})
 			writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"key":key,"status":"ready","port":port,"pid":started.Pid,"commit":started.CommitHash,"url":url,"expires_in_hours":24})
 			return
@@ -105,4 +105,25 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 }
 
 func truncatePreviewError(s string) string { s=strings.TrimSpace(s); if len(s)>900 { return s[:900] }; return s }
+
+
+func (s *Server) runDuePreviewExpiry() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	rows, err := s.db.conn.QueryContext(ctx, `SELECT id,device_id,site_id,preview_key FROM preview_deployments WHERE expires_at IS NOT NULL AND expires_at<=UTC_TIMESTAMP() AND status NOT IN ('expired','stopped') ORDER BY expires_at LIMIT 50`)
+	if err != nil { return }
+	type expiredPreview struct { id, deviceID int64; siteID, key string }
+	items := make([]expiredPreview,0)
+	for rows.Next() { var item expiredPreview; if rows.Scan(&item.id,&item.deviceID,&item.siteID,&item.key)==nil { items=append(items,item) } }
+	rows.Close()
+	for _, item := range items {
+		conn, online := s.hub.Get(item.deviceID)
+		if !online { continue } // Keep retrying until the Android Agent reconnects.
+		cmdCtx, cmdCancel := context.WithTimeout(ctx, 30*time.Second)
+		result, sendErr := conn.SendCommand(cmdCtx,"preview_remove",&shared.PreviewRemove{PreviewID:"preview_"+item.key})
+		cmdCancel()
+		if sendErr != nil || result == nil || !result.Ok { continue }
+		_, _ = s.db.conn.ExecContext(ctx,`UPDATE preview_deployments SET status='expired',pid=NULL,error_message='' WHERE id=? AND expires_at<=UTC_TIMESTAMP()`,item.id)
+	}
+}
 
