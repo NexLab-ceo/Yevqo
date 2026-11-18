@@ -138,6 +138,7 @@
             site_id: siteId,
             port,
             runtime: newSite.runtime,
+            template_id: ({ php: 'php-basic', nodejs: 'nodejs-http', static: 'static-site' })[newSite.runtime] || '',
         });
         if (!created.ok || !created.data?.ok) {
             busy = false;
@@ -308,14 +309,14 @@
             />
         </div>
         <div class="form-group">
-            <label class="form-label" for="runtime">Стартовый шаблон</label>
+            <label class="form-label" for="runtime">Шаблон приложения</label>
             <select id="runtime" class="input" bind:value={newSite.runtime}>
                 <option value="static">Static Website — готовая index.html</option>
                 <option value="php">PHP Website — готовая index.php</option>
                 <option value="nodejs">Node.js HTTP — package.json + server.js</option>
                 <option value="go">Go Application — структура проекта и README</option>
             </select>
-            <p class="form-hint">Yevqo создаст каталог и стартовые файлы на устройстве. После создания сайт можно подключить к Git и развернуть через Deployment Engine.</p>
+            <p class="form-hint">Yevqo создаст файлы проекта и yevqo.template.json с параметрами запуска, затем запустит приложение на выбранном порту.</p>
         </div>
 
         <svelte:fragment slot="footer">
