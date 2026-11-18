@@ -139,7 +139,7 @@ func(r *AndroidBuildRunner)Run(parent context.Context,req AndroidBuildRequest)An
   if err:=cmd.Run();err!=nil{if ctx.Err()!=nil{return finish(ctx.Err(),log)};return finish(fmt.Errorf("%s failed: %w",s.name,err),log)}
  }
  if req.CacheEnabled&&len(req.CachePaths)>0{if err:=saveConfiguredBuildCaches(r.DataDir,req.SiteID,root,req.CachePaths);err!=nil{return finish(err,log)}}
- if len(req.ArtifactInclude)>0 { artifactDir,artifactErr:=collectBuildArtifacts(r.DataDir,req.SiteID,root,req.ArtifactInclude,req.ArtifactExclude);if artifactErr!=nil{return finish(artifactErr,log)};out.ArtifactDir=artifactDir } else { out.ArtifactDir=root };return finish(nil,log)
+ if len(req.ArtifactInclude)>0 { artifactDir,artifactErr:=collectBuildArtifacts(r.DataDir,req.SiteID,root,req.ArtifactInclude,req.ArtifactExclude);if artifactErr!=nil{return finish(artifactErr,log)};out.ArtifactDir=artifactDir };return finish(nil,log)
 }
 // Cancel requests termination of the active build process group.
 func(r *AndroidBuildRunner)Cancel()bool{
