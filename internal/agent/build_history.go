@@ -12,9 +12,10 @@ import (
 
 // BuildHistoryRecord is a private, device-local snapshot of a completed build.
 type BuildHistoryRecord struct {
-	ID      string             `json:"id"`
-	SiteID  string             `json:"site_id"`
-	Result  AndroidBuildResult `json:"result"`
+	ID          string             `json:"id"`
+	SiteID      string             `json:"site_id"`
+	OutputBytes int                `json:"output_bytes"`
+	Result      AndroidBuildResult `json:"result"`
 }
 
 const buildHistoryRetention = 10
@@ -132,7 +133,44 @@ func ListBuildHistory(dataRoot, siteID string, limit int) ([]BuildHistoryRecord,
 		if record.SiteID != siteID {
 			return nil, fmt.Errorf("build history record %s has mismatched site id", name)
 		}
+		record.OutputBytes = len(record.Result.Output)
+		record.Result.Output = ""
 		records = append(records, record)
 	}
 	return records, nil
+}
+
+// GetBuildHistory returns one full record, including its stored log output.
+func GetBuildHistory(dataRoot, siteID, id string) (BuildHistoryRecord, error) {
+	if !validSiteID(siteID) {
+		return BuildHistoryRecord{}, fmt.Errorf("invalid site id")
+	}
+	if _, err := time.Parse("20060102T150405.000000000Z", id); err != nil {
+		return BuildHistoryRecord{}, fmt.Errorf("invalid build history id")
+	}
+	dir, err := buildHistoryDirectory(dataRoot, siteID)
+	if err != nil {
+		return BuildHistoryRecord{}, err
+	}
+	path := filepath.Join(dir, id+".json")
+	info, err := os.Lstat(path)
+	if err != nil {
+		return BuildHistoryRecord{}, fmt.Errorf("build history record not found: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return BuildHistoryRecord{}, fmt.Errorf("build history record is not a regular file")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return BuildHistoryRecord{}, err
+	}
+	var record BuildHistoryRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return BuildHistoryRecord{}, fmt.Errorf("decode build history record: %w", err)
+	}
+	if record.SiteID != siteID || record.ID != id {
+		return BuildHistoryRecord{}, fmt.Errorf("build history record identity mismatch")
+	}
+	record.OutputBytes = len(record.Result.Output)
+	return record, nil
 }
