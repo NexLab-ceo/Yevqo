@@ -188,6 +188,15 @@ func safeSiteDirectory(dataRoot, siteID string) (string, error) {
 	return absTarget, nil
 }
 
+// CancelBuild requests cancellation without taking operationMu: the build itself
+// holds that lock until its child process group has exited.
+func (m *ProcessManager) CancelBuild() error {
+	if m.BuildRunner == nil || !m.BuildRunner.Cancel() {
+		return fmt.Errorf("no build is currently running")
+	}
+	return nil
+}
+
 // AnalyzeSiteBuild inspects a configured site root without executing project code.
 func (m *ProcessManager) AnalyzeSiteBuild(siteID, rootDir string) (BuildPlan, error) {
 	m.operationMu.Lock()
