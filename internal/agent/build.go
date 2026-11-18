@@ -197,6 +197,7 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 	if has("pom.xml") {
 		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "java", "maven", "high", false
 		plan.Build, plan.Start, plan.Port = "mvn -DskipTests package", "java -jar <built-jar>", 8080
+		if has("mvnw") { plan.Build = "./mvnw -DskipTests package" }
 		plan.Evidence = append(plan.Evidence, "pom.xml")
 		return plan, nil
 	}
@@ -262,11 +263,13 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 		plan.Evidence = append(plan.Evidence, "build.zig")
 		return plan, nil
 	}
-	if has("pubspec.yaml") && has("bin/main.dart") {
-		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "dart", "dart", "high", false
-		plan.Install, plan.Build = "dart pub get", "dart compile exe bin/main.dart -o build/yevqo-app"
-		plan.Evidence = append(plan.Evidence, "pubspec.yaml", "bin/main.dart")
-		return plan, nil
+	if has("pubspec.yaml") {
+		if _, statErr := os.Stat(filepath.Join(abs, "bin", "main.dart")); statErr == nil {
+			plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "dart", "dart", "high", false
+			plan.Install, plan.Build = "dart pub get", "dart compile exe bin/main.dart -o build/yevqo-app"
+			plan.Evidence = append(plan.Evidence, "pubspec.yaml", "bin/main.dart")
+			return plan, nil
+		}
 	}
 	if has("deno.json", "deno.jsonc") {
 		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "deno", "deno", "high", false
@@ -297,6 +300,26 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 		plan.Install = "cpanm --installdeps ."
 		plan.Evidence = append(plan.Evidence, "cpanfile")
 		return plan, nil
+	}
+	for name := range files {
+		if strings.HasSuffix(name, ".cabal") {
+			plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "haskell", "cabal", "high", false
+			plan.Build = "cabal build"
+			plan.Evidence = append(plan.Evidence, name)
+			return plan, nil
+		}
+		if strings.HasSuffix(name, ".nimble") {
+			plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "nim", "nimble", "high", false
+			plan.Build = "nimble build -y"
+			plan.Evidence = append(plan.Evidence, name)
+			return plan, nil
+		}
+		if strings.HasSuffix(name, ".rockspec") {
+			plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "lua", "luarocks", "high", false
+			plan.Build = "luarocks make"
+			plan.Evidence = append(plan.Evidence, name)
+			return plan, nil
+		}
 	}
 	if has("project.toml") && has("manifest.toml") {
 		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "julia", "julia", "medium", true
