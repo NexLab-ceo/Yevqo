@@ -130,7 +130,14 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 		}
 		return plan, nil
 	}
-	if has("railpack.json") {\n\t\tplan.Stack, plan.Confidence = "detected-by-railpack", "high"\n\t\tplan.Evidence = append(plan.Evidence, "railpack.json")\n\t\tplan.Provider, plan.NeedsConfig = "railpack", true\n\t\tplan.Warnings = append(plan.Warnings, "Railpack builds require a registered remote Linux build executor; they are not run on Android/Termux.")\n\t\treturn plan, nil\n\t}\n\tif has("nixpacks.toml") {
+	if has("railpack.json") {
+		plan.Stack, plan.Confidence = "detected-by-railpack", "high"
+		plan.Evidence = append(plan.Evidence, "railpack.json")
+		plan.Provider, plan.NeedsConfig = "railpack", true
+		plan.Warnings = append(plan.Warnings, "Railpack builds require a registered remote Linux build executor; they are not run on Android/Termux.")
+		return plan, nil
+	}
+	if has("nixpacks.toml") {
 		plan.Stack, plan.Confidence = "detected-by-nixpacks", "high"
 		plan.Evidence = append(plan.Evidence, "nixpacks.toml")
 		if androidEnv.Android || androidEnv.Termux {
