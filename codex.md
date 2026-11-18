@@ -96,7 +96,7 @@ This is a conservative starting snapshot based on the repository documentation a
 | P2 — Device monitoring telemetry | PARTIAL | Heartbeat and typed metrics are documented; metric availability depends on Android/device support. |
 | P2 — Database management | PARTIAL | PostgreSQL lifecycle and database connections are documented; MySQL/MariaDB, restore/export, and other items remain incomplete unless current code proves otherwise. |
 | P2 — Website/database backups and restore | PARTIAL | Website backup creation is documented; restore and remaining backup operations require verification/implementation. |
-| P2 — Build providers and templates | PARTIAL | Six first-party starters cover Static, PHP website/API, Node.js HTTP/API and Go; remote Linux executor and framework/Git templates remain open. CI validation pending for this increment. |
+| P2 — Build providers and templates | PARTIAL | Six first-party starters cover Static, PHP website/API, Node.js HTTP/API and Go; Go tests, Android ARM64 cross-compilation, frontend build and Debian package verification passed. Remote Linux executor and framework/Git templates remain open. |
 | P2 — CLI and preview deployments | VERIFY | Check current commands, authorization, lifecycle, and Android-only limitations before updating. |
 | P2 — Team, RBAC, audit | VERIFY | Check endpoint coverage and enforcement in the API, not only UI visibility. |
 | P2 — AI Agents / Agent Builder | TODO | Do not imply real agent execution until model integration, permission enforcement, and execution lifecycle are implemented. |
@@ -122,7 +122,7 @@ Before finishing every task:
 ### Progress history
 
 - 2026-11-18 — Added the initial Codex project instructions and established the P0–P3 progress ledger. This is a tracking baseline, not a claim that all listed areas have been re-verified.
-- 2026-11-18 — Expanded first-party App Templates with PHP and Node.js JSON API starters, stable template-ID selection in the device UI, regression tests, and updated template documentation. CI validation pending.
+- 2026-11-18 — Expanded first-party App Templates with PHP and Node.js JSON API starters, stable template-ID selection in the device UI, regression tests, and updated template documentation. Pull request checks passed (run 44344232085); Android build/package workflow passed, including Go tests, ARM64 cross-compilation, frontend build, and both Debian package verifications (run 44344231782).
 
 ## Implementation guidelines
 
