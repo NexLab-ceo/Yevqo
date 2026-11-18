@@ -5,7 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"veltrix/internal/shared"
 )
+
+// ListAppTemplates exposes the shared catalog to Agent callers and tests.
+func ListAppTemplates() []shared.AppTemplate { return shared.ListAppTemplates() }
 
 // SiteTemplateConfig is persisted with each generated site so the selected
 // template and launch contract remain inspectable and reproducible.
@@ -39,7 +44,7 @@ func (m *ProcessManager) CreateSiteFromTemplate(siteID string, port int, templat
 		return fmt.Errorf("unknown app template %q", templateID)
 	}
 	if selectedValue.Runtime != runtime {
-		return fmt.Errorf("template %q requires runtime %q, got %q", templateID, selected.Runtime, runtime)
+		return fmt.Errorf("template %q requires runtime %q, got %q", templateID, selectedValue.Runtime, runtime)
 	}
 	if err := m.CreateSite(siteID, port, runtime); err != nil {
 		return err
@@ -47,7 +52,7 @@ func (m *ProcessManager) CreateSiteFromTemplate(siteID string, port int, templat
 	config := SiteTemplateConfig{
 		SchemaVersion: 1,
 		TemplateID: selectedValue.ID,
-		Runtime: selected.Runtime,
+		Runtime: selectedValue.Runtime,
 		Port: port,
 		EntryPoint: selectedValue.EntryPoint,
 	}
