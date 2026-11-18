@@ -230,6 +230,18 @@ type GetBuildHistory struct {
 	ID string `json:"id"`
 }
 
+type ListBuildArtifacts struct {
+ SiteId string `json:"site_id"`
+ BuildID string `json:"build_id"`
+}
+type ReadBuildArtifactChunk struct {
+ SiteId string `json:"site_id"`
+ BuildID string `json:"build_id"`
+ Path string `json:"path"`
+ Offset int64 `json:"offset"`
+ Limit int `json:"limit,omitempty"`
+}
+
 // PreviewDeploy is intentionally separate from production SiteAction routing.
 type PreviewDeploy struct {
 	PreviewID string `json:"preview_id"`
