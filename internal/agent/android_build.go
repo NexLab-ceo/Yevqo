@@ -302,20 +302,21 @@ func collectBuildArtifacts(dataDir,siteID,root string,include,exclude []string)(
  base:=filepath.Join(dataDir,"artifacts");if err:=os.MkdirAll(base,0700);err!=nil{return "",err}
  target:=filepath.Join(base,siteID,time.Now().UTC().Format("20060102T150405.000000000Z"))
  if err:=os.MkdirAll(target,0700);err!=nil{return "",err}
- copied:=0
+ copied:=0;var totalBytes int64
  err:=filepath.WalkDir(root,func(path string,d os.DirEntry,walkErr error)error{
   if walkErr!=nil{return walkErr};if path==root{return nil}
   rel,err:=filepath.Rel(root,path);if err!=nil{return err};rel=filepath.ToSlash(rel)
   if d.Type()&os.ModeSymlink!=0{return nil}
   if d.IsDir(){return nil}
   if !d.Type().IsRegular(){return nil}
+  info,statErr:=d.Info();if statErr!=nil{return statErr};if info.Size()>256<<20||totalBytes+info.Size()>1<<30{return fmt.Errorf("artifact collection exceeds the 1 GiB total / 256 MiB per-file limit")}
   matched:=false;for _,p:=range include{if yevqoGlobMatch(p,rel){matched=true;break}}
   if !matched{return nil}
   for _,p:=range exclude{if yevqoGlobMatch(p,rel){return nil}}
   dest:=filepath.Join(target,filepath.FromSlash(rel));if err:=os.MkdirAll(filepath.Dir(dest),0700);err!=nil{return err}
   src,err:=os.Open(path);if err!=nil{return err};defer src.Close()
   dst,err:=os.OpenFile(dest,os.O_CREATE|os.O_EXCL|os.O_WRONLY,0600);if err!=nil{return err}
-  _,copyErr:=io.Copy(dst,io.LimitReader(src,256<<20));closeErr:=dst.Close();if copyErr!=nil{return copyErr};if closeErr!=nil{return closeErr};copied++;return nil
+  n,copyErr:=io.Copy(dst,src);closeErr:=dst.Close();if copyErr==nil{totalBytes+=n}if copyErr!=nil{return copyErr};if closeErr!=nil{return closeErr};copied++;return nil
  })
  if err!=nil{_ = os.RemoveAll(target);return "",fmt.Errorf("collect build artifacts: %w",err)}
  if copied==0{_ = os.RemoveAll(target);return "",fmt.Errorf("artifact patterns matched no regular files")}
