@@ -343,15 +343,15 @@ func syncConfiguredBuildCaches(srcRoot,dstRoot string,paths []string,save bool)e
   clean:=filepath.Clean(rel);if clean=="."||clean==".."||strings.HasPrefix(clean,".."+string(filepath.Separator)){return fmt.Errorf("invalid cache path %q",rel)}
   src:=filepath.Join(srcRoot,clean);dst:=filepath.Join(dstRoot,clean);if save{src=filepath.Join(srcRoot,clean);dst=filepath.Join(dstRoot,clean)}
   if _,err:=os.Lstat(src);os.IsNotExist(err){continue}else if err!=nil{return err}
-  if err:=copyBuildCachePath(src,dst);err!=nil{return fmt.Errorf("sync cache path %s: %w",rel,err)}
+  if err:=copyBuildCachePath(src,dst,&totalBytes);err!=nil{return fmt.Errorf("sync cache path %s: %w",rel,err)}
  }
  return nil
 }
-func copyBuildCachePath(src,dst string)error{
+func copyBuildCachePath(src,dst string,totalBytes *int64)error{
  if err:=ensureNoSymlinkParents(dst);err!=nil{return err}
  info,err:=os.Lstat(src);if err!=nil{return err};if info.Mode()&os.ModeSymlink!=0{return fmt.Errorf("cache path may not be a symlink")}
- if info.IsDir(){if err:=os.MkdirAll(dst,0700);err!=nil{return err};entries,err:=os.ReadDir(src);if err!=nil{return err};for _,e:=range entries{if err:=copyBuildCachePath(filepath.Join(src,e.Name()),filepath.Join(dst,e.Name()));err!=nil{return err}};return nil}
- if !info.Mode().IsRegular(){return nil};if info.Size()>256<<20{return fmt.Errorf("single cache file exceeds 256 MiB")}
+ if info.IsDir(){if err:=os.MkdirAll(dst,0700);err!=nil{return err};entries,err:=os.ReadDir(src);if err!=nil{return err};for _,e:=range entries{if err:=copyBuildCachePath(filepath.Join(src,e.Name()),filepath.Join(dst,e.Name()),totalBytes);err!=nil{return err}};return nil}
+ if !info.Mode().IsRegular(){return nil};if info.Size()>256<<20||*totalBytes+info.Size()>1<<30{return fmt.Errorf("cache exceeds 1 GiB total / 256 MiB per-file limit")};*totalBytes+=info.Size()
  if err:=os.MkdirAll(filepath.Dir(dst),0700);err!=nil{return err};in,err:=os.Open(src);if err!=nil{return err};defer in.Close()
  out,err:=os.OpenFile(dst,os.O_CREATE|os.O_TRUNC|os.O_WRONLY,0600);if err!=nil{return err};_,copyErr:=io.Copy(out,io.LimitReader(in,256<<20+1));closeErr:=out.Close();if copyErr!=nil{return copyErr};return closeErr
 }
