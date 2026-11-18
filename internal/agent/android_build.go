@@ -76,6 +76,8 @@ type AndroidBuildRequest struct {
  Environment map[string]string `json:"environment,omitempty"`
  ArtifactInclude []string `json:"artifact_include,omitempty"`
  ArtifactExclude []string `json:"artifact_exclude,omitempty"`
+ CacheEnabled bool `json:"cache_enabled"`
+ CachePaths []string `json:"cache_paths,omitempty"`
  OnStep func(name string, index, total int) `json:"-"`
 }
 type AndroidBuildResult struct {
@@ -109,6 +111,7 @@ func(r *AndroidBuildRunner)Run(parent context.Context,req AndroidBuildRequest)An
  if env.AvailableMemoryBytes>0&&env.AvailableMemoryBytes<minMem{return finish(fmt.Errorf("insufficient available memory: %d bytes; need at least %d",env.AvailableMemoryBytes,minMem),nil)}
  if env.FreeDiskBytes>0&&env.FreeDiskBytes<minDisk{return finish(fmt.Errorf("insufficient free disk: %d bytes; need at least %d",env.FreeDiskBytes,minDisk),nil)}
  steps,err:=androidBuildSteps(root,req);if err!=nil{return finish(err,nil)}
+ if req.CacheEnabled&&len(req.CachePaths)>0{if err:=restoreConfiguredBuildCaches(r.DataDir,req.SiteID,root,req.CachePaths);err!=nil{return finish(err,nil)}}
  timeout:=req.Timeout;if timeout<=0{timeout=20*time.Minute};if timeout>2*time.Hour{timeout=2*time.Hour}
  ctx,cancel:=context.WithTimeout(parent,timeout)
  r.mu.Lock();r.activeCancel=cancel;r.mu.Unlock()
@@ -135,6 +138,7 @@ func(r *AndroidBuildRunner)Run(parent context.Context,req AndroidBuildRequest)An
   }
   if err:=cmd.Run();err!=nil{if ctx.Err()!=nil{return finish(ctx.Err(),log)};return finish(fmt.Errorf("%s failed: %w",s.name,err),log)}
  }
+ if req.CacheEnabled&&len(req.CachePaths)>0{if err:=saveConfiguredBuildCaches(r.DataDir,req.SiteID,root,req.CachePaths);err!=nil{return finish(err,log)}}
  if len(req.ArtifactInclude)>0 { artifactDir,artifactErr:=collectBuildArtifacts(r.DataDir,req.SiteID,root,req.ArtifactInclude,req.ArtifactExclude);if artifactErr!=nil{return finish(artifactErr,log)};out.ArtifactDir=artifactDir } else { out.ArtifactDir=root };return finish(nil,log)
 }
 // Cancel requests termination of the active build process group.
@@ -321,4 +325,25 @@ func yevqoGlobMatch(pattern,name string)bool{
  pattern=filepath.ToSlash(pattern)
  if strings.Contains(pattern,"**"){parts:=strings.Split(pattern,"**");if len(parts)==2{return strings.HasPrefix(name,strings.TrimSuffix(parts[0],"/"))&&strings.HasSuffix(name,parts[1])}}
  ok,_:=filepath.Match(filepath.FromSlash(pattern),filepath.FromSlash(name));return ok
+}
+
+func configuredCacheRoot(dataDir,siteID string)string{return filepath.Join(dataDir,"build-cache","sites",siteID)}
+func restoreConfiguredBuildCaches(dataDir,siteID,root string,paths []string)error{return syncConfiguredBuildCaches(configuredCacheRoot(dataDir,siteID),root,paths,false)}
+func saveConfiguredBuildCaches(dataDir,siteID,root string,paths []string)error{return syncConfiguredBuildCaches(root,configuredCacheRoot(dataDir,siteID),paths,true)}
+func syncConfiguredBuildCaches(srcRoot,dstRoot string,paths []string,save bool)error{
+ for _,rel:=range paths{
+  if filepath.IsAbs(rel)||strings.Contains(rel,"\\"){return fmt.Errorf("cache path must be relative")}
+  clean:=filepath.Clean(rel);if clean=="."||clean==".."||strings.HasPrefix(clean,".."+string(filepath.Separator)){return fmt.Errorf("invalid cache path %q",rel)}
+  src:=filepath.Join(srcRoot,clean);dst:=filepath.Join(dstRoot,clean);if save{src=filepath.Join(srcRoot,clean);dst=filepath.Join(dstRoot,clean)}
+  if _,err:=os.Lstat(src);os.IsNotExist(err){continue}else if err!=nil{return err}
+  if err:=copyBuildCachePath(src,dst);err!=nil{return fmt.Errorf("sync cache path %s: %w",rel,err)}
+ }
+ return nil
+}
+func copyBuildCachePath(src,dst string)error{
+ info,err:=os.Lstat(src);if err!=nil{return err};if info.Mode()&os.ModeSymlink!=0{return fmt.Errorf("cache path may not be a symlink")}
+ if info.IsDir(){if err:=os.MkdirAll(dst,0700);err!=nil{return err};entries,err:=os.ReadDir(src);if err!=nil{return err};for _,e:=range entries{if err:=copyBuildCachePath(filepath.Join(src,e.Name()),filepath.Join(dst,e.Name()));err!=nil{return err}};return nil}
+ if !info.Mode().IsRegular(){return nil};if info.Size()>256<<20{return fmt.Errorf("single cache file exceeds 256 MiB")}
+ if err:=os.MkdirAll(filepath.Dir(dst),0700);err!=nil{return err};in,err:=os.Open(src);if err!=nil{return err};defer in.Close()
+ out,err:=os.OpenFile(dst,os.O_CREATE|os.O_TRUNC|os.O_WRONLY,0600);if err!=nil{return err};_,copyErr:=io.Copy(out,io.LimitReader(in,256<<20+1));closeErr:=out.Close();if copyErr!=nil{return copyErr};return closeErr
 }
