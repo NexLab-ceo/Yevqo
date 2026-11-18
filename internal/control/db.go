@@ -494,6 +494,25 @@ func (db *DB) Log(ctx context.Context, entry *shared.LogEntry) error {
 	if err != nil {
 		return fmt.Errorf("insert log: %w", err)
 	}
+	// Mirror security-relevant activity into the append-only P2 audit table.
+	if entry.UserID != nil {
+		ownerID := *entry.UserID
+		targetType, targetID := "account", strconv.FormatInt(ownerID, 10)
+		if entry.DeviceID != nil {
+			targetType, targetID = "device", strconv.FormatInt(*entry.DeviceID, 10)
+			if lookupErr := db.conn.QueryRowContext(ctx, `SELECT user_id FROM devices WHERE id=?`, *entry.DeviceID).Scan(&ownerID); lookupErr != nil {
+				return fmt.Errorf("resolve audit workspace owner: %w", lookupErr)
+			}
+		}
+		outcome := "success"
+		if ok, exists := entry.Details["ok"].(bool); exists && !ok { outcome = "failure" }
+		_, auditErr := db.conn.ExecContext(ctx, `
+			INSERT INTO audit_logs (workspace_owner_id, actor_user_id, target_type, target_id, action, outcome, ip, details)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			ownerID, *entry.UserID, targetType, targetID, entry.Action, outcome, entry.IP, detailsJSON,
+		)
+		if auditErr != nil { return fmt.Errorf("insert audit log: %w", auditErr) }
+	}
 	return nil
 }
 
