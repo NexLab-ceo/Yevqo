@@ -30,8 +30,15 @@ func TestBuildHistoryPersistsNewestRecordsWithRetention(t *testing.T) {
 	if len(records) != buildHistoryRetention {
 		t.Fatalf("history contains %d records, want %d", len(records), buildHistoryRetention)
 	}
-	if records[0].Result.Output != "build-12" || records[len(records)-1].Result.Output != "build-03" {
-		t.Fatalf("history is not newest-first or retention failed: newest=%q oldest=%q", records[0].Result.Output, records[len(records)-1].Result.Output)
+	if records[0].OutputBytes == 0 || records[len(records)-1].OutputBytes == 0 {
+		t.Fatal("history metadata should include log byte counts")
+	}
+	newest, err := GetBuildHistory(root, "history-demo", records[0].ID)
+	if err != nil { t.Fatal(err) }
+	oldest, err := GetBuildHistory(root, "history-demo", records[len(records)-1].ID)
+	if err != nil { t.Fatal(err) }
+	if newest.Result.Output != "build-12" || oldest.Result.Output != "build-03" {
+		t.Fatalf("history order/retention failed: newest=%q oldest=%q", newest.Result.Output, oldest.Result.Output)
 	}
 	dir := filepath.Join(root, "build-history", "history-demo")
 	info, err := os.Stat(dir)
