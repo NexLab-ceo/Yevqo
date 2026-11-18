@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, deleteDevice, deleteSite, sendCommand } from '$lib/api.js';
+    import { getDevice, deleteDevice, deleteSite, sendCommand, listAppTemplates } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -11,6 +11,7 @@
 
     let device = null;
     let sites = [];
+    let appTemplates = [];
     let online = false;
     let loading = true;
     let showDeleteModal = false;
@@ -25,9 +26,15 @@
 
     // Загружаем данные устройства.
     onMount(async () => {
-        await loadDevice();
+        await Promise.all([loadDevice(), loadTemplates()]);
         loading = false;
     });
+
+    async function loadTemplates() {
+        const res = await listAppTemplates();
+        if (res.ok) appTemplates = res.data.templates || [];
+        else notify(res.error || 'Не удалось загрузить каталог шаблонов', 'error');
+    }
 
     async function loadDevice() {
         const id = $page.params.id;
@@ -311,10 +318,10 @@
         <div class="form-group">
             <label class="form-label" for="runtime">Шаблон приложения</label>
             <select id="runtime" class="input" bind:value={newSite.runtime}>
-                <option value="static">Static Website — готовая index.html</option>
-                <option value="php">PHP Website — готовая index.php</option>
-                <option value="nodejs">Node.js HTTP — package.json + server.js</option>
-                <option value="go">Go Application — структура проекта и README</option>
+                {#each appTemplates as template (template.id)}
+                    <option value={template.runtime}>{template.name} — {template.description}</option>
+                {/each}
+                <option value="go">Go Application — legacy starter</option>
             </select>
             <p class="form-hint">Yevqo создаст файлы проекта и yevqo.template.json с параметрами запуска, затем запустит приложение на выбранном порту.</p>
         </div>
