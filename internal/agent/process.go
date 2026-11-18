@@ -1183,6 +1183,8 @@ func (m *ProcessManager) BuildSite(req AndroidBuildRequest) AndroidBuildResult {
   if manifest.MemoryBytes>0{req.MinAvailableMemoryBytes=manifest.MemoryBytes}
   req.ArtifactInclude=manifest.ArtifactsInclude
   req.ArtifactExclude=manifest.ArtifactsExclude
+  req.CacheEnabled=manifest.CacheEnabled
+  req.CachePaths=manifest.CachePaths
  }
 	if m.BuildRunner == nil {
 		m.BuildRunner = NewAndroidBuildRunner(m.DataRoot)
