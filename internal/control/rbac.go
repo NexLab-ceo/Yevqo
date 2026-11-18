@@ -1,6 +1,10 @@
 package control
 
-import "strings"
+import (
+	"context"
+	"errors"
+	"strings"
+)
 
 // CanWorkspaceAction is the server-side role policy. UI visibility is never
 // treated as authorization.
@@ -18,4 +22,13 @@ func CanWorkspaceAction(role, action string) bool {
 		}
 	}
 	return false
+}
+
+func (s *Server) authorizeWorkspace(ctx context.Context, ownerID, actorID int64, action string) error {
+	role, allowed, err := s.db.WorkspaceRole(ctx, ownerID, actorID)
+	if err != nil { return err }
+	if !allowed || !CanWorkspaceAction(role, action) {
+		return errors.New("workspace permission denied")
+	}
+	return nil
 }
