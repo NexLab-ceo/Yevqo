@@ -338,6 +338,7 @@ func configuredCacheRoot(dataDir,siteID string)string{return filepath.Join(dataD
 func restoreConfiguredBuildCaches(dataDir,siteID,root string,paths []string)error{return syncConfiguredBuildCaches(configuredCacheRoot(dataDir,siteID),root,paths,false)}
 func saveConfiguredBuildCaches(dataDir,siteID,root string,paths []string)error{return syncConfiguredBuildCaches(root,configuredCacheRoot(dataDir,siteID),paths,true)}
 func syncConfiguredBuildCaches(srcRoot,dstRoot string,paths []string,save bool)error{
+ var totalBytes int64
  for _,rel:=range paths{
   if filepath.IsAbs(rel)||strings.Contains(rel,"\\"){return fmt.Errorf("cache path must be relative")}
   clean:=filepath.Clean(rel);if clean=="."||clean==".."||strings.HasPrefix(clean,".."+string(filepath.Separator)){return fmt.Errorf("invalid cache path %q",rel)}
