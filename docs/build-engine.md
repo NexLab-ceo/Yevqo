@@ -8,7 +8,7 @@ and projects in other languages can provide their own executable plus argv comma
 ## Architecture
 
 - **Analyzer:** read-only project detection, build-plan generation and the supported
-  `veltrix.yaml` subset (`project.root`, `build.provider`, `build.install`,
+  `yevqo.yml` subset (`project.root`, `build.provider`, `build.install`,
   `build.command`, `run.command`, `run.port`).
 - **Environment detector:** Android/Termux, architecture, CPU count, installed
   compiler/build tools, memory estimate and free-disk estimate.
@@ -65,7 +65,7 @@ configuration below.
 ## Universal custom build commands
 
 If the Analyzer cannot recognize a language or project, use the Build Engine's
-custom Install and Build fields, or define them in `veltrix.yaml`:
+custom Install and Build fields, or define them in `yevqo.yml`:
 
 ```yaml
 version: 1
