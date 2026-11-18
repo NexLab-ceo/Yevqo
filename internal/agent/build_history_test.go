@@ -85,3 +85,17 @@ func TestBuildHistoryRejectsInvalidSiteAndSymlink(t *testing.T) {
 		t.Fatal("symlinked history root was accepted")
 	}
 }
+
+func TestBuildHistoryRetentionPrunesArtifactDirectories(t *testing.T){
+ root:=t.TempDir()
+ for i:=0;i<buildHistoryRetention+2;i++{
+  finished:=time.Date(2026,11,18,12,0,i,0,time.UTC)
+  artifactDir:=filepath.Join(root,"artifacts","retention-demo",fmt.Sprintf("artifact-%02d",i))
+  if err:=os.MkdirAll(artifactDir,0700);err!=nil{t.Fatal(err)}
+  if err:=os.WriteFile(filepath.Join(artifactDir,"app.bin"),[]byte("x"),0600);err!=nil{t.Fatal(err)}
+  result:=AndroidBuildResult{SiteID:"retention-demo",Success:true,FinishedAt:finished,ArtifactDir:artifactDir}
+  if err:=persistBuildHistory(root,"retention-demo",result);err!=nil{t.Fatal(err)}
+ }
+ for i:=0;i<2;i++{path:=filepath.Join(root,"artifacts","retention-demo",fmt.Sprintf("artifact-%02d",i));if _,err:=os.Stat(path);!os.IsNotExist(err){t.Fatalf("expired artifact directory remains: %s (%v)",path,err)}}
+ for i:=2;i<buildHistoryRetention+2;i++{path:=filepath.Join(root,"artifacts","retention-demo",fmt.Sprintf("artifact-%02d",i));if _,err:=os.Stat(path);err!=nil{t.Fatalf("retained artifact missing: %s: %v",path,err)}}
+}
