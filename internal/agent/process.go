@@ -1003,17 +1003,13 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
    AllowProjectCode:true, Timeout:buildTimeout, MaxLogBytes:10<<20,
   }
   if manifestFound{buildReq.Environment=manifest.Environment;buildReq.ArtifactInclude=manifest.ArtifactsInclude;buildReq.ArtifactExclude=manifest.ArtifactsExclude;buildReq.CacheEnabled=manifest.CacheEnabled;buildReq.CachePaths=manifest.CachePaths;buildReq.MinAvailableMemoryBytes=manifest.MemoryBytes}
-  build := m.BuildRunner.Run(ctx, buildReq
-
-			OnStep:func(name string, index, total int) {
-				progress := 40
-				if total > 0 { progress += index * 25 / total }
-				state := "building"
-				message := "Running build step: " + name
-				if name == "install" { state = "installing"; message = "Installing project dependencies" }
-				m.UpdateDeploymentJob(req.SiteId, jobID, state, progress, message)
-			},
-		})
+  buildReq.OnStep=func(name string,index,total int){
+   progress:=40;if total>0{progress+=index*25/total}
+   state:="building";message:="Running build step: "+name
+   if name=="install"{state="installing";message="Installing project dependencies"}
+   m.UpdateDeploymentJob(req.SiteId,jobID,state,progress,message)
+  }
+  build:=m.BuildRunner.Run(ctx,buildReq)
 		if historyErr := persistBuildHistory(m.DataRoot, req.SiteId, build); historyErr != nil {
 			output.WriteString("Build history warning: " + historyErr.Error() + "\n")
 		}
