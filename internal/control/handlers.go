@@ -235,6 +235,56 @@ func (s *Server) handleAppTemplates(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "templates": shared.ListAppTemplates()})
 }
 
+// GET /api/audit-logs returns append-only workspace audit events to owners/admins.
+func (s *Server) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+	user := UserFromContext(r.Context())
+	if user == nil { apiError(w, shared.ErrUnauthorized("not logged in")); return }
+	limit := 100
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > 500 { apiError(w, shared.ErrBadRequest("limit must be between 1 and 500")); return }
+		limit = parsed
+	}
+	owners, err := s.db.WorkspaceOwnerIDs(r.Context(), user.ID)
+	if err != nil { apiError(w, err); return }
+	type auditView struct {
+		ID int64 `json:"id"`
+		WorkspaceOwnerID int64 `json:"workspace_owner_id"`
+		ActorUserID *int64 `json:"actor_user_id,omitempty"`
+		TargetType string `json:"target_type"`
+		TargetID string `json:"target_id"`
+		Action string `json:"action"`
+		Outcome string `json:"outcome"`
+		RequestID string `json:"request_id"`
+		IP string `json:"ip"`
+		Details json.RawMessage `json:"details,omitempty"`
+		CreatedAt time.Time `json:"created_at"`
+	}
+	out := make([]auditView, 0, limit)
+	for _, ownerID := range owners {
+		role, ok, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, user.ID)
+		if roleErr != nil { apiError(w, roleErr); return }
+		if !ok || !CanWorkspaceAction(role, "audit.read") { continue }
+		rows, queryErr := s.db.conn.QueryContext(r.Context(), `SELECT id,workspace_owner_id,actor_user_id,target_type,target_id,action,outcome,request_id,ip,details,created_at FROM audit_logs WHERE workspace_owner_id=? ORDER BY created_at DESC,id DESC LIMIT ?`, ownerID, limit)
+		if queryErr != nil { apiError(w, shared.ErrInternal("could not load audit log")); return }
+		for rows.Next() {
+			var item auditView
+			var actor sql.NullInt64
+			var details []byte
+			if scanErr := rows.Scan(&item.ID,&item.WorkspaceOwnerID,&actor,&item.TargetType,&item.TargetID,&item.Action,&item.Outcome,&item.RequestID,&item.IP,&details,&item.CreatedAt); scanErr != nil {
+				rows.Close(); apiError(w, shared.ErrInternal("could not read audit log")); return
+			}
+			if actor.Valid { value:=actor.Int64; item.ActorUserID=&value }
+			if len(details)>0 { item.Details=append(json.RawMessage(nil),details...) }
+			out=append(out,item)
+		}
+		if rowsErr:=rows.Err(); rowsErr!=nil { rows.Close(); apiError(w, shared.ErrInternal("could not read audit log")); return }
+		rows.Close()
+	}
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"audit_logs":out})
+}
+
 // ============================================================
 // GET /api/devices
 // ============================================================
