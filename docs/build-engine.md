@@ -80,6 +80,7 @@ build:
   provider: custom
   install: "npm ci"
   command: "npm run build"
+  output: dist
 
 run:
   command: "npm run start"
@@ -113,7 +114,7 @@ deploy:
 Supported configuration includes:
 
 - `project.name`, `project.runtime`, `project.root`
-- `build.provider`, `build.install`, `build.command`
+- `build.provider`, `build.install`, `build.command`, `build.output` (when no explicit `artifacts.include` is set, collect files beneath this output directory)
 - `run.command`, `run.port`
 - `environment.KEY`: explicit per-project variables injected into build and runtime processes. Keys are allowlisted; reserved host, port, database-secret and Agent variables are rejected. Do not commit secrets in this file.
 - `healthcheck.path`: local HTTP GET path. Startup requires a 2xx response; after startup the Agent probes at `healthcheck.interval` (default 30s) and terminates a process after three consecutive failures so the configured restart supervisor can recover it. Interval range: 1s–1m.
