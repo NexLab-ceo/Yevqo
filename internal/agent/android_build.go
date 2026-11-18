@@ -71,7 +71,9 @@ type AndroidBuildRequest struct {
  MaxLogBytes int `json:"max_log_bytes,omitempty"`
  MinAvailableMemoryBytes uint64 `json:"min_available_memory_bytes,omitempty"`
  MinFreeDiskBytes uint64 `json:"min_free_disk_bytes,omitempty"`
+ MinFreeDiskBytes uint64 `json:"min_free_disk_bytes,omitempty"`
  AllowProjectCode bool `json:"allow_project_code"`
+ Environment map[string]string `json:"environment,omitempty"`
  OnStep func(name string, index, total int) `json:"-"`
 }
 type AndroidBuildResult struct {
@@ -114,6 +116,10 @@ func(r *AndroidBuildRunner)Run(parent context.Context,req AndroidBuildRequest)An
   fmt.Fprintf(log,"$ %s %s\n",s.exe,strings.Join(s.args," "))
   buildEnv,envErr:=androidBuildEnv(r.DataDir)
   if envErr!=nil{return finish(fmt.Errorf("prepare build caches: %w",envErr),log)}
+  for key,value:=range req.Environment {
+   if !validManagedEnvironmentKey(key)||strings.IndexByte(value,0)>=0||len(value)>16384{return finish(fmt.Errorf("invalid Yevqo build environment variable %q",key),log)}
+   buildEnv=append(buildEnv,key+"="+value)
+  }
   cmd:=exec.CommandContext(ctx,s.exe,s.args...);cmd.Dir=root;cmd.Env=buildEnv;cmd.Stdout=log;cmd.Stderr=log
   cmd.SysProcAttr=&syscall.SysProcAttr{Setpgid:true}
   cmd.WaitDelay=3*time.Second
