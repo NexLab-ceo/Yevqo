@@ -562,6 +562,10 @@ func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port in
 	m.mu.RUnlock()
 	go m.streamLogFile(siteID, logPath, logStartOffset, pid, emitLog)
 	go m.watchLogRotation(siteID, logPath, pid)
+ if manifestFound&&manifest.HealthcheckPath!=""{
+  interval:=manifest.HealthcheckInterval;if interval<=0{interval=30*time.Second}
+  go m.monitorSiteHealth(siteID,pid,startToken,port,manifest.HealthcheckPath,interval)
+ }
 	return pid, nil
 }
 
@@ -1207,4 +1211,15 @@ func (m *ProcessManager) BuildSite(req AndroidBuildRequest) AndroidBuildResult {
 		result.HistoryWarning = historyErr.Error()
 	}
 	return result
+}
+
+func (m *ProcessManager) monitorSiteHealth(siteID string,pid int,token string,port int,path string,interval time.Duration){
+ if interval<time.Second{interval=time.Second};ticker:=time.NewTicker(interval);defer ticker.Stop();failures:=0
+ for range ticker.C{
+  record,ok:=m.registry.Get(siteID);if !ok||record.PID!=pid||record.StartToken!=token||!verifyProcessRecord(record){return}
+  if err:=waitForHTTP(port,path,2*time.Second);err!=nil{failures++}else{failures=0}
+  if failures<3{continue}
+  latest,ok:=m.registry.Get(siteID);if ok&&latest.PID==pid&&latest.StartToken==token&&verifyProcessRecord(latest){_ = killProcessGroup(latest.PID,latest.ProcessGroup)}
+  return
+ }
 }
