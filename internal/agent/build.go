@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"os"
@@ -155,8 +156,19 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 		case has("pnpm-lock.yaml"): plan.PackageTool = "pnpm"
 		case has("yarn.lock"): plan.PackageTool = "yarn"
 		}
-		plan.Install = map[string]string{"npm":"npm ci","pnpm":"pnpm install --frozen-lockfile","yarn":"yarn install --frozen-lockfile","bun":"bun install --frozen-lockfile"}[plan.PackageTool]
-		plan.Build, plan.Start = "npm run build", "npm run start"
+		plan.Install = map[string]string{"npm":"npm install --no-audit --no-fund","pnpm":"pnpm install --no-frozen-lockfile","yarn":"yarn install --non-interactive","bun":"bun install"}[plan.PackageTool]
+		if plan.PackageTool == "npm" && has("package-lock.json", "npm-shrinkwrap.json") { plan.Install = "npm ci" }
+		if plan.PackageTool == "pnpm" && has("pnpm-lock.yaml") { plan.Install = "pnpm install --frozen-lockfile" }
+		if plan.PackageTool == "yarn" && has("yarn.lock") { plan.Install = "yarn install --frozen-lockfile" }
+		if plan.PackageTool == "bun" && has("bun.lock", "bun.lockb") { plan.Install = "bun install --frozen-lockfile" }
+		plan.Start = "npm run start"
+		if packageData, readErr := os.ReadFile(filepath.Join(abs, "package.json")); readErr == nil {
+			var packageManifest struct { Scripts map[string]string `json:"scripts"` }
+			if jsonErr := json.Unmarshal(packageData, &packageManifest); jsonErr == nil {
+				if strings.TrimSpace(packageManifest.Scripts["build"]) != "" { plan.Build = "npm run build" }
+				if strings.TrimSpace(packageManifest.Scripts["start"]) == "" { plan.Start = "" }
+			}
+		}
 		plan.Port = 3000
 		plan.Evidence = append(plan.Evidence, "package.json", plan.PackageTool+" lockfile/package manager")
 		return plan, nil
@@ -178,7 +190,7 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 	}
 	if has("go.mod") {
 		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "go", "go", "high", false
-		plan.Build, plan.Start, plan.Port = "go build -o ./bin/app .", "./bin/app", 8080
+		plan.Build, plan.Start, plan.Port = "go build -o yevqo-app .", "./yevqo-app", 8080
 		plan.Evidence = append(plan.Evidence, "go.mod")
 		return plan, nil
 	}
@@ -210,6 +222,86 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "dotnet", "dotnet", "high", false
 		plan.Build, plan.Start, plan.Port = "dotnet publish -c Release -o ./publish", "dotnet ./publish/<application>.dll", 8080
 		plan.Evidence = append(plan.Evidence, ".csproj/global.json")
+		return plan, nil
+	}
+	// Additional ecosystems are detected by their native project manifests.
+	// Each plan uses fixed argv commands and requires the corresponding Termux tool.
+	if has("cmakelists.txt") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "cmake", "cmake", "high", false
+		plan.Install, plan.Build = "cmake -S . -B build", "cmake --build build --parallel 2"
+		plan.Evidence = append(plan.Evidence, "CMakeLists.txt")
+		return plan, nil
+	}
+	if has("makefile", "gnumakefile") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "make", "make", "high", false
+		plan.Build = "make -j2"
+		plan.Evidence = append(plan.Evidence, "Makefile")
+		return plan, nil
+	}
+	if has("package.swift") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "swift", "swift", "high", false
+		plan.Build = "swift build -c release"
+		plan.Evidence = append(plan.Evidence, "Package.swift")
+		return plan, nil
+	}
+	if has("mix.exs") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "elixir", "mix", "high", false
+		plan.Install, plan.Build = "mix deps.get", "mix compile"
+		plan.Evidence = append(plan.Evidence, "mix.exs")
+		return plan, nil
+	}
+	if has("build.sbt") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "scala", "sbt", "high", false
+		plan.Build = "sbt compile"
+		plan.Evidence = append(plan.Evidence, "build.sbt")
+		return plan, nil
+	}
+	if has("build.zig") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "zig", "zig", "high", false
+		plan.Build = "zig build -Doptimize=ReleaseFast"
+		plan.Evidence = append(plan.Evidence, "build.zig")
+		return plan, nil
+	}
+	if has("pubspec.yaml") && has("bin/main.dart") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "dart", "dart", "high", false
+		plan.Install, plan.Build = "dart pub get", "dart compile exe bin/main.dart -o build/yevqo-app"
+		plan.Evidence = append(plan.Evidence, "pubspec.yaml", "bin/main.dart")
+		return plan, nil
+	}
+	if has("deno.json", "deno.jsonc") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "deno", "deno", "high", false
+		plan.Build = "deno task build"
+		plan.Evidence = append(plan.Evidence, "deno.json")
+		return plan, nil
+	}
+	if has("rebar.config") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "erlang", "rebar3", "high", false
+		plan.Build = "rebar3 compile"
+		plan.Evidence = append(plan.Evidence, "rebar.config")
+		return plan, nil
+	}
+	if has("dune-project") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "ocaml", "dune", "high", false
+		plan.Build = "dune build"
+		plan.Evidence = append(plan.Evidence, "dune-project")
+		return plan, nil
+	}
+	if has("shard.yml") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "crystal", "shards", "high", false
+		plan.Install, plan.Build = "shards install", "crystal build src/main.cr -o build/yevqo-app"
+		plan.Evidence = append(plan.Evidence, "shard.yml")
+		return plan, nil
+	}
+	if has("cpanfile") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "perl", "cpanm", "high", false
+		plan.Install = "cpanm --installdeps ."
+		plan.Evidence = append(plan.Evidence, "cpanfile")
+		return plan, nil
+	}
+	if has("project.toml") && has("manifest.toml") {
+		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "julia", "julia", "medium", true
+		plan.Warnings = append(plan.Warnings, "Julia project detected; configure explicit install/build commands for the selected package.")
+		plan.Evidence = append(plan.Evidence, "Project.toml", "Manifest.toml")
 		return plan, nil
 	}
 	if has("index.html") {
