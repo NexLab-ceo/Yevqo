@@ -514,6 +514,12 @@ func parsePayload(action string, raw json.RawMessage) (interface{}, error) {
 		var p shared.AndroidBuildSite
 		if err := json.Unmarshal(raw, &p); err != nil { return nil, err }
 		return &p, nil
+ case "list_build_artifacts":
+  var p shared.ListBuildArtifacts
+  if err:=json.Unmarshal(raw,&p);err!=nil{return nil,err};return &p,nil
+ case "read_build_artifact_chunk":
+  var p shared.ReadBuildArtifactChunk
+  if err:=json.Unmarshal(raw,&p);err!=nil{return nil,err};return &p,nil
 	case "create_site":
 		var p shared.CreateSite
 		if err := json.Unmarshal(raw, &p); err != nil { return nil, err }
