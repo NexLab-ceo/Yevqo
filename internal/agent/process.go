@@ -238,7 +238,7 @@ func (m *ProcessManager) CreateSite(siteID string, port int, runtime string) err
 	defer m.operationMu.Unlock()
 	if !validSiteID(siteID) { return fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return fmt.Errorf("port must be between 1024 and 65535") }
-	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" { return fmt.Errorf("unsupported runtime: %s", runtime) }
+	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" && runtime != "custom" { return fmt.Errorf("unsupported runtime: %s", runtime) }
 	target, err := safeSiteDirectory(m.DataRoot, siteID)
 	if err != nil { return err }
 	if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil { return fmt.Errorf("create sites directory: %w", err) }
@@ -247,6 +247,7 @@ func (m *ProcessManager) CreateSite(siteID string, port int, runtime string) err
 		return fmt.Errorf("create site directory: %w", err)
 	}
 	fileName, body := "index.php", "<?php\n// Your Yevqo website starts here.\necho 'Hello from Yevqo';\n"
+	if runtime == "custom" { return nil }
 	if runtime == "static" { fileName, body = "index.html", "<!doctype html>\n<html lang=\"en\"><meta charset=\"utf-8\"><title>Yevqo site</title><h1>Your site is ready</h1></html>\n" }
 	if runtime == "go" {
 		goMod := "module yevqo-site\n\ngo 1.22\n"
@@ -342,7 +343,7 @@ func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, r
 func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port int, runtime string, extraEnv map[string]string, startCommand string) (int, error) {
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return 0, fmt.Errorf("port must be between 1024 and 65535") }
-	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
+	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" && !(runtime == "custom" && startCommand != "") { return 0, fmt.Errorf("unsupported runtime: %s (custom runtime requires a start command)", runtime) }
 	cleanPath := filepath.Clean(path)
 	expectedPath := filepath.Join("sites", siteID)
 	if filepath.IsAbs(path) || (cleanPath != expectedPath && !strings.HasPrefix(cleanPath, expectedPath+string(filepath.Separator))) {
@@ -868,8 +869,11 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	healthTimeout, err := configuredDeploymentTimeout(req.HealthCheckTimeoutSeconds, 15*time.Second, 3, 300, "health check")
 	if err != nil { return 0, "", "", "", err }
 	if req.GitCommit != "" && !validGitCommit(req.GitCommit) { return 0, "", "", "", fmt.Errorf("invalid Git commit target") }
-	if req.Runtime != "php" && req.Runtime != "go" && req.Runtime != "static" && req.Runtime != "nodejs" {
-		return 0, "", "", "", fmt.Errorf("runtime %q cannot be launched by this Agent yet; supported runtimes are php, go, static and nodejs", req.Runtime)
+	if req.Runtime != "php" && req.Runtime != "go" && req.Runtime != "static" && req.Runtime != "nodejs" && req.Runtime != "custom" {
+		return 0, "", "", "", fmt.Errorf("unsupported runtime %q; use a built-in runtime or custom with an explicit start command", req.Runtime)
+	}
+	if req.Runtime == "custom" && strings.TrimSpace(req.StartCommand) == "" {
+		return 0, "", "", "", fmt.Errorf("custom runtime requires an explicit start command")
 	}
 
 	siteRoot, err := safeSiteDirectory(m.DataRoot, req.SiteId)
@@ -950,18 +954,22 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	plan, err := AnalyzeProject(buildDir)
 	if err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, err }
 	expectedStack := map[string]string{"php":"php", "go":"go", "static":"static", "nodejs":"nodejs"}[req.Runtime]
-	if plan.Stack != expectedStack && !(req.Runtime == "php" && plan.Stack == "unknown") {
+	if req.Runtime != "custom" && plan.Stack != expectedStack && !(req.Runtime == "php" && plan.Stack == "unknown") {
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("detected stack %q does not match configured runtime %q", plan.Stack, req.Runtime)
 	}
 	if req.Runtime == "php" && plan.Stack == "unknown" {
 		// Plain PHP sites without Composer have no dependency/build phase.
 	} else {
 		if m.BuildRunner == nil { m.BuildRunner = NewAndroidBuildRunner(m.DataRoot) }
-		installCommand := ""
-		if req.BuildCommand != "" { installCommand = plan.Install }
+		installCommand := plan.Install
+		buildCommand := strings.TrimSpace(req.BuildCommand)
+		if buildCommand == "" { buildCommand = plan.Build }
+		if plan.Stack == "unknown" && buildCommand == "" && installCommand == "" {
+			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("no build plan detected; configure install/build commands in veltrix.yaml or use the Build Engine")
+		}
 		build := m.BuildRunner.Run(ctx, AndroidBuildRequest{
 			SiteID:req.SiteId, SiteRoot:stageDir, RootDir:rootDir, Stack:plan.Stack,
-			PackageTool:plan.PackageTool, InstallCommand:installCommand, BuildCommand:req.BuildCommand,
+			PackageTool:plan.PackageTool, InstallCommand:installCommand, BuildCommand:buildCommand,
 			AllowProjectCode:true, Timeout:buildTimeout, MaxLogBytes:10<<20,
 			OnStep:func(name string, index, total int) {
 				progress := 40
@@ -1076,7 +1084,7 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 	defer m.operationMu.Unlock()
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
 	if !validReleaseCommit(commit) { return 0, fmt.Errorf("invalid release commit") }
-	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" { return 0, fmt.Errorf("unsupported runtime: %s", runtime) }
+	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" && !(runtime == "custom" && startCommand != "") { return 0, fmt.Errorf("unsupported runtime: %s (custom runtime requires a start command)", runtime) }
 	if port < 1024 || port > 65535 { return 0, fmt.Errorf("invalid site port") }
 	if rootDir == "" { rootDir = "." }
 	if filepath.IsAbs(rootDir) || strings.Contains(rootDir, "\\") { return 0, fmt.Errorf("invalid release root directory") }
