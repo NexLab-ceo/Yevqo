@@ -9,6 +9,9 @@ func TestCSVSafeCellPreventsFormulaInjection(t *testing.T) {
 		{"-cmd", "'-cmd"},
 		{"@SUM(A1)", "'@SUM(A1)"},
 		{"\t=1+1", "'\t=1+1"},
+		{"  =1+1", "'  =1+1"},
+		{"\r@SUM(A1)", "'\r@SUM(A1)"},
+		{"  ordinary text", "  ordinary text"},
 		{"ordinary text", "ordinary text"},
 		{"", ""},
 	}
