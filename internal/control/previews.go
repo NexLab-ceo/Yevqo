@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -107,4 +106,3 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 
 func truncatePreviewError(s string) string { s=strings.TrimSpace(s); if len(s)>900 { return s[:900] }; return s }
 
-var _ = strconv.Itoa

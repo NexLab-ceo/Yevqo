@@ -273,3 +273,7 @@ export async function listScheduledTasks(deviceId, siteId) { return request('GET
 export async function createScheduledTask(input) { return request('POST', '/api/scheduled-tasks', input); }
 export async function setScheduledTaskEnabled(id, enabled) { return request('PATCH', `/api/scheduled-tasks/${id}`, { enabled }); }
 export async function deleteScheduledTask(id) { return request('DELETE', `/api/scheduled-tasks/${id}`); }
+
+export async function listSitePreviews(deviceId, siteId) { return request('GET', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId) + '/previews'); }
+export async function createSitePreview(deviceId, siteId, input) { return request('POST', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId) + '/previews', input); }
+export async function deleteSitePreview(deviceId, siteId, key) { return request('DELETE', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId) + '/previews/' + encodeURIComponent(key)); }

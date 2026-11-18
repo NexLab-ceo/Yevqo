@@ -2,7 +2,7 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteMetrics, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream } from '$lib/api.js';
+    import { getDevice, getSite, getSiteMetrics, listSitePreviews, createSitePreview, deleteSitePreview, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -40,6 +40,12 @@
     const logReconnectDelays = [1000, 2000, 5000, 10000, 20000, 30000];
     let activeTab = 'general';
     let releases = [];
+    let previews = [];
+    let previewsLoading = false;
+    let previewCreating = false;
+    let previewBranch = 'main';
+    let previewConsent = false;
+    let deletingPreview = '';
     let releasesLoading = false;
     let pruningReleases = false;
     let releaseKeep = 10;
@@ -129,6 +135,36 @@
         }
     }
 
+
+    async function loadPreviews() {
+        if (!online || !device || String(device.platform || '').toLowerCase() !== 'android') return;
+        previewsLoading = true;
+        const res = await listSitePreviews(deviceId, siteId);
+        previewsLoading = false;
+        if (!res.ok) { notify(res.error || 'Не удалось загрузить Preview', 'error'); return; }
+        previews = res.data.previews || [];
+    }
+
+    async function createPreview() {
+        if (!online || previewCreating || !previewConsent) return;
+        previewCreating = true;
+        const res = await createSitePreview(deviceId, siteId, { branch: previewBranch.trim() || gitForm.branch || 'main', allow_project_code: true });
+        previewCreating = false;
+        previewConsent = false;
+        if (!res.ok || !res.data?.ok) { notify(res.error || res.data?.message || 'Не удалось создать Preview', 'error'); await loadPreviews(); return; }
+        notify('Preview готов', 'success');
+        await loadPreviews();
+    }
+
+    async function removePreview(preview) {
+        if (deletingPreview || !confirm('Удалить этот Preview и остановить его процесс?')) return;
+        deletingPreview = preview.key;
+        const res = await deleteSitePreview(deviceId, siteId, preview.key);
+        deletingPreview = '';
+        if (!res.ok) { notify(res.error || 'Не удалось удалить Preview', 'error'); return; }
+        previews = previews.filter(item => item.key !== preview.key);
+        notify('Preview удалён', 'success');
+    }
     async function configureWebhook(enabled) {
         if (webhookBusy) return;
         webhookBusy = true;
@@ -658,6 +694,7 @@
         <button class:active={activeTab === 'build'} on:click={() => activeTab = 'build'}>Build</button>
         <button class:active={activeTab === 'git'} on:click={() => activeTab = 'git'}>Git</button>
         <button class:active={activeTab === 'releases'} on:click={() => { activeTab = 'releases'; loadReleases(); }}>Releases</button>
+        {#if String(device?.platform || '').toLowerCase() === 'android'}<button class:active={activeTab === 'previews'} on:click={() => { activeTab = 'previews'; loadPreviews(); }}>Previews</button>{/if}
         <button class:active={activeTab === 'tasks'} on:click={() => { activeTab = 'tasks'; refreshScheduledTasks(); }}>Scheduled Tasks</button>
     </nav>
 
@@ -900,6 +937,41 @@
                     <div class="webhook-secret"><strong>Webhook secret — показывается только один раз</strong><code>{webhookSecret}</code><Button size="sm" on:click={copyWebhookSecret}>Copy secret</Button><small>В GitHub откройте Settings → Webhooks → Add webhook. Content type: application/json; Events: Just the push event.</small></div>
                 {/if}
             </section>
+        </Card>
+    {:else if activeTab === 'previews'}
+        <Card>
+            <h2 class="details-title">Android Preview Deployments</h2>
+            <p class="muted">Изолированная копия выбранной Git-ветки на Android/Termux. Preview использует отдельную директорию, процесс и порт и не переключает production-релиз. Срок жизни — 24 часа.</p>
+            {#if String(device?.platform || '').toLowerCase() !== 'android'}
+                <p class="muted">Preview доступен только на Android/Termux Agent.</p>
+            {:else if !online}
+                <p class="muted">Подключите Android Agent для управления Preview.</p>
+            {:else}
+                <div class="git-form">
+                    <label>Git branch<input class="input" bind:value={previewBranch} placeholder={gitForm.branch || 'main'} maxlength="128" /></label>
+                </div>
+                <label class="webhook-consent"><input type="checkbox" bind:checked={previewConsent} /> Я разрешаю клонировать, собирать и запускать код этой ветки на Android-устройстве.</label>
+                <div class="save-row"><Button variant="primary" disabled={!previewConsent || !git.repository_url || previewCreating} loading={previewCreating} on:click={createPreview}>Create Preview</Button><Button size="sm" disabled={previewsLoading} on:click={loadPreviews}>Refresh</Button></div>
+                {#if previewsLoading}
+                    <p class="muted">Загрузка Preview…</p>
+                {:else if previews.length === 0}
+                    <div class="empty-state">Preview пока нет.</div>
+                {:else}
+                    <div class="release-list">
+                        {#each previews as preview (preview.key)}
+                            <article class="release-row">
+                                <div class="release-info">
+                                    <div class="release-title"><code>{preview.branch || 'main'}</code><span class="release-active">{preview.status}</span></div>
+                                    <p class="muted">Port {preview.port} · {preview.commit ? preview.commit.slice(0,12) : 'commit pending'} · истекает {preview.expires_at ? new Date(preview.expires_at).toLocaleString() : 'через 24 часа'}</p>
+                                    {#if preview.error}<p class="muted">{preview.error}</p>{/if}
+                                    {#if preview.url}<a href={preview.url} target="_blank" rel="noreferrer">{preview.url} ↗</a>{/if}
+                                </div>
+                                <Button size="sm" variant="danger" disabled={!!deletingPreview} loading={deletingPreview === preview.key} on:click={() => removePreview(preview)}>Delete</Button>
+                            </article>
+                        {/each}
+                    </div>
+                {/if}
+            {/if}
         </Card>
     {/if}
 {:else}
