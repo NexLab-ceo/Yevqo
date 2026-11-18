@@ -60,7 +60,7 @@
     if(!r.ok||!r.data?.ok){notify(r.error||r.data?.message||'Не удалось скачать артефакт','error');return}
     let p;try{p=JSON.parse(decode(r.data.payload))}catch{notify('Некорректный фрагмент артефакта','error');return}
     const raw=atob(p.data||'');const bytes=new Uint8Array(raw.length);for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
-    chunks.push(bytes);offset+=bytes.length;eof=!!p.eof;
+    chunks.push(bytes);offset+=bytes.length;if(offset>1073741824){notify('Артефакт превышает лимит загрузки 1 GiB','error');return}eof=!!p.eof;
     if(bytes.length===0&&!eof){notify('Загрузка артефакта остановлена: пустой фрагмент','error');return}
    }
    const blob=new Blob(chunks,{type:'application/octet-stream'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=file.path.replace(/[\\/]/g,'_')||'artifact';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
