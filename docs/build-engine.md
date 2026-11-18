@@ -8,8 +8,9 @@ and projects in other languages can provide their own executable plus argv comma
 ## Architecture
 
 - **Analyzer:** read-only project detection, build-plan generation and the supported
-  `yevqo.yml` subset (`project.root`, `build.provider`, `build.install`,
-  `build.command`, `run.command`, `run.port`).
+  `yevqo.yml` configuration (`project.root`, `build.provider`, `build.install`,
+  `build.command`, `run.command`, `run.port`). The only recognized filename is
+  exactly `yevqo.yml`; legacy `veltrix.yaml` / `veltrix.yml` files are ignored.
 - **Environment detector:** Android/Termux, architecture, CPU count, installed
   compiler/build tools, memory estimate and free-disk estimate.
 - **Local provider:** executes one program at a time with an argv vector; it never
@@ -65,7 +66,7 @@ configuration below.
 ## Universal custom build commands
 
 If the Analyzer cannot recognize a language or project, use the Build Engine's
-custom Install and Build fields, or define them in `yevqo.yml`:
+custom Install and Build fields, or define them in the project-root `yevqo.yml`:
 
 ```yaml
 version: 1
@@ -75,7 +76,14 @@ build:
   provider: custom
   install: "nimble install -y"
   command: "nim c -o build/app src/main.nim"
+run:
+  command: "./build/app"
+  port: 8080
 ```
+
+Only the keys shown above are currently consumed by the Agent. The file is optional:
+when absent, Yevqo uses automatic project detection. `veltrix.yaml` and
+`veltrix.yml` are not aliases and are deliberately ignored.
 
 Commands consist of an executable available on the Agent's Termux `PATH` followed
 by arguments. Single/double-quoted arguments are supported. The executable can be
