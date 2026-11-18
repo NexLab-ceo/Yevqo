@@ -121,6 +121,7 @@ project:
 build:
   provider: custom
   command: "go build -o app ."
+  output: dist
 run:
   command: "./app"
   port: 8080
@@ -145,7 +146,7 @@ deploy:
 `
  if err:=os.WriteFile(filepath.Join(root,"yevqo.yml"),[]byte(body),0600);err!=nil{t.Fatal(err)}
  m,found,err:=readYevqoManifest(root);if err!=nil{t.Fatal(err)};if !found{t.Fatal("manifest not found")}
- if m.Name!="example"||m.Port!=8080||m.Environment["APP_MODE"]!="production"||m.HealthcheckPath!="/health"||m.HealthcheckInterval.String()!="10s"||m.MemoryBytes!=512<<20||!m.CacheEnabled||len(m.CachePaths)!=1||len(m.ArtifactsInclude)!=1||len(m.ArtifactsExclude)!=1||!m.DeployRestart{t.Fatalf("manifest fields not parsed: %+v",m)}
+ if m.Name!="example"||m.Output!="dist"||m.Port!=8080||m.Environment["APP_MODE"]!="production"||m.HealthcheckPath!="/health"||m.HealthcheckInterval.String()!="10s"||m.MemoryBytes!=512<<20||!m.CacheEnabled||len(m.CachePaths)!=1||len(m.ArtifactsInclude)!=1||len(m.ArtifactsExclude)!=1||!m.DeployRestart{t.Fatalf("manifest fields not parsed: %+v",m)}
 }
 
 func TestYevqoManifestRejectsUnsafePathsAndEnvironment(t *testing.T) {
