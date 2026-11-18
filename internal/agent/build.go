@@ -42,6 +42,7 @@ type yevqoManifest struct {
  HealthcheckInterval time.Duration
  MemoryBytes uint64
  DeployRestart bool
+ DeployRestartSet bool
  ArtifactsInclude, ArtifactsExclude, CachePaths []string
  CacheEnabled bool
 }
@@ -128,7 +129,7 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
   case "healthcheck.path":m.HealthcheckPath=val
   case "healthcheck.interval":d,e:=time.ParseDuration(val);if e!=nil||d<time.Second||d>time.Minute{return m,false,fmt.Errorf("healthcheck.interval must be 1s..1m")};m.HealthcheckInterval=d
   case "resources.memory":n,e:=parseYevqoMemory(val);if e!=nil{return m,false,e};m.MemoryBytes=n
-  case "deploy.restart":x,e:=strconv.ParseBool(val);if e!=nil{return m,false,fmt.Errorf("deploy.restart must be boolean")};m.DeployRestart=x
+  case "deploy.restart":x,e:=strconv.ParseBool(val);if e!=nil{return m,false,fmt.Errorf("deploy.restart must be boolean")};m.DeployRestart=x;m.DeployRestartSet=true
   case "cache.enabled":x,e:=strconv.ParseBool(val);if e!=nil{return m,false,fmt.Errorf("cache.enabled must be boolean")};m.CacheEnabled=x
   case "artifacts.include","artifacts.exclude","cache.paths":if val!=""{return m,false,fmt.Errorf("%s must be a YAML list",full)};listKey=full
   default:return m,false,fmt.Errorf("yevqo.yml:%d: unsupported key %q",line,full)
