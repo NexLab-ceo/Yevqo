@@ -23,6 +23,7 @@ jobs:
         run: |
           GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/agent
           GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/control
+          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/yevqo
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
