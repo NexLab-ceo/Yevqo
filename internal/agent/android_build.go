@@ -10,6 +10,7 @@ import (
  "path/filepath"
  "runtime"
  "strconv"
+ "sort"
  "strings"
  "sync"
  "syscall"
@@ -107,7 +108,9 @@ func(r *AndroidBuildRunner)Run(parent context.Context,req AndroidBuildRequest)An
  maxLog:=req.MaxLogBytes;if maxLog<=0{maxLog=10<<20};if maxLog>50<<20{maxLog=50<<20};log:=&boundedBuildLog{limit:maxLog}
  for index,s:=range steps{if req.OnStep != nil { req.OnStep(s.name, index, len(steps)) }; if err:=ctx.Err();err!=nil{return finish(err,log)};if _,err:=exec.LookPath(s.exe);err!=nil{return finish(fmt.Errorf("required Termux tool %q is not installed",s.exe),log)}
   fmt.Fprintf(log,"$ %s %s\n",s.exe,strings.Join(s.args," "))
-  cmd:=exec.CommandContext(ctx,s.exe,s.args...);cmd.Dir=root;cmd.Env=androidBuildEnv();cmd.Stdout=log;cmd.Stderr=log
+  buildEnv,envErr:=androidBuildEnv(r.DataDir)
+  if envErr!=nil{return finish(fmt.Errorf("prepare build caches: %w",envErr),log)}
+  cmd:=exec.CommandContext(ctx,s.exe,s.args...);cmd.Dir=root;cmd.Env=buildEnv;cmd.Stdout=log;cmd.Stderr=log
   if err:=cmd.Run();err!=nil{if ctx.Err()!=nil{return finish(ctx.Err(),log)};return finish(fmt.Errorf("%s failed: %w",s.name,err),log)}
  }
  out.ArtifactDir=root;return finish(nil,log)
@@ -209,19 +212,38 @@ func splitBuildCommand(raw string)([]string,error){
  return fields,nil
 }
 
-func androidBuildEnv()[]string{
+func androidBuildEnv(dataDir string)([]string,error){
  allow:=map[string]bool{
   "PATH":true,"PREFIX":true,"HOME":true,"TMPDIR":true,"LANG":true,"LC_ALL":true,"TERM":true,
   "ANDROID_ROOT":true,"ANDROID_DATA":true,"ANDROID_HOME":true,"ANDROID_NDK_HOME":true,
   "JAVA_HOME":true,"GOROOT":true,"GOPATH":true,"CGO_ENABLED":true,
   "CARGO_HOME":true,"RUSTUP_HOME":true,"PKG_CONFIG_PATH":true,"CPATH":true,"LIBRARY_PATH":true,
   "CFLAGS":true,"CXXFLAGS":true,"LDFLAGS":true,"GEM_HOME":true,"GEM_PATH":true,"BUNDLE_PATH":true,
-  "COMPOSER_HOME":true,"PIP_CACHE_DIR":true,"NPM_CONFIG_CACHE":true,"PNPM_HOME":true,"BUN_INSTALL":true,
-  "DENO_DIR":true,"DOTNET_ROOT":true,"DOTNET_CLI_HOME":true,"MAVEN_HOME":true,"GRADLE_USER_HOME":true,
+  "COMPOSER_HOME":true,"COMPOSER_CACHE_DIR":true,"PIP_CACHE_DIR":true,"NPM_CONFIG_CACHE":true,"PNPM_HOME":true,"BUN_INSTALL":true,
+  "DENO_DIR":true,"DOTNET_ROOT":true,"DOTNET_CLI_HOME":true,"MAVEN_HOME":true,"GRADLE_USER_HOME":true,"PUB_CACHE":true,"JULIA_DEPOT_PATH":true,
  }
- var env []string
- for _,v:=range os.Environ(){k,_,_:=strings.Cut(v,"=");if allow[k]{env=append(env,v)}}
- return env
+ values:=map[string]string{}
+ for _,v:=range os.Environ(){k,val,ok:=strings.Cut(v,"=");if ok&&allow[k]{values[k]=val}}
+ if dataDir!="" {
+  cacheRoot:=filepath.Join(dataDir,"build-cache")
+  caches:=map[string]string{
+   "GOCACHE":"go-build","GOMODCACHE":"go-mod","CARGO_HOME":"cargo","NPM_CONFIG_CACHE":"npm",
+   "PIP_CACHE_DIR":"pip","DENO_DIR":"deno","GRADLE_USER_HOME":"gradle","COMPOSER_CACHE_DIR":"composer",
+   "BUNDLE_PATH":"ruby","PUB_CACHE":"dart","DOTNET_CLI_HOME":"dotnet","JULIA_DEPOT_PATH":"julia",
+  }
+  for key,dir:=range caches {
+   if values[key]!=""{continue}
+   path:=filepath.Join(cacheRoot,dir)
+   if err:=os.MkdirAll(path,0o700);err!=nil{return nil,fmt.Errorf("create %s cache: %w",key,err)}
+   values[key]=path
+  }
+ }
+ keys:=make([]string,0,len(values))
+ for key:=range values{keys=append(keys,key)}
+ sort.Strings(keys)
+ env:=make([]string,0,len(keys))
+ for _,key:=range keys{env=append(env,key+"="+values[key])}
+ return env,nil
 }
 type boundedBuildLog struct{mu sync.Mutex;data []byte;limit int;truncated bool}
 func(w *boundedBuildLog)Write(p []byte)(int,error){w.mu.Lock();defer w.mu.Unlock();n:=len(p);left:=w.limit-len(w.data);if left>0{if len(p)>left{w.data=append(w.data,p[:left]...);w.truncated=true}else{w.data=append(w.data,p...)}}else{w.truncated=true};return n,nil}
