@@ -76,6 +76,10 @@ export async function me() {
     return request('GET', '/api/me');
 }
 
+export async function listAppTemplates() {
+    return request('GET', '/api/templates');
+}
+
 export async function changePassword(currentPassword, newPassword) {
     return request('POST', '/api/password', { current_password: currentPassword, new_password: newPassword });
 }
