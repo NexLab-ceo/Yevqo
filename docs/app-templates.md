@@ -14,6 +14,7 @@ a database migration.
 | Node.js HTTP | `nodejs` | `package.json`, `server.js` |
 | Node.js JSON API | `nodejs` | `package.json`, `server.js` |
 | Go HTTP Application | `go` | `go.mod`, `main.go`, compiled `veltrix-app` |
+| Custom Language App | `custom` | Empty site directory; source and commands supplied by Git or the owner |
 
 The device's **Добавить сайт** dialog exposes each template by its stable template ID, so
 PHP and Node.js variants remain independently selectable even though they share a runtime.
@@ -35,8 +36,8 @@ starting it, so it does not leave the user with an unbuilt README-only placehold
 
 ## Current boundaries
 
-These are local, safe runtime starters, not a remote template marketplace. They do not run
-third-party post-install hooks, clone repositories, install package dependencies, or execute
-template-supplied commands. Laravel/Next.js/React starters, Git-based templates,
-template variables, and one-click build/deploy remain future work. The P2 roadmap item
+The Custom Language App starter intentionally creates an empty site directory. It can be
+used with any project whose compiler/build tool is installed in Termux and an explicit
+shell-free start command is configured. Build scripts execute with Agent-user permissions;
+this is not a sandbox. These are local starters, not a remote template marketplace. The P2 roadmap item
 must remain open until those capabilities and their end-to-end tests are implemented.
