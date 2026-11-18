@@ -187,3 +187,19 @@ func TestCollectBuildArtifactsIncludeExclude(t *testing.T){
  if _,err:=os.Stat(filepath.Join(dir,"dist","index.html"));err!=nil{t.Fatal(err)}
  if _,err:=os.Stat(filepath.Join(dir,"dist","app.js.map"));!os.IsNotExist(err){t.Fatalf("excluded artifact exists: %v",err)}
 }
+
+func TestBuildArtifactListAndChunkRead(t *testing.T){
+ data:=t.TempDir();dir:=filepath.Join(data,"artifacts","demo","run-1");if err:=os.MkdirAll(dir,0700);err!=nil{t.Fatal(err)}
+ content:=[]byte("artifact-content")
+ if err:=os.WriteFile(filepath.Join(dir,"app.bin"),content,0600);err!=nil{t.Fatal(err)}
+ finished:=time.Now().UTC();record:=AndroidBuildResult{SiteID:"demo",Success:true,ArtifactDir:dir,FinishedAt:finished}
+ if err:=persistBuildHistory(data,"demo",record);err!=nil{t.Fatal(err)}
+ id:=finished.Format("20060102T150405.000000000Z")
+ files,err:=ListBuildArtifacts(data,"demo",id);if err!=nil{t.Fatal(err)}
+ if len(files)!=1||files[0].Path!="app.bin"||files[0].SizeBytes!=int64(len(content)){t.Fatalf("unexpected artifacts: %+v",files)}
+ got,total,eof,err:=ReadBuildArtifactChunk(data,"demo",id,"app.bin",0,4);if err!=nil{t.Fatal(err)}
+ if string(got)!="arti"||total!=int64(len(content))||eof{t.Fatalf("unexpected chunk: %q %d %v",got,total,eof)}
+ got,total,eof,err=ReadBuildArtifactChunk(data,"demo",id,"app.bin",4,64);if err!=nil{t.Fatal(err)}
+ if string(got)!="fact-content"||total!=int64(len(content))||!eof{t.Fatalf("unexpected final chunk: %q %d %v",got,total,eof)}
+ if _,_,_,err:=ReadBuildArtifactChunk(data,"demo",id,"../escape",0,10);err==nil{t.Fatal("expected path traversal rejection")}
+}
