@@ -18,6 +18,7 @@ type BuildProvider struct {
 
 var buildProviderCatalog = []BuildProvider{
 	{ID:"android-local", Name:"Android local", Available:true},
+	{ID:"static", Name:"Static files", Available:true},
 	{ID:"dockerfile", Name:"Dockerfile", RequiresLinux:true, RequiresExecutor:true},
 	{ID:"nixpacks", Name:"Nixpacks", RequiresLinux:true, RequiresExecutor:true},
 	{ID:"railpack", Name:"Railpack", RequiresLinux:true, RequiresExecutor:true},

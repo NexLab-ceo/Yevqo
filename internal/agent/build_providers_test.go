@@ -26,3 +26,10 @@ func TestResolveBuildProviderAndroidLocal(t *testing.T) {
 	provider, err := ResolveBuildProvider("auto", AndroidBuildEnvironment{Android:true, Termux:true}, false)
 	if err != nil || provider.ID != "android-local" || !provider.Available { t.Fatalf("unexpected result: %#v, %v", provider, err) }
 }
+
+func TestResolveBuildProviderStatic(t *testing.T) {
+	provider, err := ResolveBuildProvider("static", AndroidBuildEnvironment{Android:true, Termux:true}, false)
+	if err != nil || provider.ID != "static" || !provider.Available {
+		t.Fatalf("expected static provider to be available without an executor, got %#v, %v", provider, err)
+	}
+}
