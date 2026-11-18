@@ -79,7 +79,7 @@
   <div><small>Default port</small><strong>{plan.port||'—'}</strong></div>
  </div>
  {#if plan.evidence?.length}<p class="muted">Обнаружено: {plan.evidence.join(', ')}</p>{/if}
- {#if plan.needs_configuration}<div class="warning">Не удалось определить поддерживаемый локальный стек. Dockerfile, Nixpacks и произвольные shell-команды на Android отключены.</div>{/if}
+ {#if plan.needs_configuration}<div class="warning">Язык не распознан автоматически. Укажи команды для установленного в Termux компилятора или build-инструмента. Shell-команды и Docker/Nixpacks здесь отключены.</div>{/if}
  <div class="commands">
   {#if plan.install_command}<div><small>INSTALL</small><code>{plan.install_command}</code></div>{/if}
   {#if plan.build_command}<div><small>BUILD</small><code>{plan.build_command}</code></div>{/if}
