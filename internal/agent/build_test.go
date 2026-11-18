@@ -82,7 +82,7 @@ func TestAnalyzeProjectRejectsFileRoot(t *testing.T) {
 
 func TestLegacyVeltrixConfigIsIgnored(t *testing.T) {
  root := t.TempDir()
- legacy := "version: 1\\nbuild:\\n  provider: custom\\n  command: nim c app.nim\\n"
+ legacy := "version: 1\nbuild:\n  provider: custom\n  command: nim c app.nim\n"
  if err := os.WriteFile(filepath.Join(root, "veltrix.yaml"), []byte(legacy), 0600); err != nil { t.Fatal(err) }
  plan, err := AnalyzeProject(root)
  if err != nil { t.Fatal(err) }
