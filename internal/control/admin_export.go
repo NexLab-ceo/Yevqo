@@ -3,10 +3,8 @@ package control
 import (
 	"database/sql"
 	"encoding/csv"
-	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"veltrix/internal/shared"
@@ -91,7 +89,6 @@ func (s *Server) handleAdminUsersCSV(w http.ResponseWriter, r *http.Request) {
 }
 
 func csvSafeCell(value string) string {
-	value = strings.TrimSpace(value)
 	if value == "" {
 		return value
 	}
@@ -103,4 +100,3 @@ func csvSafeCell(value string) string {
 	}
 }
 
-var _ = fmt.Sprintf
