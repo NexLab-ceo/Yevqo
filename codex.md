@@ -5,7 +5,7 @@
 Yevqo is an Android-first, self-hosted application platform built around **Android + Termux**. A phone or tablet runs the Yevqo Agent (and optionally the Control Plane); the web interface manages projects and device-side workloads.
 
 - Product name: **Yevqo**.
-- The repository/module and some legacy package, service, and data-directory names still use `veltrix` for upgrade compatibility. Do not rename these casually.
+- The Go module and some internal package, service, and data-directory names still use `veltrix` for upgrade compatibility. The project configuration filename is exclusively `yevqo.yml`; do not support `veltrix.yaml` or `veltrix.yml` as aliases.
 - Android/Termux is the primary execution environment, not a thin client for a cloud VPS.
 - Do not describe features as available unless they are implemented and verified.
 
