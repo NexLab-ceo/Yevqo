@@ -80,11 +80,12 @@ func (s *Server) siteGitSettings(ctx context.Context, deviceID int64, siteID str
 }
 
 func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *shared.User, deviceID int64, siteID string) {
-	var owned int
-	err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites st
-		JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,
-		deviceID, siteID, user.ID).Scan(&owned)
-	if err != nil || owned != 1 { apiError(w, shared.ErrNotFound("site not found")); return }
+	dev, err := s.db.GetDeviceByID(r.Context(), deviceID)
+	if err != nil { apiError(w, shared.ErrNotFound("site not found")); return }
+	if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil {
+		apiError(w, err)
+		return
+	}
 
 	switch r.Method {
 	case http.MethodGet:
