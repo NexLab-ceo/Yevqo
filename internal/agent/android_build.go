@@ -5,6 +5,7 @@ import (
  "encoding/json"
  "errors"
  "fmt"
+ "io"
  "os"
  "os/exec"
  "path/filepath"
@@ -74,6 +75,8 @@ type AndroidBuildRequest struct {
  MinFreeDiskBytes uint64 `json:"min_free_disk_bytes,omitempty"`
  AllowProjectCode bool `json:"allow_project_code"`
  Environment map[string]string `json:"environment,omitempty"`
+ ArtifactInclude []string `json:"artifact_include,omitempty"`
+ ArtifactExclude []string `json:"artifact_exclude,omitempty"`
  OnStep func(name string, index, total int) `json:"-"`
 }
 type AndroidBuildResult struct {
@@ -133,7 +136,7 @@ func(r *AndroidBuildRunner)Run(parent context.Context,req AndroidBuildRequest)An
   }
   if err:=cmd.Run();err!=nil{if ctx.Err()!=nil{return finish(ctx.Err(),log)};return finish(fmt.Errorf("%s failed: %w",s.name,err),log)}
  }
- out.ArtifactDir=root;return finish(nil,log)
+ if len(req.ArtifactInclude)>0 { artifactDir,artifactErr:=collectBuildArtifacts(r.DataDir,req.SiteID,root,req.ArtifactInclude,req.ArtifactExclude);if artifactErr!=nil{return finish(artifactErr,log)};out.ArtifactDir=artifactDir } else { out.ArtifactDir=root };return finish(nil,log)
 }
 // Cancel requests termination of the active build process group.
 func(r *AndroidBuildRunner)Cancel()bool{
@@ -291,3 +294,32 @@ func androidBuildEnv(dataDir string)([]string,error){
 type boundedBuildLog struct{mu sync.Mutex;data []byte;limit int;truncated bool}
 func(w *boundedBuildLog)Write(p []byte)(int,error){w.mu.Lock();defer w.mu.Unlock();n:=len(p);left:=w.limit-len(w.data);if left>0{if len(p)>left{w.data=append(w.data,p[:left]...);w.truncated=true}else{w.data=append(w.data,p...)}}else{w.truncated=true};return n,nil}
 func(w *boundedBuildLog)String()string{w.mu.Lock();defer w.mu.Unlock();return string(w.data)}
+
+func collectBuildArtifacts(dataDir,siteID,root string,include,exclude []string)(string,error){
+ base:=filepath.Join(dataDir,"artifacts");if err:=os.MkdirAll(base,0700);err!=nil{return "",err}
+ target:=filepath.Join(base,siteID,time.Now().UTC().Format("20060102T150405.000000000Z"))
+ if err:=os.MkdirAll(target,0700);err!=nil{return "",err}
+ copied:=0
+ err:=filepath.WalkDir(root,func(path string,d os.DirEntry,walkErr error)error{
+  if walkErr!=nil{return walkErr};if path==root{return nil}
+  rel,err:=filepath.Rel(root,path);if err!=nil{return err};rel=filepath.ToSlash(rel)
+  if d.Type()&os.ModeSymlink!=0{return nil}
+  if d.IsDir(){return nil}
+  if !d.Type().IsRegular(){return nil}
+  matched:=false;for _,p:=range include{if yevqoGlobMatch(p,rel){matched=true;break}}
+  if !matched{return nil}
+  for _,p:=range exclude{if yevqoGlobMatch(p,rel){return nil}}
+  dest:=filepath.Join(target,filepath.FromSlash(rel));if err:=os.MkdirAll(filepath.Dir(dest),0700);err!=nil{return err}
+  src,err:=os.Open(path);if err!=nil{return err};defer src.Close()
+  dst,err:=os.OpenFile(dest,os.O_CREATE|os.O_EXCL|os.O_WRONLY,0600);if err!=nil{return err}
+  _,copyErr:=io.Copy(dst,io.LimitReader(src,256<<20));closeErr:=dst.Close();if copyErr!=nil{return copyErr};if closeErr!=nil{return closeErr};copied++;return nil
+ })
+ if err!=nil{_ = os.RemoveAll(target);return "",fmt.Errorf("collect build artifacts: %w",err)}
+ if copied==0{_ = os.RemoveAll(target);return "",fmt.Errorf("artifact patterns matched no regular files")}
+ return target,nil
+}
+func yevqoGlobMatch(pattern,name string)bool{
+ pattern=filepath.ToSlash(pattern)
+ if strings.Contains(pattern,"**"){parts:=strings.Split(pattern,"**");if len(parts)==2{return strings.HasPrefix(name,strings.TrimSuffix(parts[0],"/"))&&strings.HasSuffix(name,parts[1])}}
+ ok,_:=filepath.Match(filepath.FromSlash(pattern),filepath.FromSlash(name));return ok
+}
