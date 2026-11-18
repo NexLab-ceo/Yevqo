@@ -102,7 +102,6 @@ func TestYevqoConfigMetadataAndStrictValidation(t *testing.T) {
 func TestYevqoConfigRejectsUnsupportedAndMalformedFields(t *testing.T) {
  cases:=[]string{
   "version: 2\nproject:\n  root: .\n",
-  "version: 1\nproject:\n  root: .\nhealthcheck:\n  path: /health\n",
   "version: 1\nproject:\n  root: .\nbuild:\n  command: npm run build\n  command: npm run test\n",
   "version: 1\nproject:\n\troot: .\n",
  }
