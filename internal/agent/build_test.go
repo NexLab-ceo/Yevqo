@@ -79,3 +79,13 @@ func TestAnalyzeProjectRejectsFileRoot(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root,"not-dir"), []byte("x"), 0o644); err != nil { t.Fatal(err) }
 	if _, err := AnalyzeProject(filepath.Join(root,"not-dir")); err == nil { t.Fatal("expected non-directory root to fail") }
 }
+
+func TestLegacyVeltrixConfigIsIgnored(t *testing.T) {
+ root := t.TempDir()
+ legacy := "version: 1\\nbuild:\\n  provider: custom\\n  command: nim c app.nim\\n"
+ if err := os.WriteFile(filepath.Join(root, "veltrix.yaml"), []byte(legacy), 0600); err != nil { t.Fatal(err) }
+ plan, err := AnalyzeProject(root)
+ if err != nil { t.Fatal(err) }
+ if plan.Stack != "unknown" || !plan.NeedsConfig { t.Fatalf("legacy veltrix.yaml must not configure builds: %+v", plan) }
+ for _, evidence := range plan.Evidence { if evidence == "veltrix.yaml" { t.Fatal("legacy config was treated as active") } }
+}
