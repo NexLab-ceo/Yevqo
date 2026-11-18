@@ -352,7 +352,7 @@ func (m *ProcessManager) startSiteWithEnvLocked(siteID, path string, port int, r
 func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port int, runtime string, extraEnv map[string]string, startCommand string) (int, error) {
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
 	if port < 1024 || port > 65535 { return 0, fmt.Errorf("port must be between 1024 and 65535") }
-	if runtime != "php" && runtime != "go" && runtime != "static" && runtime != "nodejs" && !(runtime == "custom" && startCommand != "") { return 0, fmt.Errorf("unsupported runtime: %s (custom runtime requires a start command)", runtime) }
+	
 	cleanPath := filepath.Clean(path)
 	expectedPath := filepath.Join("sites", siteID)
 	if filepath.IsAbs(path) || (cleanPath != expectedPath && !strings.HasPrefix(cleanPath, expectedPath+string(filepath.Separator))) {
@@ -393,6 +393,7 @@ func (m *ProcessManager) startSiteWithCommandLocked(siteID, path string, port in
   for k,v:=range extraEnv{merged[k]=v}
   extraEnv=merged
  }
+ if runtime!="php"&&runtime!="go"&&runtime!="static"&&runtime!="nodejs"&&!(runtime=="custom"&&startCommand!=""){return 0,fmt.Errorf("unsupported runtime: %s (custom runtime requires a start command)",runtime)}
  // Refuse a port already occupied by another process.
 	listener, listenErr := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	if listenErr != nil { return 0, fmt.Errorf("port %d is already in use", port) }
@@ -899,9 +900,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	if req.Runtime != "php" && req.Runtime != "go" && req.Runtime != "static" && req.Runtime != "nodejs" && req.Runtime != "custom" {
 		return 0, "", "", "", fmt.Errorf("unsupported runtime %q; use a built-in runtime or custom with an explicit start command", req.Runtime)
 	}
-	if req.Runtime == "custom" && strings.TrimSpace(req.StartCommand) == "" {
-		return 0, "", "", "", fmt.Errorf("custom runtime requires an explicit start command")
-	}
+	
 
 	siteRoot, err := safeSiteDirectory(m.DataRoot, req.SiteId)
 	if err != nil { return 0, "", "", "", err }
@@ -1060,6 +1059,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	if startErr != nil {
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("release activation failed: %w", startErr)
 	}
+ if req.Runtime=="custom"&&strings.TrimSpace(req.StartCommand)==""{return 0,truncateDeployOutput(output.String()),commit,commitDate,fmt.Errorf("custom runtime requires an explicit start command or run.command in yevqo.yml")}
  if manifestFound&&manifest.DeployRestartSet{
   policy:="never";if manifest.DeployRestart{policy="always"}
   if policyErr:=m.setRestartPolicyLocked(req.SiteId,policy);policyErr!=nil{return 0,truncateDeployOutput(output.String()),commit,commitDate,fmt.Errorf("release activated but restart policy could not be saved: %w",policyErr)}
