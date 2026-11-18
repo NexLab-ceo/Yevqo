@@ -59,6 +59,20 @@ func TestVeltrixManifestAndSafeCommands(t *testing.T) {
 }
 
 
+
+func TestAndroidBuildEnvironmentUsesPersistentCachesAndFiltersSecrets(t *testing.T) {
+ data:=t.TempDir()
+ t.Setenv("BUILD_SECRET_SHOULD_NOT_PASS","do-not-leak")
+ env,err:=androidBuildEnv(data)
+ if err!=nil{t.Fatal(err)}
+ joined:=strings.Join(env,"\n")
+ if strings.Contains(joined,"BUILD_SECRET_SHOULD_NOT_PASS"){t.Fatal("unapproved environment variable leaked into build")}
+ for _,key:=range []string{"GOCACHE=","GOMODCACHE=","CARGO_HOME=","NPM_CONFIG_CACHE=","PIP_CACHE_DIR=","GRADLE_USER_HOME="} {
+  if !strings.Contains(joined,key){t.Errorf("persistent cache %s missing from build environment",key)}
+ }
+ if _,err:=os.Stat(filepath.Join(data,"build-cache","go-build"));err!=nil{t.Fatalf("Go build cache was not created: %v",err)}
+}
+
 func TestUniversalBuildCommandSupportsInstalledToolchains(t *testing.T) {
  root:=t.TempDir()
  bin:=t.TempDir()
