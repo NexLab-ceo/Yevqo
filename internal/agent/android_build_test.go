@@ -67,7 +67,7 @@ func TestUniversalBuildCommandSupportsInstalledToolchains(t *testing.T) {
  t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
  step,err:=parseManifestBuildCommand(root,"build",`nim c -o "build/my app" src/main.nim`)
  if err!=nil{t.Fatal(err)}
- if step.exe!="nim"||len(step.args)!=5||step.args[2]!="build/my app"{t.Fatalf("unexpected argv: %#v",step)}
+ if step.exe!="nim"||len(step.args)!=4||step.args[2]!="build/my app"{t.Fatalf("unexpected argv: %#v",step)}
  result:=NewAndroidBuildRunner(t.TempDir()).Run(context.Background(),AndroidBuildRequest{
   SiteID:"universal",SiteRoot:root,Stack:"custom",BuildCommand:"nim compile src/main.nim",
   AllowProjectCode:true,Timeout:time.Second,MaxLogBytes:1024,
