@@ -3,18 +3,21 @@ package agent
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"path/filepath"
 	"testing"
 )
 
 func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 	templates := ListAppTemplates()
-	if len(templates) != 4 {
-		t.Fatalf("template catalog has %d entries, want 3", len(templates))
+	if len(templates) != 6 {
+		t.Fatalf("template catalog has %d entries, want 6", len(templates))
 	}
 	want := map[string]string{
 		"php-basic":"index.php",
+		"php-api":"index.php",
 		"nodejs-http":"server.js",
+		"nodejs-api":"server.js",
 		"static-site":"index.html",
 		"go-http":"main.go",
 	}
@@ -38,8 +41,18 @@ func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 		if config.TemplateID != template.ID || config.Runtime != template.Runtime || config.Port != 8123 || config.EntryPoint != entry {
 			t.Fatalf("%s generated incorrect config: %#v", template.ID, config)
 		}
-		if template.ID == "nodejs-http" && config.StartCommand != "npm run start" {
+		if (template.ID == "nodejs-http" || template.ID == "nodejs-api") && config.StartCommand != "npm run start" {
 			t.Fatalf("Node.js launch command = %q", config.StartCommand)
+		}
+		if template.ID == "php-api" || template.ID == "nodejs-api" {
+			content, err := os.ReadFile(filepath.Join(siteRoot, entry))
+			if err != nil { t.Fatalf("%s starter content missing: %v", template.ID, err) }
+			if !strings.Contains(string(content), "Hello from Yevqo API") {
+				t.Fatalf("%s starter does not contain the API response", template.ID)
+			}
+			if template.ID == "nodejs-api" && !strings.Contains(string(content), "/health") {
+				t.Fatal("Node.js API starter is missing its health endpoint")
+			}
 		}
 		if template.ID == "go-http" {
 			for _, name := range []string{"go.mod", "main.go"} {
