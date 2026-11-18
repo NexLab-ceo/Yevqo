@@ -115,7 +115,15 @@ or unavailable SDKs cannot be built merely because their language is detected.
 ## Git deployment integration
 
 Git deployment stages commits in immutable release directories and runs the
-Analyzer/Build Engine against the staged project root before activation. The
-active release is not replaced when build or readiness checks fail. Runtime
-startup remains a separate concern: the detected or configured start command
-must be supported by the Agent's site process manager.
+Analyzer/Build Engine against the staged project root before activation. Detected
+install/build commands are used by default; a saved build command can override the
+detected build step. The active release is not replaced when build or readiness
+checks fail.
+
+Built-in PHP, Go, Static and Node.js runtimes retain their existing launch behavior.
+The **Custom Language App** runtime can launch any installed Termux tool or an
+executable file inside the release directory through an explicit shell-free
+`start_command`. The process must bind to `127.0.0.1` and the configured `PORT`
+so the Agent readiness check can verify it. The Agent injects `HOST=127.0.0.1`
+and `PORT` into custom runtime processes. Custom runtime restarts and rollbacks
+reuse the saved start command.
