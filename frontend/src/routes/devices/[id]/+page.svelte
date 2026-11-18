@@ -22,7 +22,7 @@
     let busy = false;
 
     // Форма нового сайта. Шаблоны используют существующий безопасный Agent create_site lifecycle.
-    let newSite = { site_id: '', port: 8000, runtime: 'php' };
+    let newSite = { site_id: '', port: 8000, template_id: 'php-basic' };
 
     // Загружаем данные устройства.
     onMount(async () => {
@@ -140,12 +140,18 @@
             return;
         }
 
+        const selectedTemplate = appTemplates.find((template) => template.id === newSite.template_id);
+        if (!selectedTemplate) {
+            notify('Выберите шаблон из каталога', 'error');
+            return;
+        }
+
         busy = true;
         const created = await sendCommand(device.id, 'create_site', {
             site_id: siteId,
             port,
-            runtime: newSite.runtime,
-            template_id: ({ php: 'php-basic', nodejs: 'nodejs-http', static: 'static-site' })[newSite.runtime] || '',
+            runtime: selectedTemplate.runtime,
+            template_id: selectedTemplate.id,
         });
         if (!created.ok || !created.data?.ok) {
             busy = false;
@@ -154,7 +160,7 @@
         }
 
         // Go starters are compiled on the target Agent before first start.
-        if (newSite.runtime === 'go') {
+        if (selectedTemplate.runtime === 'go') {
             const built = await sendCommand(device.id, 'build_site', {
                 site_id: siteId,
                 stack: 'go',
@@ -165,7 +171,7 @@
             if (!built.ok || !built.data?.ok) {
                 busy = false;
                 showAddSiteModal = false;
-                newSite = { site_id: '', port: 8000, runtime: 'php' };
+                newSite = { site_id: '', port: 8000, template_id: 'php-basic' };
                 await loadDevice();
                 notify('Go-проект создан, но сборка не прошла: ' + (built.error || built.data?.message || 'ошибка сборки'), 'error');
                 return;
@@ -178,11 +184,11 @@
             site_id: siteId,
             path: `sites/${siteId}`,
             port,
-            runtime: newSite.runtime,
+            runtime: selectedTemplate.runtime,
         });
         busy = false;
         showAddSiteModal = false;
-        newSite = { site_id: '', port: 8000, runtime: 'php' };
+        newSite = { site_id: '', port: 8000, template_id: 'php-basic' };
         await loadDevice();
 
         if (!started.ok || !started.data?.ok) {
@@ -317,11 +323,10 @@
         </div>
         <div class="form-group">
             <label class="form-label" for="runtime">Шаблон приложения</label>
-            <select id="runtime" class="input" bind:value={newSite.runtime}>
+            <select id="runtime" class="input" bind:value={newSite.template_id}>
                 {#each appTemplates as template (template.id)}
-                    <option value={template.runtime}>{template.name} — {template.description}</option>
+                    <option value={template.id}>{template.name} — {template.description}</option>
                 {/each}
-                <option value="go">Go Application — legacy starter</option>
             </select>
             <p class="form-hint">Yevqo создаст файлы проекта и yevqo.template.json с параметрами запуска, затем запустит приложение на выбранном порту.</p>
         </div>
