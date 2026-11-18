@@ -81,9 +81,18 @@ run:
   port: 8080
 ```
 
-Only the keys shown above are currently consumed by the Agent. The file is optional:
-when absent, Yevqo uses automatic project detection. `veltrix.yaml` and
-`veltrix.yml` are not aliases and are deliberately ignored.
+The Agent currently supports these keys: `version: 1`, `project.name`,
+`project.runtime` (reported as metadata), `project.root`, `build.provider`,
+`build.install`, `build.command`, `run.command`, and `run.port`.
+Unknown sections/keys, duplicate keys, unsupported versions, tabs, malformed
+indentation, and YAML lists are rejected instead of silently ignored. The
+parser intentionally supports a strict scalar subset of YAML, not every YAML
+feature. The file is optional: when absent, Yevqo uses automatic project
+detection. `veltrix.yaml` and `veltrix.yml` are not aliases and are ignored.
+
+Fields such as `environment`, `healthcheck`, `artifacts`, `cache`,
+`resources`, and `deploy` are not implemented in the Agent schema yet and
+must not be added to a production config until documented as supported.
 
 Commands consist of an executable available on the Agent's Termux `PATH` followed
 by arguments. Single/double-quoted arguments are supported. The executable can be
