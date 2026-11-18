@@ -5,17 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
-
-// AppTemplate describes a runnable first-party starter template.
-type AppTemplate struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Runtime     string `json:"runtime"`
-	EntryPoint  string `json:"entry_point"`
-}
 
 // SiteTemplateConfig is persisted with each generated site so the selected
 // template and launch contract remain inspectable and reproducible.
@@ -26,19 +16,6 @@ type SiteTemplateConfig struct {
 	Port          int    `json:"port"`
 	EntryPoint    string `json:"entry_point"`
 	StartCommand  string `json:"start_command,omitempty"`
-}
-
-var appTemplates = []AppTemplate{
-	{ID:"php-basic", Name:"PHP Website", Description:"PHP starter served by the local PHP runtime", Runtime:"php", EntryPoint:"index.php"},
-	{ID:"nodejs-http", Name:"Node.js HTTP", Description:"Runnable Node.js HTTP server with npm start", Runtime:"nodejs", EntryPoint:"server.js"},
-	{ID:"static-site", Name:"Static Website", Description:"Static HTML website served by the local PHP development server", Runtime:"static", EntryPoint:"index.html"},
-}
-
-// ListAppTemplates returns a defensive copy of the supported starter catalog.
-func ListAppTemplates() []AppTemplate {
-	out := make([]AppTemplate, len(appTemplates))
-	copy(out, appTemplates)
-	return out
 }
 
 // CreateSiteFromTemplate scaffolds a supported template and persists its
@@ -57,17 +34,11 @@ func (m *ProcessManager) CreateSiteFromTemplate(siteID string, port int, templat
 		default: return fmt.Errorf("no starter template is available for runtime %q", runtime)
 		}
 	}
-	var selected *AppTemplate
-	for i := range appTemplates {
-		if appTemplates[i].ID == templateID {
-			selected = &appTemplates[i]
-			break
-		}
-	}
-	if selected == nil {
+	selectedValue, found := shared.FindAppTemplate(templateID)
+	if !found {
 		return fmt.Errorf("unknown app template %q", templateID)
 	}
-	if selected.Runtime != runtime {
+	if selectedValue.Runtime != runtime {
 		return fmt.Errorf("template %q requires runtime %q, got %q", templateID, selected.Runtime, runtime)
 	}
 	if err := m.CreateSite(siteID, port, runtime); err != nil {
@@ -75,10 +46,10 @@ func (m *ProcessManager) CreateSiteFromTemplate(siteID string, port int, templat
 	}
 	config := SiteTemplateConfig{
 		SchemaVersion: 1,
-		TemplateID: selected.ID,
+		TemplateID: selectedValue.ID,
 		Runtime: selected.Runtime,
 		Port: port,
-		EntryPoint: selected.EntryPoint,
+		EntryPoint: selectedValue.EntryPoint,
 	}
 	if runtime == "nodejs" { config.StartCommand = "npm run start" }
 	encoded, err := json.MarshalIndent(config, "", "  ")
@@ -94,8 +65,6 @@ func (m *ProcessManager) CreateSiteFromTemplate(siteID string, port int, templat
 // ValidateTemplateID is shared by UI/API adapters that need a stable catalog
 // validation without creating a site.
 func ValidateTemplateID(templateID string) bool {
-	for _, template := range appTemplates {
-		if strings.EqualFold(template.ID, templateID) { return true }
-	}
-	return false
+	_, ok := shared.FindAppTemplate(templateID)
+	return ok
 }
