@@ -949,8 +949,6 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	}
 	buildDir, err := safeAndroidBuildRoot(stageDir, rootDir)
 	if err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("resolve deployment root: %w", err) }
-	if req.StartCommand != "" { if _, commandErr := parseCustomStartCommand(buildDir, req.StartCommand); commandErr != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, commandErr } }
-
 	plan, err := AnalyzeProject(buildDir)
 	if err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, err }
 	expectedStack := map[string]string{"php":"php", "go":"go", "static":"static", "nodejs":"nodejs"}[req.Runtime]
@@ -987,6 +985,11 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 		}
 	}
 
+	if req.StartCommand != "" {
+		if _, commandErr := parseCustomStartCommand(buildDir, req.StartCommand); commandErr != nil {
+			return 0, truncateDeployOutput(output.String()), commit, commitDate, commandErr
+		}
+	}
 	if err := ctx.Err(); err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, err }
 	m.UpdateDeploymentJob(req.SiteId, jobID, "starting", 85, "Activating candidate release")
 	releaseDir := filepath.Join(releasesRoot, commit)
