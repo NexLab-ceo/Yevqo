@@ -86,7 +86,7 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
  if !info.Mode().IsRegular(){return m,false,fmt.Errorf("yevqo.yml must be a regular file")}
  f,err:=os.Open(path);if err!=nil{return m,false,fmt.Errorf("open yevqo.yml: %w",err)};defer f.Close()
  scanner:=bufio.NewScanner(f);scanner.Buffer(make([]byte,4096),64*1024)
- section:="";seen:=map[string]bool{};lineNo:=0
+ section:="";seen:=map[string]bool{};lineNo:=0;versionSeen:=false
  for scanner.Scan(){
   lineNo++;raw:=scanner.Text();trimmed:=strings.TrimSpace(raw)
   if trimmed==""||strings.HasPrefix(trimmed,"#"){continue}
@@ -100,6 +100,7 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
   if indent==0{
    if value!=""{
     if key!="version"||strings.Trim(value,"\"'")!="1"{return m,false,fmt.Errorf("yevqo.yml:%d: only version: 1 is supported at the top level",lineNo)}
+    if versionSeen{return m,false,fmt.Errorf("yevqo.yml:%d: duplicate version",lineNo)};versionSeen=true
     continue
    }
    if key!="project"&&key!="build"&&key!="run"{return m,false,fmt.Errorf("yevqo.yml:%d: unsupported section %q",lineNo,key)}
@@ -121,6 +122,7 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
   }
  }
  if err:=scanner.Err();err!=nil{return m,false,fmt.Errorf("read yevqo.yml: %w",err)}
+ if !versionSeen{return m,false,fmt.Errorf("yevqo.yml must declare version: 1")}
  if len(seen)==0{return m,false,fmt.Errorf("yevqo.yml contains no supported configuration")}
   return m,true,nil
 }
