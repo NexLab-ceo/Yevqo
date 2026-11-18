@@ -78,7 +78,7 @@ func TestAndroidBuildCanBeCancelled(t *testing.T) {
  root:=t.TempDir()
  bin:=t.TempDir()
  tool:=filepath.Join(bin,"slowcompiler")
- if err:=os.WriteFile(tool,[]byte("#!/bin/sh\nsleep 30\n"),0700);err!=nil{t.Fatal(err)}
+ if err:=os.WriteFile(tool,[]byte("#!/bin/sh\nexec sleep 30\n"),0700);err!=nil{t.Fatal(err)}
  t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
  runner:=NewAndroidBuildRunner(t.TempDir())
  done:=make(chan AndroidBuildResult,1)
