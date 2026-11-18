@@ -1,0 +1,22 @@
+package control
+
+import "testing"
+
+func TestCanWorkspaceActionRoleMatrix(t *testing.T) {
+	cases := []struct{ role, action string; want bool }{
+		{"Owner","device.delete",true},
+		{"Admin","device.delete",true},
+		{"Developer","device.read",true},
+		{"Developer","deploy",true},
+		{"Developer","stop_site",true},
+		{"Developer","device.delete",false},
+		{"Developer","manage_members",false},
+		{"viewer","device.read",false},
+		{"","deploy",false},
+	}
+	for _, tc := range cases {
+		if got:=CanWorkspaceAction(tc.role,tc.action);got!=tc.want {
+			t.Errorf("CanWorkspaceAction(%q,%q)=%v, want %v",tc.role,tc.action,got,tc.want)
+		}
+	}
+}
