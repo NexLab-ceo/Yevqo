@@ -81,18 +81,23 @@ run:
   port: 8080
 ```
 
-The Agent currently supports these keys: `version: 1`, `project.name`,
-`project.runtime` (reported as metadata), `project.root`, `build.provider`,
-`build.install`, `build.command`, `run.command`, and `run.port`.
-Unknown sections/keys, duplicate keys, unsupported versions, tabs, malformed
-indentation, and YAML lists are rejected instead of silently ignored. The
-parser intentionally supports a strict scalar subset of YAML, not every YAML
-feature. The file is optional: when absent, Yevqo uses automatic project
-detection. `veltrix.yaml` and `veltrix.yml` are not aliases and are ignored.
+Supported configuration includes:
 
-Fields such as `environment`, `healthcheck`, `artifacts`, `cache`,
-`resources`, and `deploy` are not implemented in the Agent schema yet and
-must not be added to a production config until documented as supported.
+- `project.name`, `project.runtime`, `project.root`
+- `build.provider`, `build.install`, `build.command`
+- `run.command`, `run.port`
+- `environment.KEY`: explicit per-project variables injected into build and runtime processes. Keys are allowlisted; reserved host, port, database-secret and Agent variables are rejected. Do not commit secrets in this file.
+- `healthcheck.path`: local HTTP GET path. Startup requires a 2xx response; after startup the Agent probes at `healthcheck.interval` (default 30s) and terminates a process after three consecutive failures so the configured restart supervisor can recover it. Interval range: 1s–1m.
+- `artifacts.include` / `artifacts.exclude`: relative glob patterns. Matching regular files are copied to the private Agent artifact directory; symlinks are skipped. `**` matches nested directories.
+- `cache.enabled` / `cache.paths`: selected relative project paths are restored from and saved to a private per-site cache between builds/releases. This is separate from compiler/package-manager caches.
+- `resources.memory`: minimum available-memory preflight threshold (for example `512MiB`). This is not a hard process memory limit.
+- `deploy.restart`: when explicitly set, `true` selects the `always` restart policy and `false` selects `never`.
+
+The parser supports a strict YAML subset with two-space indentation, scalar
+values and lists; it is not a general-purpose YAML implementation. Unknown
+sections/keys, duplicate keys, unsupported versions, tabs and malformed
+indentation are rejected. The file is optional: when absent, Yevqo uses
+automatic project detection. `veltrix.yaml` and `veltrix.yml` are ignored.
 
 Commands consist of an executable available on the Agent's Termux `PATH` followed
 by arguments. Single/double-quoted arguments are supported. The executable can be
