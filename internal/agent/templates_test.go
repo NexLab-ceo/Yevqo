@@ -55,3 +55,15 @@ func TestCreateSiteFromTemplateRejectsUnknownAndMismatchedTemplates(t *testing.T
 		t.Fatalf("invalid template request created site files: %v", err)
 	}
 }
+func TestCreateSiteFromTemplatePreservesLegacyGoStarter(t *testing.T) {
+	root := t.TempDir()
+	manager := NewProcessManager(root)
+	if err := manager.CreateSiteFromTemplate("go-legacy", 8123, "", "go"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"go.mod", "main.go"} {
+		if _, err := os.Stat(filepath.Join(root, "sites", "go-legacy", name)); err != nil {
+			t.Fatalf("legacy Go starter %s missing: %v", name, err)
+		}
+	}
+}
