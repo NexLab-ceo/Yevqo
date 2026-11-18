@@ -9,13 +9,14 @@ import (
 
 func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 	templates := ListAppTemplates()
-	if len(templates) != 3 {
+	if len(templates) != 4 {
 		t.Fatalf("template catalog has %d entries, want 3", len(templates))
 	}
 	want := map[string]string{
 		"php-basic":"index.php",
 		"nodejs-http":"server.js",
 		"static-site":"index.html",
+		"go-http":"main.go",
 	}
 	for _, template := range templates {
 		entry, ok := want[template.ID]
@@ -39,6 +40,11 @@ func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 		}
 		if template.ID == "nodejs-http" && config.StartCommand != "npm run start" {
 			t.Fatalf("Node.js launch command = %q", config.StartCommand)
+		}
+		if template.ID == "go-http" {
+			for _, name := range []string{"go.mod", "main.go"} {
+				if _, err := os.Stat(filepath.Join(siteRoot, name)); err != nil { t.Fatalf("Go starter file %s missing: %v", name, err) }
+			}
 		}
 	}
 }

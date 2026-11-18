@@ -20,8 +20,8 @@ func TestAppTemplatesEndpointReturnsRunnableCatalog(t *testing.T) {
 		Templates []shared.AppTemplate `json:"templates"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil { t.Fatal(err) }
-	if !body.OK || len(body.Templates) != 3 { t.Fatalf("unexpected template catalog: %#v", body) }
-	want := map[string]string{"php-basic":"php", "nodejs-http":"nodejs", "static-site":"static"}
+	if !body.OK || len(body.Templates) != 4 { t.Fatalf("unexpected template catalog: %#v", body) }
+	want := map[string]string{"php-basic":"php", "nodejs-http":"nodejs", "static-site":"static", "go-http":"go"}
 	for _, template := range body.Templates {
 		if want[template.ID] != template.Runtime { t.Errorf("unexpected template: %#v", template) }
 	}
