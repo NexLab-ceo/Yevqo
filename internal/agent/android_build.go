@@ -316,7 +316,7 @@ func collectBuildArtifacts(dataDir,siteID,root string,include,exclude []string)(
   dest:=filepath.Join(target,filepath.FromSlash(rel));if err:=os.MkdirAll(filepath.Dir(dest),0700);err!=nil{return err}
   src,err:=os.Open(path);if err!=nil{return err};defer src.Close()
   dst,err:=os.OpenFile(dest,os.O_CREATE|os.O_EXCL|os.O_WRONLY,0600);if err!=nil{return err}
-  n,copyErr:=io.Copy(dst,src);closeErr:=dst.Close();if copyErr==nil{totalBytes+=n}
+  n,copyErr:=io.Copy(dst,src);closeErr:=dst.Close();if copyErr==nil{totalBytes+=n};
   if copyErr!=nil{return copyErr};if closeErr!=nil{return closeErr};copied++;return nil
  })
  if err!=nil{_ = os.RemoveAll(target);return "",fmt.Errorf("collect build artifacts: %w",err)}
