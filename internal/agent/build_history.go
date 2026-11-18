@@ -44,7 +44,7 @@ func persistBuildHistory(dataRoot, siteID string, result AndroidBuildResult) err
 		finished = time.Now().UTC()
 	}
 	id := finished.UTC().Format("20060102T150405.000000000Z")
-	record := BuildHistoryRecord{ID: id, SiteID: siteID, Result: result}
+	record := BuildHistoryRecord{ID: id, SiteID: siteID, OutputBytes: len(result.Output), Result: result}
 	encoded, err := json.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("encode build history: %w", err)
