@@ -167,6 +167,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/cloudflare/dns", s.RequireAuth(s.handleCloudflareDNS))
 
 	// --- API для админа ---
+	s.mux.HandleFunc("/admin/api/users/export.csv", s.RequireAdmin(s.handleAdminUsersCSV))
 	s.mux.HandleFunc("/admin/api/users", s.RequireAdmin(s.handleAdminUsers))
 	s.mux.HandleFunc("/admin/api/users/", s.RequireAdmin(s.handleAdminUserByID))
 	s.mux.HandleFunc("/admin/api/stats", s.RequireAdmin(s.handleAdminStats))

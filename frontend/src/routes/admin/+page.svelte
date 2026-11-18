@@ -72,6 +72,7 @@
     <div>
         <h1 class="page-title">Админка</h1>
         <p class="page-desc">Статистика и управление пользователями</p><Button on:click={async () => { loading = true; await loadAll(); loading = false; }}>Обновить данные</Button>
+            <a class="export-link" href="/admin/api/users/export.csv">Экспорт CSV</a>
     </div>
 </div>
 
@@ -169,6 +170,19 @@
 {/if}
 
 <style>
+    .export-link {
+        display: inline-flex;
+        align-items: center;
+        margin-top: 10px;
+        padding: 8px 12px;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        color: #cbd5e1;
+        text-decoration: none;
+        font-size: 12px;
+    }
+    .export-link:hover { background: #172136; color: #fff; }
+
     .stats-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
