@@ -161,11 +161,13 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 		if plan.PackageTool == "pnpm" && has("pnpm-lock.yaml") { plan.Install = "pnpm install --frozen-lockfile" }
 		if plan.PackageTool == "yarn" && has("yarn.lock") { plan.Install = "yarn install --frozen-lockfile" }
 		if plan.PackageTool == "bun" && has("bun.lock", "bun.lockb") { plan.Install = "bun install --frozen-lockfile" }
-		plan.Start = "npm run start"
+		packageRunner := plan.PackageTool
+		if packageRunner == "" { packageRunner = "npm" }
+		plan.Start = packageRunner + " run start"
 		if packageData, readErr := os.ReadFile(filepath.Join(abs, "package.json")); readErr == nil {
 			var packageManifest struct { Scripts map[string]string `json:"scripts"` }
 			if jsonErr := json.Unmarshal(packageData, &packageManifest); jsonErr == nil {
-				if strings.TrimSpace(packageManifest.Scripts["build"]) != "" { plan.Build = "npm run build" }
+				if strings.TrimSpace(packageManifest.Scripts["build"]) != "" { plan.Build = packageRunner + " run build" }
 				if strings.TrimSpace(packageManifest.Scripts["start"]) == "" { plan.Start = "" }
 			}
 		}
@@ -196,8 +198,8 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 	}
 	if has("pom.xml") {
 		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "java", "maven", "high", false
-		plan.Build, plan.Start, plan.Port = "mvn -DskipTests package", "java -jar <built-jar>", 8080
-		if has("mvnw") { plan.Build = "./mvnw -DskipTests package" }
+		plan.Build, plan.Start, plan.Port = "mvn package", "java -jar <built-jar>", 8080
+		if has("mvnw") { plan.Build = "./mvnw package" }
 		plan.Evidence = append(plan.Evidence, "pom.xml")
 		return plan, nil
 	}
@@ -266,7 +268,7 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 	if has("pubspec.yaml") {
 		if _, statErr := os.Stat(filepath.Join(abs, "bin", "main.dart")); statErr == nil {
 			plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "dart", "dart", "high", false
-			plan.Install, plan.Build = "dart pub get", "dart compile exe bin/main.dart -o build/yevqo-app"
+			plan.Install, plan.Build = "dart pub get", "dart compile exe bin/main.dart -o yevqo-app"
 			plan.Evidence = append(plan.Evidence, "pubspec.yaml", "bin/main.dart")
 			return plan, nil
 		}
@@ -291,7 +293,7 @@ func analyzeProjectMarkers(root string) (BuildPlan, error) {
 	}
 	if has("shard.yml") {
 		plan.Stack, plan.PackageTool, plan.Confidence, plan.NeedsConfig = "crystal", "shards", "high", false
-		plan.Install, plan.Build = "shards install", "crystal build src/main.cr -o build/yevqo-app"
+		plan.Install, plan.Build = "shards install", "crystal build src/main.cr -o yevqo-app"
 		plan.Evidence = append(plan.Evidence, "shard.yml")
 		return plan, nil
 	}
