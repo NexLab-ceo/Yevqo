@@ -17,6 +17,18 @@ func TestParseCustomStartCommandUsesSiteExecutableWithoutShell(t *testing.T) {
  if cmd.Path != executable || len(cmd.Args) != 3 || cmd.Args[1] != "--port" { t.Fatalf("unexpected argv: %#v", cmd.Args) }
 }
 
+
+func TestCustomStartCommandAcceptsInstalledLanguageRuntime(t *testing.T) {
+ root:=t.TempDir()
+ bin:=t.TempDir()
+ tool:=filepath.Join(bin,"elixir")
+ if err:=os.WriteFile(tool,[]byte("#!/bin/sh\nexit 0\n"),0700);err!=nil{t.Fatal(err)}
+ t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+ cmd,err:=parseCustomStartCommand(root,"elixir --version")
+ if err!=nil{t.Fatal(err)}
+ if cmd.Path!=tool||len(cmd.Args)!=2||cmd.Args[1]!="--version"{t.Fatalf("unexpected custom runtime argv: %#v",cmd.Args)}
+}
+
 func TestParseCustomStartCommandRejectsShellAndTraversal(t *testing.T) {
  root := t.TempDir()
  outside := filepath.Join(t.TempDir(), "outside")
