@@ -117,7 +117,7 @@ Supported configuration includes:
 - `run.command`, `run.port`
 - `environment.KEY`: explicit per-project variables injected into build and runtime processes. Keys are allowlisted; reserved host, port, database-secret and Agent variables are rejected. Do not commit secrets in this file.
 - `healthcheck.path`: local HTTP GET path. Startup requires a 2xx response; after startup the Agent probes at `healthcheck.interval` (default 30s) and terminates a process after three consecutive failures so the configured restart supervisor can recover it. Interval range: 1s–1m.
-- `artifacts.include` / `artifacts.exclude`: relative glob patterns. Matching regular files are copied to the private Agent artifact directory; symlinks are skipped. Collection is limited to 256 MiB per file and 1 GiB total. `**` matches nested directories.
+- `artifacts.include` / `artifacts.exclude`: relative glob patterns. Matching regular files are copied to the private Agent artifact directory; symlinks are skipped. Collection is limited to 256 MiB per file and 1 GiB total. Files are listed against the corresponding successful build-history record and can be downloaded from the Build Engine page in bounded 256 KiB chunks. `**` matches nested directories.
 - `cache.enabled` / `cache.paths`: selected relative project paths are restored from and saved to a private per-site cache between builds/releases. This is separate from compiler/package-manager caches.
 - `resources.memory`: minimum available-memory preflight threshold (for example `512MiB`). This is not a hard process memory limit.
 - `deploy.restart`: when explicitly set, `true` selects the `always` restart policy and `false` selects `never`.
