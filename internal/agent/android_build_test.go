@@ -73,6 +73,33 @@ func TestAndroidBuildEnvironmentUsesPersistentCachesAndFiltersSecrets(t *testing
  if _,err:=os.Stat(filepath.Join(data,"build-cache","go-build"));err!=nil{t.Fatalf("Go build cache was not created: %v",err)}
 }
 
+
+func TestAndroidBuildCanBeCancelled(t *testing.T) {
+ root:=t.TempDir()
+ bin:=t.TempDir()
+ tool:=filepath.Join(bin,"slowcompiler")
+ if err:=os.WriteFile(tool,[]byte("#!/bin/sh\nsleep 30\n"),0700);err!=nil{t.Fatal(err)}
+ t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+ runner:=NewAndroidBuildRunner(t.TempDir())
+ done:=make(chan AndroidBuildResult,1)
+ go func(){done<-runner.Run(context.Background(),AndroidBuildRequest{SiteID:"cancel-demo",SiteRoot:root,Stack:"custom",BuildCommand:"slowcompiler",AllowProjectCode:true,Timeout:time.Minute})}()
+ deadline:=time.Now().Add(3*time.Second)
+ active:=false
+ for time.Now().Before(deadline){
+  runner.mu.Lock();active=runner.activeCancel!=nil;runner.mu.Unlock()
+  if active{break}
+  time.Sleep(10*time.Millisecond)
+ }
+ if !active{t.Fatal("build did not enter running state")}
+ if !runner.Cancel(){t.Fatal("active build was not cancellable")}
+ select{
+ case result:=<-done:
+  if result.Success||!strings.Contains(result.Error,"context canceled"){t.Fatalf("unexpected cancellation result: %+v",result)}
+ case <-time.After(6*time.Second):
+  t.Fatal("cancelled build did not exit promptly")
+ }
+}
+
 func TestUniversalBuildCommandSupportsInstalledToolchains(t *testing.T) {
  root:=t.TempDir()
  bin:=t.TempDir()
