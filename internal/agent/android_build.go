@@ -72,7 +72,6 @@ type AndroidBuildRequest struct {
  MaxLogBytes int `json:"max_log_bytes,omitempty"`
  MinAvailableMemoryBytes uint64 `json:"min_available_memory_bytes,omitempty"`
  MinFreeDiskBytes uint64 `json:"min_free_disk_bytes,omitempty"`
- MinFreeDiskBytes uint64 `json:"min_free_disk_bytes,omitempty"`
  AllowProjectCode bool `json:"allow_project_code"`
  Environment map[string]string `json:"environment,omitempty"`
  ArtifactInclude []string `json:"artifact_include,omitempty"`
