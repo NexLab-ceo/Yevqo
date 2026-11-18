@@ -182,6 +182,16 @@ func parseManifestBuildCommand(root, name, raw string) (androidBuildStep,error) 
   if _,err:=exec.LookPath("bash");err!=nil{return androidBuildStep{},errors.New("bash is required to run the project wrapper")}
   return androidBuildStep{name:name,exe:"bash",args:append([]string{"./"+wrapper},fields[1:]...)},nil
  }
+ if strings.HasPrefix(exe,"./") {
+  relative:=filepath.Clean(strings.TrimPrefix(exe,"./"))
+  if relative=="."||relative==".."||strings.HasPrefix(relative,".."+string(filepath.Separator)){return androidBuildStep{},errors.New("project executable escapes build root")}
+  base,err:=filepath.Abs(root);if err!=nil{return androidBuildStep{},err}
+  target,err:=filepath.EvalSymlinks(filepath.Join(base,relative));if err!=nil{return androidBuildStep{},fmt.Errorf("resolve project executable: %w",err)}
+  rel,err:=filepath.Rel(base,target);if err!=nil||rel==".."||strings.HasPrefix(rel,".."+string(filepath.Separator)){return androidBuildStep{},errors.New("project executable resolves outside build root")}
+  info,err:=os.Stat(target);if err!=nil{return androidBuildStep{},err}
+  if !info.Mode().IsRegular()||info.Mode().Perm()&0111==0{return androidBuildStep{},errors.New("project executable must be a regular executable file")}
+  return androidBuildStep{name:name,exe:target,args:fields[1:]},nil
+ }
  if strings.ContainsAny(exe,"/\\") || exe=="." || exe==".." { return androidBuildStep{},fmt.Errorf("executable must be a tool available on Termux PATH") }
  base:=strings.ToLower(filepath.Base(exe))
  switch base {
