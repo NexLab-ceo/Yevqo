@@ -216,7 +216,7 @@ func androidBuildEnv(dataDir string)([]string,error){
  allow:=map[string]bool{
   "PATH":true,"PREFIX":true,"HOME":true,"TMPDIR":true,"LANG":true,"LC_ALL":true,"TERM":true,
   "ANDROID_ROOT":true,"ANDROID_DATA":true,"ANDROID_HOME":true,"ANDROID_NDK_HOME":true,
-  "JAVA_HOME":true,"GOROOT":true,"GOPATH":true,"CGO_ENABLED":true,
+  "JAVA_HOME":true,"GOROOT":true,"GOPATH":true,"GOCACHE":true,"GOMODCACHE":true,"CGO_ENABLED":true,
   "CARGO_HOME":true,"RUSTUP_HOME":true,"PKG_CONFIG_PATH":true,"CPATH":true,"LIBRARY_PATH":true,
   "CFLAGS":true,"CXXFLAGS":true,"LDFLAGS":true,"GEM_HOME":true,"GEM_PATH":true,"BUNDLE_PATH":true,
   "COMPOSER_HOME":true,"COMPOSER_CACHE_DIR":true,"PIP_CACHE_DIR":true,"NPM_CONFIG_CACHE":true,"PNPM_HOME":true,"BUN_INSTALL":true,
