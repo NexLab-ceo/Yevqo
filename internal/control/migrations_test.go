@@ -47,3 +47,34 @@ func TestCoreMigrationIsAdditive(t *testing.T) {
 		}
 	}
 }
+
+func TestP2MigrationIsAdditiveAndContainsPlatformTables(t *testing.T) {
+	path := filepath.Join("..", "..", "migrations", "020_p2_platform_foundations.sql")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read P2 migration: %v", err)
+	}
+	statements := splitSQL(string(content))
+	wantTables := []string{
+		"preview_deployments",
+		"build_executors",
+		"build_jobs",
+		"app_templates",
+		"workspace_members",
+		"audit_logs",
+	}
+	if len(statements) != len(wantTables) {
+		t.Fatalf("P2 migration has %d statements, want %d", len(statements), len(wantTables))
+	}
+	for i, table := range wantTables {
+		normalized := strings.ToLower(strings.TrimSpace(statements[i]))
+		if !strings.HasPrefix(normalized, "create table if not exists "+table+" ") {
+			t.Errorf("statement %d must create %s additively, got %q", i+1, table, statements[i])
+		}
+		for _, forbidden := range []string{"drop table", "truncate table", "delete from", "drop column"} {
+			if strings.Contains(normalized, forbidden) {
+				t.Errorf("statement %d contains destructive SQL %q", i+1, forbidden)
+			}
+		}
+	}
+}
