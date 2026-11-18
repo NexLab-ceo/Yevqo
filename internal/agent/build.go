@@ -31,31 +31,31 @@ type BuildPlan struct {
 
 // AnalyzeProject inspects only the immediate project root. It does not execute
 // scripts, parse arbitrary build plugins, or follow symlinks.
-type veltrixManifest struct { Root, Provider, Install, Build, Start string; Port int }
+type yevqoManifest struct { Root, Provider, Install, Build, Start string; Port int }
 
-// AnalyzeProject honors a small, explicit veltrix.yaml subset before auto-detection.
+// AnalyzeProject honors the canonical yevqo.yml configuration before auto-detection.
 func AnalyzeProject(root string) (BuildPlan, error) {
  abs, err := filepath.Abs(root)
  if err != nil { return BuildPlan{}, fmt.Errorf("resolve project root: %w", err) }
- manifest, found, err := readVeltrixManifest(abs)
+ manifest, found, err := readYevqoManifest(abs)
  if err != nil { return BuildPlan{}, err }
  if !found { return analyzeProjectMarkers(abs) }
  if manifest.Provider != "" {
-  switch manifest.Provider { case "auto","veltrix","custom","static","android-local","dockerfile","nixpacks","railpack": default: return BuildPlan{}, fmt.Errorf("unsupported veltrix.yaml build.provider %q", manifest.Provider) }
+  switch manifest.Provider { case "auto","veltrix","custom","static","android-local","dockerfile","nixpacks","railpack": default: return BuildPlan{}, fmt.Errorf("unsupported yevqo.yml build.provider %q", manifest.Provider) }
  }
  manifestRoot := manifest.Root
  if manifestRoot == "" { manifestRoot = "." }
- if filepath.IsAbs(manifestRoot) || strings.Contains(manifestRoot, "\\\\") { return BuildPlan{}, fmt.Errorf("veltrix.yaml project.root must be relative") }
+ if filepath.IsAbs(manifestRoot) || strings.Contains(manifestRoot, "\\\\") { return BuildPlan{}, fmt.Errorf("yevqo.yml project.root must be relative") }
  clean := filepath.Clean(manifestRoot)
- if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) { return BuildPlan{}, fmt.Errorf("veltrix.yaml project.root escapes project directory") }
+ if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) { return BuildPlan{}, fmt.Errorf("yevqo.yml project.root escapes project directory") }
  projectRoot, err := filepath.EvalSymlinks(filepath.Join(abs, clean))
- if err != nil { return BuildPlan{}, fmt.Errorf("resolve veltrix.yaml project.root: %w", err) }
+ if err != nil { return BuildPlan{}, fmt.Errorf("resolve yevqo.yml project.root: %w", err) }
  rel, err := filepath.Rel(abs, projectRoot)
- if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return BuildPlan{}, fmt.Errorf("veltrix.yaml project.root resolves outside project directory") }
+ if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return BuildPlan{}, fmt.Errorf("yevqo.yml project.root resolves outside project directory") }
  plan, err := analyzeProjectMarkers(projectRoot)
  if err != nil { return BuildPlan{}, err }
  plan.Root = clean
- plan.Evidence = append(plan.Evidence, "veltrix.yaml")
+ plan.Evidence = append(plan.Evidence, "yevqo.yml")
  if manifest.Provider != "" && manifest.Provider != "auto" {
   plan.Provider = manifest.Provider
   if (manifest.Provider == "dockerfile" || manifest.Provider == "nixpacks" || manifest.Provider == "railpack") && (plan.AndroidEnvironment.Android || plan.AndroidEnvironment.Termux) {
@@ -73,11 +73,11 @@ func AnalyzeProject(root string) (BuildPlan, error) {
  return plan, nil
 }
 
-func readVeltrixManifest(root string) (veltrixManifest, bool, error) {
- var m veltrixManifest
- path := filepath.Join(root, "veltrix.yaml")
+func readYevqoManifest(root string) (yevqoManifest, bool, error) {
+ var m yevqoManifest
+ path := filepath.Join(root, "yevqo.yml")
  if _, err := os.Stat(path); err != nil {
-  if os.IsNotExist(err) { path = filepath.Join(root, "veltrix.yml"); if _, e := os.Stat(path); os.IsNotExist(e) { return m, false, nil } else if e != nil { return m, false, e } } else { return m, false, err }
+  if os.IsNotExist(err) { return m, false, nil } else { return m, false, err }
  }
  f, err := os.Open(path); if err != nil { return m, false, err }; defer f.Close()
  scanner := bufio.NewScanner(f); scanner.Buffer(make([]byte, 4096), 64*1024)
