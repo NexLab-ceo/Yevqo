@@ -25,13 +25,15 @@ type BuildPlan struct {
 		NeedsConfig  bool     `json:"needs_configuration"`
 		Evidence     []string `json:"evidence"`
 		Warnings     []string `json:"warnings,omitempty"`
+	ProjectName string `json:"project_name,omitempty"`
+	Runtime string `json:"runtime,omitempty"`
 	Capabilities BuildCapabilities `json:"capabilities"`
 	AndroidEnvironment AndroidBuildEnvironment `json:"android_environment"`
 }
 
 // AnalyzeProject inspects only the immediate project root. It does not execute
 // scripts, parse arbitrary build plugins, or follow symlinks.
-type yevqoManifest struct { Name, Runtime, Root, Provider, Install, Build, Output, Start string; Port int; Environment map[string]string }
+type yevqoManifest struct { Name, Runtime, Root, Provider, Install, Build, Start string; Port int }
 
 // AnalyzeProject honors the canonical yevqo.yml configuration before auto-detection.
 func AnalyzeProject(root string) (BuildPlan, error) {
@@ -64,6 +66,8 @@ func AnalyzeProject(root string) (BuildPlan, error) {
   }
  }
  if manifest.Provider == "static" { plan.Stack = "static"; plan.NeedsConfig = false }
+ plan.ProjectName = manifest.Name
+ plan.Runtime = manifest.Runtime
  if manifest.Install != "" { plan.Install = manifest.Install }
  if manifest.Build != "" { plan.Build = manifest.Build }
  if manifest.Start != "" { plan.Start = manifest.Start }
@@ -81,7 +85,7 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
  if err!=nil{return m,false,fmt.Errorf("inspect yevqo.yml: %w",err)}
  if !info.Mode().IsRegular(){return m,false,fmt.Errorf("yevqo.yml must be a regular file")}
  f,err:=os.Open(path);if err!=nil{return m,false,fmt.Errorf("open yevqo.yml: %w",err)};defer f.Close()
- m.Environment=make(map[string]string);scanner:=bufio.NewScanner(f);scanner.Buffer(make([]byte,4096),64*1024)
+ scanner:=bufio.NewScanner(f);scanner.Buffer(make([]byte,4096),64*1024)
  section:="";seen:=map[string]bool{};lineNo:=0
  for scanner.Scan(){
   lineNo++;raw:=scanner.Text();trimmed:=strings.TrimSpace(raw)
@@ -98,16 +102,10 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
     if key!="version"||strings.Trim(value,"\"'")!="1"{return m,false,fmt.Errorf("yevqo.yml:%d: only version: 1 is supported at the top level",lineNo)}
     continue
    }
-   if key!="project"&&key!="build"&&key!="run"&&key!="environment"{return m,false,fmt.Errorf("yevqo.yml:%d: unsupported section %q",lineNo,key)}
+   if key!="project"&&key!="build"&&key!="run"{return m,false,fmt.Errorf("yevqo.yml:%d: unsupported section %q",lineNo,key)}
    section=key;continue
   }
-  if section=="environment"{
-   if value==""{return m,false,fmt.Errorf("yevqo.yml:%d: environment value must be a scalar",lineNo)}
-   if !validYevqoEnvironmentKey(key){return m,false,fmt.Errorf("yevqo.yml:%d: environment key %q is reserved or invalid",lineNo,key)}
-   if _,ok:=m.Environment[key];ok{return m,false,fmt.Errorf("yevqo.yml:%d: duplicate environment key %q",lineNo,key)}
-   m.Environment[key]=strings.Trim(strings.TrimSpace(strings.SplitN(value," #",2)[0]),"\"'");continue
-  }
-  full:=section+"."+key;if seen[full]{return m,false,fmt.Errorf("yevqo.yml:%d: duplicate key %q",lineNo,full)};seen[full]=true
+   full:=section+"."+key;if seen[full]{return m,false,fmt.Errorf("yevqo.yml:%d: duplicate key %q",lineNo,full)};seen[full]=true
   value=strings.Trim(strings.TrimSpace(strings.SplitN(value," #",2)[0]),"\"'")
   switch full{
   case "project.name":m.Name=value
@@ -116,25 +114,17 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
   case "build.provider":m.Provider=value
   case "build.install":m.Install=value
   case "build.command":m.Build=value
-  case "build.output":m.Output=value
-  case "run.command":m.Start=value
+   case "run.command":m.Start=value
   case "run.port":
    n,e:=strconv.Atoi(value);if e!=nil||n<1||n>65535{return m,false,fmt.Errorf("yevqo.yml run.port must be between 1 and 65535")};m.Port=n
   default:return m,false,fmt.Errorf("yevqo.yml:%d: unsupported key %q",lineNo,full)
   }
  }
  if err:=scanner.Err();err!=nil{return m,false,fmt.Errorf("read yevqo.yml: %w",err)}
- if len(seen)==0&&len(m.Environment)==0{return m,false,fmt.Errorf("yevqo.yml contains no supported configuration")}
- if m.Output!=""&&(filepath.IsAbs(m.Output)||strings.Contains(m.Output,"\\")||filepath.Clean(m.Output)==".."||strings.HasPrefix(filepath.Clean(m.Output),".."+string(filepath.Separator))){return m,false,fmt.Errorf("yevqo.yml build.output must stay inside the project root")}
- return m,true,nil
+ if len(seen)==0{return m,false,fmt.Errorf("yevqo.yml contains no supported configuration")}
+  return m,true,nil
 }
 
-func validYevqoEnvironmentKey(key string)bool{
- if key==""||len(key)>64{return false}
- for i,r:=range key{if !((r>='A'&&r<='Z')||r=='_'||(i>0&&r>='0'&&r<='9')){return false}}
- switch key{case "PATH","HOME","PREFIX","TMPDIR","LD_PRELOAD","LD_LIBRARY_PATH","PORT","HOST":return false}
- return !strings.HasPrefix(key,"DB_")&&!strings.HasPrefix(key,"VELTRIX_")
-}
 
 func analyzeProjectMarkers(root string) (BuildPlan, error) {
 	abs, err := filepath.Abs(root)
