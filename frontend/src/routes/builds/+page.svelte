@@ -35,6 +35,13 @@
    try{const payload=JSON.parse(decode(r.data.payload));buildHistory=payload.records||[]}
    catch{buildHistory=[]}
  }
+ async function viewBuildHistory(record){
+   if(!selectedSite)return;
+   const r=await sendCommand(selectedSite.device_id,'get_build_history',{site_id:selectedSite.site.site_id,id:record.id});
+   if(!r.ok||!r.data?.ok){notify(r.error||r.data?.message||'Не удалось открыть лог сборки','error');return}
+   try{result=JSON.parse(decode(r.data.payload))}
+   catch{notify('Не удалось прочитать запись сборки','error')}
+ }
  async function analyze(){
    if(!selectedSite||!online||analyzing)return;
    analyzing=true;plan=null;result=null;customInstallCommand='';customBuildCommand='';
@@ -136,10 +143,10 @@
  {:else if buildHistory.length}
  <div class="history-list">
   {#each buildHistory as record (record.id)}
-   <button class="history-item" on:click={()=>{result=record.result;}}>
+   <button class="history-item" on:click={()=>viewBuildHistory(record)}>
     <span class:success={record.result.success} class:failure={!record.result.success}>{record.result.success?'SUCCESS':'FAILED'}</span>
     <span><strong>{record.result.stack||'custom'}</strong><small>{new Date(record.result.finished_at).toLocaleString()}</small></span>
-    <small>{((record.result.duration_ms||0)/1000).toFixed(1)} s</small>
+    <small>{((record.result.duration_ms||0)/1000).toFixed(1)} s · {(record.output_bytes/1024).toFixed(0)} KB log</small>
    </button>
   {/each}
  </div>
