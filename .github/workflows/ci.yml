@@ -1,11 +1,19 @@
 name: Pull request checks
 
 on:
-  pull_request:
-    branches: [main]
   push:
     branches:
-      - feature/database-server-wizard
+      - main
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
@@ -29,7 +37,7 @@ jobs:
           node-version: '20'
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm install
+        run: npm ci
       - name: Build frontend
         working-directory: frontend
         run: npm run build
