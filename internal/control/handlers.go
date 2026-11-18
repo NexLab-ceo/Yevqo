@@ -246,20 +246,27 @@ func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	devices, err := s.db.ListDevicesByUser(r.Context(), user.ID)
+	owners, err := s.db.WorkspaceOwnerIDs(r.Context(), user.ID)
 	if err != nil {
 		apiError(w, err)
 		return
 	}
-
 	type deviceView struct {
 		shared.Device
 		SiteCount int `json:"site_count"`
+		WorkspaceOwnerID int64 `json:"workspace_owner_id"`
+		WorkspaceRole string `json:"workspace_role"`
 	}
-	out := make([]deviceView, 0, len(devices))
-	for _, d := range devices {
-		sites, _ := s.db.ListSitesByDevice(r.Context(), d.ID)
-		out = append(out, deviceView{Device: d, SiteCount: len(sites)})
+	out := make([]deviceView, 0)
+	for _, ownerID := range owners {
+		devices, listErr := s.db.ListDevicesByUser(r.Context(), ownerID)
+		if listErr != nil { apiError(w, listErr); return }
+		role, _, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, user.ID)
+		if roleErr != nil { apiError(w, roleErr); return }
+		for _, d := range devices {
+			sites, _ := s.db.ListSitesByDevice(r.Context(), d.ID)
+			out = append(out, deviceView{Device:d, SiteCount:len(sites), WorkspaceOwnerID:ownerID, WorkspaceRole:role})
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
