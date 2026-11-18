@@ -14,8 +14,9 @@ and projects in other languages can provide their own executable plus argv comma
   compiler/build tools, memory estimate and free-disk estimate.
 - **Local provider:** executes one program at a time with an argv vector; it never
   interprets a command through a shell.
-- **Supervisor:** serialized builds, explicit project-code consent, timeout,
-  bounded combined stdout/stderr, path validation and a filtered environment.
+- **Supervisor:** serialized builds, explicit project-code consent, timeout and cancellation of the
+  complete build process group, bounded combined stdout/stderr, path validation and
+  a filtered environment.
 - **Build cache:** persistent per-tool caches under `<agent-data>/build-cache`
   for Go, Rust/Cargo, Node/npm, Python/pip, Deno, Gradle, Composer, Ruby, Dart,
   .NET and Julia. Existing explicitly configured cache paths are preserved.
