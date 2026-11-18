@@ -1056,6 +1056,10 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	if startErr != nil {
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("release activation failed: %w", startErr)
 	}
+ if manifestFound&&manifest.DeployRestartSet{
+  policy:="never";if manifest.DeployRestart{policy="always"}
+  if policyErr:=m.setRestartPolicyLocked(req.SiteId,policy);policyErr!=nil{return 0,truncateDeployOutput(output.String()),commit,commitDate,fmt.Errorf("release activated but restart policy could not be saved: %w",policyErr)}
+ }
 	m.UpdateDeploymentJob(req.SiteId, jobID, "healthy", 100, "Release is healthy")
 	output.WriteString(fmt.Sprintf("\nActivated release %s (pid %d)", commit, pid))
 	return pid, truncateDeployOutput(output.String()), commit, commitDate, nil
