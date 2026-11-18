@@ -111,3 +111,50 @@ func TestYevqoConfigRejectsUnsupportedAndMalformedFields(t *testing.T) {
   if _,err:=AnalyzeProject(root);err==nil{t.Fatalf("expected invalid config to fail: %q",body)}
  })}
 }
+
+
+func TestYevqoManifestRuntimeSections(t *testing.T) {
+ root:=t.TempDir()
+ body:=`version: 1
+project:
+  name: example
+  root: .
+build:
+  provider: custom
+  command: "go build -o app ."
+run:
+  command: "./app"
+  port: 8080
+environment:
+  APP_MODE: production
+healthcheck:
+  path: /health
+  interval: 10s
+artifacts:
+  include:
+    - dist/**
+  exclude:
+    - dist/*.map
+cache:
+  enabled: true
+  paths:
+    - node_modules
+resources:
+  memory: 512MiB
+deploy:
+  restart: true
+`
+ if err:=os.WriteFile(filepath.Join(root,"yevqo.yml"),[]byte(body),0600);err!=nil{t.Fatal(err)}
+ m,found,err:=readYevqoManifest(root);if err!=nil{t.Fatal(err)};if !found{t.Fatal("manifest not found")}
+ if m.Name!="example"||m.Port!=8080||m.Environment["APP_MODE"]!="production"||m.HealthcheckPath!="/health"||m.HealthcheckInterval.String()!="10s"||m.MemoryBytes!=512<<20||!m.CacheEnabled||len(m.CachePaths)!=1||len(m.ArtifactsInclude)!=1||len(m.ArtifactsExclude)!=1||!m.DeployRestart{t.Fatalf("manifest fields not parsed: %+v",m)}
+}
+
+func TestYevqoManifestRejectsUnsafePathsAndEnvironment(t *testing.T) {
+ cases:=[]string{
+  "version: 1\nproject:\n  root: .\ncache:\n  paths:\n    - ../outside\n",
+  "version: 1\nproject:\n  root: .\nenvironment:\n  PATH: hacked\n",
+  "version: 1\nproject:\n  root: .\nhealthcheck:\n  path: //evil.test/\n",
+  "version: 1\nproject:\n  root: .\nresources:\n  memory: 0MB\n",
+ }
+ for i,body:=range cases{t.Run(fmt.Sprintf("case-%d",i),func(t *testing.T){root:=t.TempDir();if err:=os.WriteFile(filepath.Join(root,"yevqo.yml"),[]byte(body),0600);err!=nil{t.Fatal(err)};if _,_,err:=readYevqoManifest(root);err==nil{t.Fatalf("expected rejection: %s",body)}})}
+}
