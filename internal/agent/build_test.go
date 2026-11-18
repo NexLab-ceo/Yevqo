@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt
 	"os"
 	"path/filepath"
 	"testing"
@@ -88,4 +89,25 @@ func TestLegacyVeltrixConfigIsIgnored(t *testing.T) {
  if err != nil { t.Fatal(err) }
  if plan.Stack != "unknown" || !plan.NeedsConfig { t.Fatalf("legacy veltrix.yaml must not configure builds: %+v", plan) }
  for _, evidence := range plan.Evidence { if evidence == "veltrix.yaml" { t.Fatal("legacy config was treated as active") } }
+}
+
+func TestYevqoConfigMetadataAndStrictValidation(t *testing.T) {
+ root:=project(t,"package.json")
+ body:="version: 1\nproject:\n  name: demo\n  runtime: nodejs\n  root: .\nbuild:\n  provider: auto\nrun:\n  port: 3210\n"
+ if err:=os.WriteFile(filepath.Join(root,"yevqo.yml"),[]byte(body),0600);err!=nil{t.Fatal(err)}
+ plan,err:=AnalyzeProject(root);if err!=nil{t.Fatal(err)}
+ if plan.ProjectName!="demo"||plan.Runtime!="nodejs"||plan.Port!=3210{t.Fatalf("metadata/config not applied: %+v",plan)}
+}
+
+func TestYevqoConfigRejectsUnsupportedAndMalformedFields(t *testing.T) {
+ cases:=[]string{
+  "version: 2\nproject:\n  root: .\n",
+  "version: 1\nproject:\n  root: .\nhealthcheck:\n  path: /health\n",
+  "version: 1\nproject:\n  root: .\nbuild:\n  command: npm run build\n  command: npm run test\n",
+  "version: 1\nproject:\n\troot: .\n",
+ }
+ for i,body:=range cases{t.Run(fmt.Sprintf("case-%d",i),func(t *testing.T){
+  root:=t.TempDir();if err:=os.WriteFile(filepath.Join(root,"yevqo.yml"),[]byte(body),0600);err!=nil{t.Fatal(err)}
+  if _,err:=AnalyzeProject(root);err==nil{t.Fatalf("expected invalid config to fail: %q",body)}
+ })}
 }
