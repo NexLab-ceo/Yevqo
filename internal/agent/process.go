@@ -972,7 +972,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 		buildCommand := strings.TrimSpace(req.BuildCommand)
 		if buildCommand == "" { buildCommand = plan.Build }
 		if plan.Stack == "unknown" && buildCommand == "" && installCommand == "" {
-			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("no build plan detected; configure install/build commands in veltrix.yaml or use the Build Engine")
+			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("no build plan detected; configure install/build commands in yevqo.yml or use the Build Engine")
 		}
 		build := m.BuildRunner.Run(ctx, AndroidBuildRequest{
 			SiteID:req.SiteId, SiteRoot:stageDir, RootDir:rootDir, Stack:plan.Stack,
