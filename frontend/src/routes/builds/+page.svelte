@@ -44,7 +44,7 @@
  }
  async function loadArtifacts(record){
    artifactFiles=[];artifactBuildID=record?.id||'';
-   if(!selectedSite||!record?.id||!record.result?.artifact_dir||record.result.artifact_dir===record.result.root_directory)return;
+   if(!selectedSite||!record?.id||!record.result?.artifact_dir)return;
    artifactLoading=true;
    const r=await sendCommand(selectedSite.device_id,'list_build_artifacts',{site_id:selectedSite.site.site_id,build_id:record.id});
    artifactLoading=false;
@@ -63,7 +63,7 @@
     chunks.push(bytes);offset+=bytes.length;eof=!!p.eof;
     if(bytes.length===0&&!eof){notify('Загрузка артефакта остановлена: пустой фрагмент','error');return}
    }
-   const blob=new Blob(chunks,{type:'application/octet-stream'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=file.path.split('/').pop()||'artifact';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
+   const blob=new Blob(chunks,{type:'application/octet-stream'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=file.path.replace(/[\\/]/g,'_')||'artifact';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);
  }
  async function analyze(){
    if(!selectedSite||!online||analyzing)return;
@@ -101,6 +101,7 @@
    catch{result={success:!!r.data.ok,error:r.data.message||'Некорректный ответ',output:''}}
    notify(result.success?'Сборка завершена':(result.error||r.data.message||'Ошибка сборки'),result.success?'success':'error');
    await loadHistory(selectedSite);
+   if(result.success&&result.artifact_dir&&buildHistory[0])await loadArtifacts(buildHistory[0]);
  }
 </script>
 <svelte:head><title>Build Engine · Yevqo</title></svelte:head>
