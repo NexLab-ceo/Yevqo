@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+ "time"
 )
 
 // BuildPlan is a deterministic, non-executing description of how a project
@@ -33,7 +34,17 @@ type BuildPlan struct {
 
 // AnalyzeProject inspects only the immediate project root. It does not execute
 // scripts, parse arbitrary build plugins, or follow symlinks.
-type yevqoManifest struct { Name, Runtime, Root, Provider, Install, Build, Start string; Port int }
+type yevqoManifest struct {
+ Name, Runtime, Root, Provider, Install, Build, Start string
+ Port int
+ Environment map[string]string
+ HealthcheckPath string
+ HealthcheckInterval time.Duration
+ MemoryBytes uint64
+ DeployRestart bool
+ ArtifactsInclude, ArtifactsExclude, CachePaths []string
+ CacheEnabled bool
+}
 
 // AnalyzeProject honors the canonical yevqo.yml configuration before auto-detection.
 func AnalyzeProject(root string) (BuildPlan, error) {
@@ -79,54 +90,52 @@ func AnalyzeProject(root string) (BuildPlan, error) {
 
 func readYevqoManifest(root string) (yevqoManifest, bool, error) {
  var m yevqoManifest
- path:=filepath.Join(root,"yevqo.yml")
- info,err:=os.Lstat(path)
- if os.IsNotExist(err){return m,false,nil}
- if err!=nil{return m,false,fmt.Errorf("inspect yevqo.yml: %w",err)}
+ path:=filepath.Join(root,"yevqo.yml");info,err:=os.Lstat(path)
+ if os.IsNotExist(err){return m,false,nil};if err!=nil{return m,false,err}
  if !info.Mode().IsRegular(){return m,false,fmt.Errorf("yevqo.yml must be a regular file")}
- f,err:=os.Open(path);if err!=nil{return m,false,fmt.Errorf("open yevqo.yml: %w",err)};defer f.Close()
- scanner:=bufio.NewScanner(f);scanner.Buffer(make([]byte,4096),64*1024)
- section:="";seen:=map[string]bool{};lineNo:=0;versionSeen:=false
- for scanner.Scan(){
-  lineNo++;raw:=scanner.Text();trimmed:=strings.TrimSpace(raw)
-  if trimmed==""||strings.HasPrefix(trimmed,"#"){continue}
-  if strings.Contains(raw,"\t"){return m,false,fmt.Errorf("yevqo.yml:%d: tabs are not allowed",lineNo)}
-  indent:=len(raw)-len(strings.TrimLeft(raw," "))
-  if indent!=0&&indent!=2{return m,false,fmt.Errorf("yevqo.yml:%d: only two-space indentation is supported",lineNo)}
-  if strings.HasPrefix(trimmed,"- "){return m,false,fmt.Errorf("yevqo.yml:%d: list values are not supported",lineNo)}
-  if !strings.Contains(trimmed,":"){return m,false,fmt.Errorf("yevqo.yml:%d: expected key: value",lineNo)}
-  parts:=strings.SplitN(trimmed,":",2);key:=strings.TrimSpace(parts[0]);value:=strings.TrimSpace(parts[1])
-  if key==""{return m,false,fmt.Errorf("yevqo.yml:%d: empty key",lineNo)}
-  if indent==0{
-   if value!=""{
-    if key!="version"||strings.Trim(value,"\"'")!="1"{return m,false,fmt.Errorf("yevqo.yml:%d: only version: 1 is supported at the top level",lineNo)}
-    if versionSeen{return m,false,fmt.Errorf("yevqo.yml:%d: duplicate version",lineNo)};versionSeen=true
-    continue
-   }
-   if key!="project"&&key!="build"&&key!="run"{return m,false,fmt.Errorf("yevqo.yml:%d: unsupported section %q",lineNo,key)}
-   section=key;continue
+ f,err:=os.Open(path);if err!=nil{return m,false,err};defer f.Close()
+ m.Environment=map[string]string{};m.CacheEnabled=true
+ sc:=bufio.NewScanner(f);sc.Buffer(make([]byte,4096),64*1024)
+ section,listKey:="","";seen:=map[string]bool{};version:=false;line:=0
+ for sc.Scan(){line++;raw:=sc.Text();v:=strings.TrimSpace(raw);if v==""||strings.HasPrefix(v,"#"){continue}
+  if strings.Contains(raw,"\t"){return m,false,fmt.Errorf("yevqo.yml:%d: tabs are forbidden",line)}
+  ind:=len(raw)-len(strings.TrimLeft(raw," "));if ind!=0&&ind!=2&&ind!=4{return m,false,fmt.Errorf("yevqo.yml:%d: use 0, 2 or 4 spaces",line)}
+  if ind==0{p:=strings.SplitN(v,":",2);if len(p)!=2{return m,false,fmt.Errorf("yevqo.yml:%d: expected key: value",line)};k,val:=strings.TrimSpace(p[0]),strings.TrimSpace(p[1])
+   if k=="version"{if version||strings.Trim(val,"\"'")!="1"{return m,false,fmt.Errorf("yevqo.yml requires exactly one version: 1")};version=true;continue}
+   if val!=""{return m,false,fmt.Errorf("yevqo.yml:%d: section value not allowed",line)}
+   switch k{case "project","build","run","environment","healthcheck","artifacts","cache","resources","deploy":default:return m,false,fmt.Errorf("yevqo.yml:%d: unsupported section %q",line,k)}
+   section=k;listKey="";continue
   }
-   full:=section+"."+key;if seen[full]{return m,false,fmt.Errorf("yevqo.yml:%d: duplicate key %q",lineNo,full)};seen[full]=true
-  value=strings.Trim(strings.TrimSpace(strings.SplitN(value," #",2)[0]),"\"'")
-  switch full{
-  case "project.name":m.Name=value
-  case "project.runtime":m.Runtime=value
-  case "project.root":m.Root=value
-  case "build.provider":m.Provider=value
-  case "build.install":m.Install=value
-  case "build.command":m.Build=value
-   case "run.command":m.Start=value
-  case "run.port":
-   n,e:=strconv.Atoi(value);if e!=nil||n<1||n>65535{return m,false,fmt.Errorf("yevqo.yml run.port must be between 1 and 65535")};m.Port=n
-  default:return m,false,fmt.Errorf("yevqo.yml:%d: unsupported key %q",lineNo,full)
+  if ind==4{p:=strings.SplitN(v,":",2);if len(p)!=2{return m,false,fmt.Errorf("yevqo.yml:%d: expected key: value",line)};k,val:=strings.TrimSpace(p[0]),strings.TrimSpace(p[1]);full:=section+"."+k
+   if seen[full]{return m,false,fmt.Errorf("yevqo.yml:%d: duplicate key %q",line,full)};seen[full]=true
+   val=strings.Trim(strings.TrimSpace(strings.SplitN(val," #",2)[0]),"\"'")
+   switch full{
+   case "healthcheck.path":m.HealthcheckPath=val
+   case "healthcheck.interval":d,e:=time.ParseDuration(val);if e!=nil||d<time.Second||d>time.Minute{return m,false,fmt.Errorf("healthcheck.interval must be 1s..1m")};m.HealthcheckInterval=d
+   case "resources.memory":n,e:=parseYevqoMemory(val);if e!=nil{return m,false,e};m.MemoryBytes=n
+   case "deploy.restart":x,e:=strconv.ParseBool(val);if e!=nil{return m,false,fmt.Errorf("deploy.restart must be boolean")};m.DeployRestart=x
+   case "artifacts.include","artifacts.exclude","cache.paths":if val!=""{return m,false,fmt.Errorf("%s must be a list",full)};listKey=full
+   case "cache.enabled":x,e:=strconv.ParseBool(val);if e!=nil{return m,false,fmt.Errorf("cache.enabled must be boolean")};m.CacheEnabled=x
+   default:return m,false,fmt.Errorf("yevqo.yml:%d: unsupported key %q",line,full)
+   };continue
   }
+  if ind==2&&strings.HasPrefix(v,"- "){if listKey==""{return m,false,fmt.Errorf("yevqo.yml:%d: unexpected list item",line)};x:=strings.Trim(strings.TrimSpace(strings.SplitN(strings.TrimPrefix(v,"- ")," #",2)[0]),"\"'");if x==""{return m,false,fmt.Errorf("yevqo.yml:%d: empty list item",line)}
+   switch listKey{case "artifacts.include":m.ArtifactsInclude=append(m.ArtifactsInclude,x);case "artifacts.exclude":m.ArtifactsExclude=append(m.ArtifactsExclude,x);case "cache.paths":m.CachePaths=append(m.CachePaths,x)};continue
+  }
+  if ind!=2{return m,false,fmt.Errorf("yevqo.yml:%d: invalid indentation",line)}
+  p:=strings.SplitN(v,":",2);if len(p)!=2{return m,false,fmt.Errorf("yevqo.yml:%d: expected key: value",line)};k,val:=strings.TrimSpace(p[0]),strings.TrimSpace(p[1])
+  if section=="environment"{if !validYevqoEnvironmentKey(k){return m,false,fmt.Errorf("invalid or reserved environment key %q",k)};if _,ok:=m.Environment[k];ok{return m,false,fmt.Errorf("duplicate environment key %q",k)};m.Environment[k]=strings.Trim(strings.TrimSpace(strings.SplitN(val," #",2)[0]),"\"'");continue}
+  full:=section+"."+k;if seen[full]{return m,false,fmt.Errorf("yevqo.yml:%d: duplicate key %q",line,full)};seen[full]=true;val=strings.Trim(strings.TrimSpace(strings.SplitN(val," #",2)[0]),"\"'")
+  switch full{case "project.name":m.Name=val;case "project.runtime":m.Runtime=val;case "project.root":m.Root=val;case "build.provider":m.Provider=val;case "build.install":m.Install=val;case "build.command":m.Build=val;case "run.command":m.Start=val;case "run.port":n,e:=strconv.Atoi(val);if e!=nil||n<1||n>65535{return m,false,fmt.Errorf("run.port must be 1..65535")};m.Port=n;default:return m,false,fmt.Errorf("yevqo.yml:%d: unsupported key %q",line,full)}
+  listKey=""
  }
- if err:=scanner.Err();err!=nil{return m,false,fmt.Errorf("read yevqo.yml: %w",err)}
- if !versionSeen{return m,false,fmt.Errorf("yevqo.yml must declare version: 1")}
- if len(seen)==0{return m,false,fmt.Errorf("yevqo.yml contains no supported configuration")}
-  return m,true,nil
+ if e:=sc.Err();e!=nil{return m,false,e};if !version{return m,false,fmt.Errorf("yevqo.yml must declare version: 1")};if len(seen)==0&&len(m.Environment)==0{return m,false,fmt.Errorf("yevqo.yml has no configuration")}
+ if m.HealthcheckPath!=""&&(!strings.HasPrefix(m.HealthcheckPath,"/")||strings.ContainsAny(m.HealthcheckPath,"\r\n?#")){return m,false,fmt.Errorf("healthcheck.path must be an absolute path without query or fragment")}
+ for _,p:=range append(append(append([]string{},m.CachePaths...),m.ArtifactsInclude...),m.ArtifactsExclude...){if filepath.IsAbs(p)||strings.Contains(p,"\\")||filepath.Clean(p)==".."||strings.HasPrefix(filepath.Clean(p),".."+string(filepath.Separator)){return m,false,fmt.Errorf("yevqo.yml paths must stay inside project root")}}
+ return m,true,nil
 }
-
+func validYevqoEnvironmentKey(k string)bool{if k==""||len(k)>64{return false};for i,r:=range k{if !((r>='A'&&r<='Z')||r=='_'||(i>0&&r>='0'&&r<='9')){return false}};switch k{case "PATH","HOME","PREFIX","TMPDIR","LD_PRELOAD","LD_LIBRARY_PATH","PORT","HOST":return false};return !strings.HasPrefix(k,"DB_")&&!strings.HasPrefix(k,"VELTRIX_")}
+func parseYevqoMemory(raw string)(uint64,error){v:=strings.ToUpper(strings.TrimSpace(raw));var mult uint64=1;for suffix,factor:=range map[string]uint64{"KIB":1<<10,"MIB":1<<20,"GIB":1<<30,"KB":1000,"MB":1000000,"GB":1000000000}{if strings.HasSuffix(v,suffix){mult=factor;v=strings.TrimSpace(strings.TrimSuffix(v,suffix));break}};n,e:=strconv.ParseUint(v,10,64);if e!=nil||n==0||n>^uint64(0)/mult{return 0,fmt.Errorf("resources.memory must be a positive size, e.g. 512MiB")};return n*mult,nil}
 
 func analyzeProjectMarkers(root string) (BuildPlan, error) {
 	abs, err := filepath.Abs(root)
