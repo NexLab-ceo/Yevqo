@@ -80,6 +80,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleAnalyzeSiteBuild(cmd)
 	case "build_site":
 		return h.handleBuildSite(cmd)
+	case "list_build_history":
+		return h.handleListBuildHistory(cmd)
 	case "cancel_build":
 		return h.handleCancelBuild(cmd)
 	case "start_site":
@@ -193,6 +195,22 @@ func (h *CommandHandler) handleBuildSite(cmd *shared.Command) *shared.Result {
 	if err != nil { return errorResult(cmd.Id, "could not encode build result") }
 	if !result.Success { return &shared.Result{Id: cmd.Id, Ok: false, Message: result.Error, Payload: payload} }
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: "Android local build completed", Payload: payload}
+}
+
+func (h *CommandHandler) handleListBuildHistory(cmd *shared.Command) *shared.Result {
+	var req shared.ListBuildHistory
+	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
+		return errorResult(cmd.Id, "invalid list_build_history payload")
+	}
+	records, err := ListBuildHistory(h.cfg.DataRoot, req.SiteId, req.Limit)
+	if err != nil {
+		return errorResult(cmd.Id, err.Error())
+	}
+	payload, err := shared.Marshal(map[string]interface{}{"records": records})
+	if err != nil {
+		return errorResult(cmd.Id, "could not encode build history")
+	}
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: "build history loaded", Payload: payload}
 }
 
 func (h *CommandHandler) handleCancelBuild(cmd *shared.Command) *shared.Result {
