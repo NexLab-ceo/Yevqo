@@ -299,9 +299,9 @@ func(w *boundedBuildLog)Write(p []byte)(int,error){w.mu.Lock();defer w.mu.Unlock
 func(w *boundedBuildLog)String()string{w.mu.Lock();defer w.mu.Unlock();return string(w.data)}
 
 func collectBuildArtifacts(dataDir,siteID,root string,include,exclude []string)(string,error){
- base:=filepath.Join(dataDir,"artifacts");if err:=os.MkdirAll(base,0700);err!=nil{return "",err}
- target:=filepath.Join(base,siteID,time.Now().UTC().Format("20060102T150405.000000000Z"))
- if err:=os.MkdirAll(target,0700);err!=nil{return "",err}
+ base,err:=ensureSafeSubdirectory(dataDir,"artifacts",0700);if err!=nil{return "",err}
+ siteBase,err:=ensureSafeSubdirectory(base,siteID,0700);if err!=nil{return "",err}
+ target,err:=os.MkdirTemp(siteBase,time.Now().UTC().Format("20060102T150405.000000000Z")+"-");if err!=nil{return "",err}
  copied:=0;var totalBytes int64
  err:=filepath.WalkDir(root,func(path string,d os.DirEntry,walkErr error)error{
   if walkErr!=nil{return walkErr};if path==root{return nil}
