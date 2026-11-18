@@ -974,6 +974,15 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	if err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("resolve deployment root: %w", err) }
 	plan, err := AnalyzeProject(buildDir)
 	if err != nil { return 0, truncateDeployOutput(output.String()), commit, commitDate, err }
+ manifest,manifestFound,manifestErr:=readYevqoManifest(buildDir)
+ if manifestErr!=nil{return 0,truncateDeployOutput(output.String()),commit,commitDate,manifestErr}
+ if manifestFound{
+  if manifest.Port>0&&int(req.Port)!=manifest.Port{return 0,truncateDeployOutput(output.String()),commit,commitDate,fmt.Errorf("deployment port %d does not match yevqo.yml run.port %d",req.Port,manifest.Port)}
+  if req.HealthCheckPath==""{req.HealthCheckPath=manifest.HealthcheckPath}
+  if req.StartCommand==""{req.StartCommand=manifest.Start}
+  merged:=make(map[string]string,len(manifest.Environment)+len(req.Env));for k,v:=range manifest.Environment{merged[k]=v};for k,v:=range req.Env{merged[k]=v};req.Env=merged
+  if manifest.Root!=""&&manifest.Root!="."{buildDir,err=safeAndroidBuildRoot(stageDir,filepath.Join(rootDir,manifest.Root));if err!=nil{return 0,truncateDeployOutput(output.String()),commit,commitDate,err};rootDir=filepath.Join(rootDir,manifest.Root)}
+ }
 	expectedStack := map[string]string{"php":"php", "go":"go", "static":"static", "nodejs":"nodejs"}[req.Runtime]
 	if req.Runtime != "custom" && plan.Stack != expectedStack && !(req.Runtime == "php" && plan.Stack == "unknown") {
 		return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("detected stack %q does not match configured runtime %q", plan.Stack, req.Runtime)
@@ -988,10 +997,14 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 		if plan.Stack == "unknown" && buildCommand == "" && installCommand == "" {
 			return 0, truncateDeployOutput(output.String()), commit, commitDate, fmt.Errorf("no build plan detected; configure install/build commands in yevqo.yml or use the Build Engine")
 		}
-		build := m.BuildRunner.Run(ctx, AndroidBuildRequest{
-			SiteID:req.SiteId, SiteRoot:stageDir, RootDir:rootDir, Stack:plan.Stack,
-			PackageTool:plan.PackageTool, InstallCommand:installCommand, BuildCommand:buildCommand,
-			AllowProjectCode:true, Timeout:buildTimeout, MaxLogBytes:10<<20,
+		buildReq:=AndroidBuildRequest{
+   SiteID:req.SiteId, SiteRoot:stageDir, RootDir:rootDir, Stack:plan.Stack,
+   PackageTool:plan.PackageTool, InstallCommand:installCommand, BuildCommand:buildCommand,
+   AllowProjectCode:true, Timeout:buildTimeout, MaxLogBytes:10<<20,
+  }
+  if manifestFound{buildReq.Environment=manifest.Environment;buildReq.ArtifactInclude=manifest.ArtifactsInclude;buildReq.ArtifactExclude=manifest.ArtifactsExclude;buildReq.CacheEnabled=manifest.CacheEnabled;buildReq.CachePaths=manifest.CachePaths;buildReq.MinAvailableMemoryBytes=manifest.MemoryBytes}
+  build := m.BuildRunner.Run(ctx, buildReq
+
 			OnStep:func(name string, index, total int) {
 				progress := 40
 				if total > 0 { progress += index * 25 / total }
