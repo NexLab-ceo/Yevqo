@@ -41,7 +41,7 @@ func AnalyzeProject(root string) (BuildPlan, error) {
  if err != nil { return BuildPlan{}, err }
  if !found { return analyzeProjectMarkers(abs) }
  if manifest.Provider != "" {
-  switch manifest.Provider { case "auto","veltrix","custom","static","android-local","dockerfile","nixpacks","railpack": default: return BuildPlan{}, fmt.Errorf("unsupported yevqo.yml build.provider %q", manifest.Provider) }
+  switch manifest.Provider { case "auto","custom","static","android-local","dockerfile","nixpacks","railpack": default: return BuildPlan{}, fmt.Errorf("unsupported yevqo.yml build.provider %q", manifest.Provider) }
  }
  manifestRoot := manifest.Root
  if manifestRoot == "" { manifestRoot = "." }
@@ -94,7 +94,7 @@ func readYevqoManifest(root string) (yevqoManifest, bool, error) {
   switch section {
   case "project": if key == "root" { m.Root = value }
   case "build": switch key { case "provider": m.Provider = value; case "install": m.Install = value; case "command": m.Build = value }
-  case "run": switch key { case "command": m.Start = value; case "port": n, e := strconv.Atoi(value); if e != nil || n < 1 || n > 65535 { return m, false, fmt.Errorf("veltrix.yaml run.port must be between 1 and 65535") }; m.Port = n }
+  case "run": switch key { case "command": m.Start = value; case "port": n, e := strconv.Atoi(value); if e != nil || n < 1 || n > 65535 { return m, false, fmt.Errorf("yevqo.yml run.port must be between 1 and 65535") }; m.Port = n }
   }
  }
  if err := scanner.Err(); err != nil { return m, false, err }
