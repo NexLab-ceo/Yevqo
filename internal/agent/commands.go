@@ -192,7 +192,7 @@ func (h *CommandHandler) handleBuildSite(cmd *shared.Command) *shared.Result {
 func (h *CommandHandler) handleCreateSite(cmd *shared.Command) *shared.Result {
 	var req shared.CreateSite
 	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid create_site payload") }
-	if err := h.processes.CreateSite(req.SiteId, int(req.Port), req.Runtime); err != nil { return errorResult(cmd.Id, err.Error()) }
+	if err := h.processes.CreateSiteFromTemplate(req.SiteId, int(req.Port), req.TemplateID, req.Runtime); err != nil { return errorResult(cmd.Id, err.Error()) }
 	return &shared.Result{Id: cmd.Id, Ok: true, Message: "site directory created"}
 }
 
