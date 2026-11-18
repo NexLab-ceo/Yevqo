@@ -193,7 +193,7 @@
 
     async function saveEnvironmentVariable() {
         const name = newEnvName.trim();
-        if (!name || !newEnvValue || savingEnv) return;
+        if (!name || savingEnv) return;
         savingEnv = true;
         const res = await saveSiteEnvironment(deviceId, siteId, name, newEnvValue);
         savingEnv = false;
@@ -215,7 +215,7 @@
 
     function parseEnvImport(source) {
         const entries = [], errors = [];
-        for (const [index, raw] of source.split(/\\r?\\n/).entries()) {
+        for (const [index, raw] of source.split(/\r?\n/).entries()) {
             const line = raw.trim();
             if (!line || line.startsWith('#')) continue;
             const normalized = line.startsWith('export ') ? line.slice(7).trim() : line;
