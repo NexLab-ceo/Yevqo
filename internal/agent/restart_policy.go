@@ -69,17 +69,14 @@ func writeRestartPolicies(dataRoot string, policies map[string]string) error {
 func (m *ProcessManager) SetRestartPolicy(siteID, policy string) error {
  m.operationMu.Lock()
  defer m.operationMu.Unlock()
- if !validSiteID(siteID) { return fmt.Errorf("invalid site id") }
- if !validRestartPolicy(policy) { return fmt.Errorf("restart policy must be never, on-failure or always") }
- policies, err := readRestartPolicies(m.DataRoot); if err != nil { return err }
- policies[siteID] = policy
- if err := writeRestartPolicies(m.DataRoot, policies); err != nil { return fmt.Errorf("persist restart policy: %w", err) }
- if m.registry != nil {
-  if record, ok := m.registry.Get(siteID); ok {
-   record.RestartPolicy = policy
-   if err := m.registry.Save(record); err != nil { return fmt.Errorf("update running process policy: %w", err) }
-  }
- }
+ return m.setRestartPolicyLocked(siteID,policy)
+}
+func (m *ProcessManager) setRestartPolicyLocked(siteID,policy string)error{
+ if !validSiteID(siteID){return fmt.Errorf("invalid site id")}
+ if !validRestartPolicy(policy){return fmt.Errorf("restart policy must be never, on-failure or always")}
+ policies,err:=readRestartPolicies(m.DataRoot);if err!=nil{return err};policies[siteID]=policy
+ if err:=writeRestartPolicies(m.DataRoot,policies);err!=nil{return fmt.Errorf("persist restart policy: %w",err)}
+ if m.registry!=nil{if record,ok:=m.registry.Get(siteID);ok{record.RestartPolicy=policy;if err:=m.registry.Save(record);err!=nil{return fmt.Errorf("update running process policy: %w",err)}}}
  return nil
 }
 
