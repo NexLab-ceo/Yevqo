@@ -12,7 +12,7 @@
 Повторный запуск соответствующего установщика копирует `scripts/termux-boot.sh` в:
 
 ```sh
-~/.termux/boot/00-veltrix
+~/.termux/boot/00-yevqo
 ```
 
 Скрипт:
