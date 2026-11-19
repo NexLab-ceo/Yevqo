@@ -131,7 +131,7 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	switch r.Method {
 	case http.MethodGet:
-		rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT id,device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE user_id=? ORDER BY created_at DESC`,u.ID)
+		projectID:=int64(0); if raw:=r.URL.Query().Get("project_id"); raw!="" { parsed,parseErr:=strconv.ParseInt(raw,10,64); if parseErr!=nil||parsed<1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }; var owned int; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id=?`,parsed,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }; projectID=parsed }; query:=`SELECT id,device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE user_id=?`; args:=[]interface{}{u.ID}; if projectID>0 { query+=` AND id IN (SELECT pds.database_server_id FROM project_database_servers pds WHERE pds.project_id=?)`;args=append(args,projectID) }; query+=` ORDER BY created_at DESC`; rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
 		if err!=nil{apiError(w,shared.ErrInternal("could not load database servers"));return}
 		defer rows.Close();out:=make([]map[string]interface{},0)
 		for rows.Next(){var id,did int64;var name,engine,version,dir,network,status string;var port int;var created time.Time
