@@ -13,7 +13,7 @@
   {label:'MANAGEMENT',items:[['Team & Permissions','/team','♙'],['Integrations','/integrations','⌘'],['Backup & Restore','/backups','⤓'],['Maintenance','/maintenance','⚙']]}
  ];
  $: pathParts=$page.url.pathname.split('/');
- $: projectId=(pathParts[1]==='projects'&&/^\\d+$/.test(pathParts[2]||'')?pathParts[2]:'')||$page.url.searchParams.get('project_id')||'';
+ $: projectId=(pathParts[1]==='projects'&&Number.isInteger(Number(pathParts[2]))&&Number(pathParts[2])>0?pathParts[2]:'')||$page.url.searchParams.get('project_id')||'';
  $: inProject=!!projectId;
  $: projectGroups=inProject?[
   {label:'PROJECT',items:[['Project overview',`/projects/${projectId}`,'▦']]},
