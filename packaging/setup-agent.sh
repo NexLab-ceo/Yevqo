@@ -64,15 +64,40 @@ mkdir -p "$BOOT_DIR"
 cat > "$BOOT_DIR/00-veltrix" <<'BOOT'
 #!/data/data/com.termux/files/usr/bin/bash
 set -u
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 LOG_DIR="${HOME}/.local/var/log"
 mkdir -p "$LOG_DIR"
 exec >>"$LOG_DIR/veltrix-boot.log" 2>&1
+echo "[$(date -Iseconds)] Yevqo boot hook started"
+
+# Keep Android from suspending the device while Yevqo services are active.
 command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock || true
+
+# The Agent-only package can coexist with a local Control Plane. Start the
+# existing MariaDB instance before bringing the Control Plane service up.
+if command -v mysqld_safe >/dev/null 2>&1; then
+  if ! pgrep -x mariadbd >/dev/null 2>&1 && ! pgrep -x mysqld >/dev/null 2>&1; then
+    echo "Starting existing MariaDB data directory"
+    nohup mysqld_safe >/dev/null 2>&1 &
+  fi
+  ready=0
+  for i in $(seq 1 45); do
+    if mysqladmin ping --silent >/dev/null 2>&1; then ready=1; break; fi
+    sleep 1
+  done
+  if [ "$ready" -ne 1 ]; then
+    echo "MariaDB did not become ready; Control Plane will not be started"
+    exit 1
+  fi
+fi
+
 for service in veltrix-control veltrix-agent; do
-  if [ -d "${PREFIX}/var/service/$service" ] || [ -L "${PREFIX}/var/service/$service" ]; then
-    sv up "$service" || true
+  if [ -d "$PREFIX/var/service/$service" ] || [ -L "$PREFIX/var/service/$service" ]; then
+    echo "Starting $service"
+    sv up "$service" || echo "Could not start $service"
   fi
 done
+echo "[$(date -Iseconds)] Yevqo boot hook finished"
 BOOT
 chmod 700 "$BOOT_DIR/00-veltrix"
 if command -v sv >/dev/null 2>&1; then sv up veltrix-agent || warn "Could not start Agent service now"; fi
