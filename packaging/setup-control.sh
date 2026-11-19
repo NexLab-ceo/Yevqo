@@ -1,13 +1,13 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
+DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/yevqo-control}"
 if [ ! -d /sdcard ]; then
   echo "Shared storage is not available. Run termux-setup-storage and grant permission first." >&2
   exit 1
 fi
 CONFIG_FILE="$DATA_ROOT/config/config.json"
-SERVICE_DIR="$PREFIX/var/service/veltrix-control"
+SERVICE_DIR="$PREFIX/var/service/yevqo-control"
 log(){ printf '==> %s\n' "$*"; }
 warn(){ printf 'WARNING: %s\n' "$*" >&2; }
 command -v mysql >/dev/null 2>&1 || { echo "MariaDB client missing; install package mariadb first" >&2; exit 1; }
@@ -81,17 +81,17 @@ cat > "$SERVICE_DIR/run" <<'RUN'
 set -e
 exec 2>&1
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-BIN="$PREFIX/bin/veltrix-control"
-DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
+BIN="$PREFIX/bin/yevqo-control"
+DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/yevqo-control}"
 [ -x "$BIN" ] || { echo "Control Plane binary missing: $BIN"; exit 1; }
 exec "$BIN" -data "$DATA_ROOT"
 RUN
 chmod 700 "$SERVICE_DIR/run"
-sv-enable veltrix-control >/dev/null 2>&1 || true
+sv-enable yevqo-control >/dev/null 2>&1 || true
 
 BOOT_DIR="$HOME/.termux/boot"
 mkdir -p "$BOOT_DIR"
 if [ -f "$SHARE/termux-boot.sh" ]; then cp "$SHARE/termux-boot.sh" "$BOOT_DIR/00-veltrix"; chmod 700 "$BOOT_DIR/00-veltrix"; fi
-sv up veltrix-control || warn "Could not start Control Plane service now"
+sv up yevqo-control || warn "Could not start Control Plane service now"
 log "Control Plane configured at http://127.0.0.1:8080"
-log "Status: sv status veltrix-control"
+log "Status: sv status yevqo-control"
