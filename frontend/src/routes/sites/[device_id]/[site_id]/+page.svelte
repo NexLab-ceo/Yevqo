@@ -40,6 +40,7 @@
     const logReconnectDelays = [1000, 2000, 5000, 10000, 20000, 30000];
     let activeTab = 'general';
     let domainDraft = '';
+    let domainTunnelToken = '';
     let domainBusy = false;
     let releases = [];
     let previews = [];
@@ -830,9 +831,11 @@
             <p class="muted">Домен принадлежит этому сайту. Для публичного HTTPS настройте Cloudflare Tunnel и DNS в Cloudflare.</p>
             <label class="field-label" for="site-domain">Primary domain</label>
             <input id="site-domain" class="input" bind:value={domainDraft} placeholder="app.example.com" autocomplete="off"/>
+            <label class="field-label" for="site-tunnel-token">Cloudflare Tunnel token</label>
+            <input id="site-tunnel-token" class="input" type="password" bind:value={domainTunnelToken} placeholder="Оставьте пустым, чтобы использовать сохранённый token" autocomplete="new-password"/>
             <div class="actions">
-                <Button variant="primary" loading={domainBusy} disabled={domainBusy || !online} on:click={async()=>{domainBusy=true;const r=await updateSiteDomain(deviceId,siteId,domainDraft.trim(),'');domainBusy=false;if(r.ok){notify(r.data?.message||'Домен обновлён','success');await refresh()}else notify(r.error||'Не удалось сохранить домен','error')}}>Save domain</Button>
-                <Button variant="ghost" disabled={domainBusy||!domainDraft} on:click={()=>domainDraft=''}>Clear</Button>
+                <Button variant="primary" loading={domainBusy} disabled={domainBusy || !online} on:click={async()=>{domainBusy=true;const r=await updateSiteDomain(deviceId,siteId,domainDraft.trim(),domainTunnelToken.trim());domainBusy=false;if(r.ok){domainTunnelToken='';if(r.data?.ok){notify(r.data?.message||'Домен обновлён','success')}else{notify(r.data?.message||'Домен сохранён, но Tunnel не активирован','error')}await refresh()}else notify(r.error||'Не удалось сохранить домен','error')}}>Save domain</Button>
+                <Button variant="danger" disabled={domainBusy||!site?.domain||!online} on:click={async()=>{if(!confirm('Удалить домен и остановить Cloudflare Tunnel?'))return;domainBusy=true;const r=await updateSiteDomain(deviceId,siteId,'','');domainBusy=false;if(r.ok){notify('Домен удалён','success');domainDraft='';await refresh()}else notify(r.error||'Не удалось удалить домен','error')}}>Remove domain</Button>
             </div>
             <p class="muted">Cloudflare API zone и DNS automation остаются в настройках интеграции проекта/рабочего пространства; секреты туннеля не отображаются в интерфейсе.</p>
         </Card>
