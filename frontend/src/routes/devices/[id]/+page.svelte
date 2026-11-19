@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, deleteDevice, deleteSite, sendCommand, listAppTemplates } from '$lib/api.js';
+    import { getDevice, deleteDevice, deleteSite, sendCommand, listAppTemplates, attachProjectSite } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -157,6 +157,15 @@
             busy = false;
             notify(created.error || created.data?.message || 'Не удалось создать сайт', 'error');
             return;
+        }
+
+        const projectId = $page.url.searchParams.get('project_id');
+        if (projectId) {
+            const linked = await attachProjectSite(projectId, Number(device.id), siteId);
+            if (!linked.ok) {
+                busy = false;
+                notify('Сайт создан, но не удалось добавить его в проект: ' + (linked.error || 'ошибка привязки'), 'warning');
+            }
         }
 
         // Go starters are compiled on the target Agent before first start.
