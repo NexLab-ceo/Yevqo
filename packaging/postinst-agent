@@ -2,8 +2,8 @@
 set -e
 PREFIX="/data/data/com.termux/files/usr"
 if [ -r /dev/tty ]; then
-  "$PREFIX/bin/veltrix-setup-agent" </dev/tty >/dev/tty 2>&1
+  "$PREFIX/bin/yevqo-setup-agent" </dev/tty >/dev/tty 2>&1
 else
-  echo "VELTRIX Agent installed. Run: veltrix-setup-agent to enter the server URL and device token."
+  echo "YEVQO Agent installed. Run: yevqo-setup-agent to enter the server URL and device token."
 fi
 exit 0
