@@ -38,7 +38,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 			SELECT p.id,p.name,p.slug,p.description,p.created_at,p.updated_at,
 			(SELECT COUNT(*) FROM project_devices pd WHERE pd.project_id=p.id),
 			(SELECT COUNT(*) FROM project_sites ps WHERE ps.project_id=p.id)
-			FROM projects p WHERE p.user_id=? ORDER BY p.updated_at DESC`, u.ID)
+			FROM projects p WHERE p.user_id IN (SELECT owner_user_id FROM workspace_members WHERE member_user_id=? AND status='active' UNION SELECT ?) ORDER BY p.updated_at DESC`, u.ID, u.ID)
 		if err != nil { apiError(w, shared.ErrInternal("could not load projects")); return }
 		defer rows.Close()
 		out := make([]map[string]interface{},0)
@@ -59,7 +59,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		if err!=nil { apiError(w,shared.ErrBadRequest("project name is already in use"));return }
 		id,_:=res.LastInsertId()
 		for _, env := range []struct{name,slug,description string; protected bool}{{"Production","production","Live production workloads",true},{"Development","development","Development and integration workloads",false},{"Staging","staging","Pre-production validation workloads",false}} {
-			if _,envErr:=s.db.conn.ExecContext(r.Context(),`INSERT INTO project_environments(project_id,name,slug,description,is_protected) VALUES(?,?,?,?,?)`,id,env.name,env.slug,env.description,env.protected);envErr!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM projects WHERE id=? AND user_id=?`,id,u.ID);apiError(w,shared.ErrInternal("could not initialize project environments"));return }
+			if _,envErr:=s.db.conn.ExecContext(r.Context(),`INSERT INTO project_environments(project_id,name,slug,description,is_protected) VALUES(?,?,?,?,?)`,id,env.name,env.slug,env.description,env.protected);envErr!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM projects WHERE id=? AND user_id=?`,id,ownerID);apiError(w,shared.ErrInternal("could not initialize project environments"));return }
 		}
 		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"name":in.Name,"slug":slug,"description":in.Description}})
 	default: http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
@@ -72,13 +72,17 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 	if len(parts)==0 || parts[0]=="" { http.NotFound(w,r);return }
 	id,err:=strconv.ParseInt(parts[0],10,64); if err!=nil || id<1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }
 	var name,slug,description string
-	err=s.db.conn.QueryRowContext(r.Context(),`SELECT name,slug,description FROM projects WHERE id=? AND user_id=?`,id,u.ID).Scan(&name,&slug,&description)
+	var ownerID int64
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT user_id,name,slug,description FROM projects WHERE id=?`,id).Scan(&ownerID,&name,&slug,&description)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("project not found"));return }; if err!=nil { apiError(w,shared.ErrInternal("could not load project"));return }
+	action := "project.manage"
+	if r.Method == http.MethodGet { action = "project.read" }
+	if err := s.authorizeWorkspace(r.Context(), ownerID, u.ID, action); err != nil { apiError(w, err); return }
 	if len(parts)==2 && parts[1]=="databases" && r.Method==http.MethodPost {
 		var in struct { ServerID int64 `json:"server_id"` }
 		if err:=decodeJSON(r,&in);err!=nil||in.ServerID<1 { apiError(w,shared.ErrBadRequest("invalid database server"));return }
 		var owned int
-		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("database server not found"));return }
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,ownerID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("database server not found"));return }
 		if _,err:=s.db.conn.ExecContext(r.Context(),`INSERT IGNORE INTO project_database_servers(project_id,database_server_id) VALUES(?,?)`,id,in.ServerID);err!=nil { apiError(w,shared.ErrInternal("could not attach database server"));return }
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
 	}
@@ -86,7 +90,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 		var in struct { DeviceID int64 `json:"device_id"`; SiteID string `json:"site_id"` }
 		if err:=decodeJSON(r,&in);err!=nil { apiError(w,shared.ErrBadRequest("invalid JSON"));return }
 		var count int
-		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM devices WHERE id=? AND user_id=?`,in.DeviceID,u.ID).Scan(&count);err!=nil || count!=1 { apiError(w,shared.ErrNotFound("device not found"));return }
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM devices WHERE id=? AND user_id=?`,in.DeviceID,ownerID).Scan(&count);err!=nil || count!=1 { apiError(w,shared.ErrNotFound("device not found"));return }
 		if parts[1]=="devices" {
 			_,err=s.db.conn.ExecContext(r.Context(),`INSERT IGNORE INTO project_devices(project_id,device_id) VALUES(?,?)`,id,in.DeviceID)
 		} else {
@@ -98,17 +102,17 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT d.id,d.hostname,d.device_id FROM project_devices pd JOIN devices d ON d.id=pd.device_id WHERE pd.project_id=? AND d.user_id=?`,id,u.ID)
+		rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT d.id,d.hostname,d.device_id FROM project_devices pd JOIN devices d ON d.id=pd.device_id WHERE pd.project_id=? AND d.user_id=?`,id,ownerID)
 		if err!=nil { apiError(w,shared.ErrInternal("could not load project devices"));return }
 		devices:=make([]map[string]interface{},0); for rows.Next(){var did int64;var host,uuid string;if rows.Scan(&did,&host,&uuid)==nil{devices=append(devices,map[string]interface{}{"id":did,"hostname":host,"device_id":uuid})}};rows.Close()
-		srows,err:=s.db.conn.QueryContext(r.Context(),`SELECT ps.device_id,ps.site_id,d.hostname FROM project_sites ps JOIN devices d ON d.id=ps.device_id WHERE ps.project_id=? AND d.user_id=?`,id,u.ID)
+		srows,err:=s.db.conn.QueryContext(r.Context(),`SELECT ps.device_id,ps.site_id,d.hostname FROM project_sites ps JOIN devices d ON d.id=ps.device_id WHERE ps.project_id=? AND d.user_id=?`,id,ownerID)
 		if err!=nil { apiError(w,shared.ErrInternal("could not load project sites"));return }
 		sites:=make([]map[string]interface{},0);for srows.Next(){var did int64;var sid,host string;if srows.Scan(&did,&sid,&host)==nil{sites=append(sites,map[string]interface{}{"device_id":did,"site_id":sid,"device_name":host})}};srows.Close()
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"name":name,"slug":slug,"description":description},"devices":devices,"sites":sites})
 	case http.MethodPatch:
 		var in projectInput;if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 		in.Name=strings.TrimSpace(in.Name);if len(in.Name)<2||len(in.Name)>80{apiError(w,shared.ErrBadRequest("project name must be 2–80 characters"));return}
-		_,err:=s.db.conn.ExecContext(r.Context(),`UPDATE projects SET name=?,slug=?,description=? WHERE id=? AND user_id=?`,in.Name,projectSlug(in.Name),strings.TrimSpace(in.Description),id,u.ID)
+		_,err:=s.db.conn.ExecContext(r.Context(),`UPDATE projects SET name=?,slug=?,description=? WHERE id=? AND user_id=?`,in.Name,projectSlug(in.Name),strings.TrimSpace(in.Description),id,ownerID)
 		if err!=nil{apiError(w,shared.ErrBadRequest("project name is already in use"));return};writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	case http.MethodDelete:
 		// Удаляется только группировка. Устройства, сайты и их данные остаются нетронутыми.
@@ -142,7 +146,7 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	switch r.Method {
 	case http.MethodGet:
-		projectID:=int64(0); if raw:=r.URL.Query().Get("project_id"); raw!="" { parsed,parseErr:=strconv.ParseInt(raw,10,64); if parseErr!=nil||parsed<1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }; var owned int; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id=?`,parsed,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }; projectID=parsed }; query:=`SELECT id,device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE user_id=?`; args:=[]interface{}{u.ID}; if projectID>0 { query+=` AND id IN (SELECT pds.database_server_id FROM project_database_servers pds WHERE pds.project_id=?)`;args=append(args,projectID) }; query+=` ORDER BY created_at DESC`; rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
+		projectID:=int64(0); if raw:=r.URL.Query().Get("project_id"); raw!="" { parsed,parseErr:=strconv.ParseInt(raw,10,64); if parseErr!=nil||parsed<1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }; var owned int; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id IN (SELECT owner_user_id FROM workspace_members WHERE member_user_id=? AND status='active' UNION SELECT ?)`,parsed,u.ID,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }; projectID=parsed }; query:=`SELECT id,device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE user_id=?`; args:=[]interface{}{u.ID}; if projectID>0 { query+=` AND id IN (SELECT pds.database_server_id FROM project_database_servers pds WHERE pds.project_id=?)`;args=append(args,projectID) }; query+=` ORDER BY created_at DESC`; rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
 		if err!=nil{apiError(w,shared.ErrInternal("could not load database servers"));return}
 		defer rows.Close();out:=make([]map[string]interface{},0)
 		for rows.Next(){var id,did int64;var name,engine,version,dir,network,status string;var port int;var created time.Time
