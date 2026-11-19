@@ -139,7 +139,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/sites/", s.RequireAuth(s.handleSiteByID))
 	// Workspace and operations modules.
 	s.mux.HandleFunc("/api/projects", s.RequireAuth(s.handleProjects))
-	s.mux.HandleFunc("/api/projects/", s.RequireAuth(s.handleProjectByID))
+	s.mux.HandleFunc("/api/projects/", s.RequireAuth(func(w http.ResponseWriter, r *http.Request) { if strings.Contains(r.URL.Path, "/environments") { s.handleProjectEnvironments(w, r); return }; s.handleProjectByID(w, r) }))
 	s.mux.HandleFunc("/api/databases/servers", s.RequireAuth(s.handleDatabaseServers))
 	s.mux.HandleFunc("/api/databases/servers/", s.RequireAuth(s.handleDatabaseServerByID))
 	s.mux.HandleFunc("/api/databases", s.RequireAuth(s.handleDatabaseCollection))
