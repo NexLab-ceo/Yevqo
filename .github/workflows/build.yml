@@ -92,7 +92,7 @@ jobs:
             "build-deb-all/$PREFIX_ROOT/share/veltrix/scripts" \
             "build-deb-all/$PREFIX_ROOT/share/veltrix/systemd" \
             "build-deb-agent/DEBIAN" \
-            "build-deb-agent/$PREFIX_ROOT/bin" \\
+            "build-deb-agent/$PREFIX_ROOT/bin" \
             "build-deb-agent/$PREFIX_ROOT/share/veltrix"
 
           install -m 0755 bin/veltrix-control "build-deb-all/$PREFIX_ROOT/bin/veltrix-control"
