@@ -200,7 +200,7 @@ export async function listDatabaseServers(projectId = '') { return request('GET'
 export async function createDatabaseServer(input) { return request('POST', '/api/databases/servers', input); }
 export async function getDatabaseServer(id) { return request('GET', `/api/databases/servers/${id}`); }
 export async function deleteDatabaseServer(id) { return request('DELETE', `/api/databases/servers/${id}`); }
-export async function listDatabases() { return request('GET', '/api/databases'); }
+export async function listDatabases(projectId = '') { return request('GET', '/api/databases' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
 
 // === Operations ===
 export async function listLogs(limit = 100) { return request('GET', `/api/logs?limit=${limit}`); }
