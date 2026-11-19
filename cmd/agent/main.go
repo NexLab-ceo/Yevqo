@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"veltrix/internal/agent"
@@ -15,7 +16,18 @@ import (
 
 func main() {
 	// Флаги.
-	configPath := flag.String("config", "", "path to agent.json (default: "+agent.DefaultConfigPath+")")
+	prefix := os.Getenv("PREFIX")
+	if prefix == "" { prefix = "/data/data/com.termux/files/usr" }
+	defaultConfigPath := os.Getenv("VELTRIX_AGENT_CONFIG")
+	if defaultConfigPath == "" {
+		privateConfig := filepath.Join(prefix, "var", "lib", "veltrix-agent", "config", "agent.json")
+		if _, err := os.Stat(privateConfig); err == nil {
+			defaultConfigPath = privateConfig
+		} else {
+			defaultConfigPath = agent.DefaultConfigPath
+		}
+	}
+	configPath := flag.String("config", defaultConfigPath, "path to agent.json (default: "+defaultConfigPath+")")
 	flag.Parse()
 
 	// 1. Загружаем конфиг.
