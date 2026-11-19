@@ -22,7 +22,7 @@ termux-setup-storage
 
 ```sh
 cd ~/storage/downloads
-dpkg -i ./veltrix-all_0.1.0-dev.977_aarch64.deb
+dpkg -i ./yevqo-all_0.1.0-dev.977_aarch64.deb
 ```
 
 If the ZIP was extracted to another directory, change the `cd` path accordingly. The package targets Android/Termux aarch64. The Agent-only package is also included in the artifact; both packages now carry the same shared Termux boot hook.
@@ -48,8 +48,8 @@ Use `ws://127.0.0.1:8080/ws` as the Control Plane WebSocket URL and paste the pa
 Check service state and logs:
 
 ```sh
-sv status veltrix-control
-svlogtail veltrix-control
+sv status yevqo-control
+svlogtail yevqo-control
 ```
 
 Open the local dashboard on the same phone:
@@ -93,8 +93,8 @@ Useful diagnostics:
 uname -a
 uname -m
 pkg list-installed | grep -E 'termux-services|mariadb|golang|php|git'
-sv status veltrix-control
-sv status veltrix-agent
+sv status yevqo-control
+sv status yevqo-agent
 ```
 
 ## Important limitations
