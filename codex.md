@@ -88,7 +88,7 @@ This is a conservative starting snapshot based on the repository documentation a
 | Phase / area | Initial status | Notes |
 |---|---|---|
 | P0 — Go Control Plane and Agent foundation | PARTIAL | Core services and Android/Termux packaging are present; re-check full install/upgrade and device runtime coverage. |
-| P0 — Android package build and CI | VERIFY | CI/package workflows exist; verify latest successful runs before claiming current green status. |
+| P0 — Android package build and CI | DONE | Verified on code head a96d98e: Go tests, Android ARM64 cross-compilation, frontend build, Debian package assembly and metadata checks passed (build run 44370256506); PR checks passed (run 44370256837). Physical Android startup is tracked separately under P3. |
 | P0 — Device pairing and one-device Free limit | VERIFY | Preserve one connected device per Free account; reconnect same device; reject a second device. |
 | P1 — Project/site lifecycle | PARTIAL | Per-site Environment tab supports encrypted custom variables, masked listing, add/update/delete, search and .env bulk import; a shared set currently applies to Build and Runtime. Built-in runtimes plus Custom Language runtime; arbitrary installed Termux tools and in-site executables can be launched with explicit shell-free start commands. Full end-to-end runtime coverage remains open. |
 | P1 — Git deployments, immutable releases, rollback | PARTIAL | Deployment/release flow is documented; verify edge cases and current test coverage. |
