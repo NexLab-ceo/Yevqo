@@ -134,28 +134,29 @@ if [ ! -f "proto/veltrix.pb.go" ]; then
 fi
 
 mkdir -p bin
-go build -ldflags="-s -w" -o bin/yevqo-agent ./cmd/agent
-log "  → bin/yevqo-agent ($(du -h bin/yevqo-agent | cut -f1))"
+go build -ldflags="-s -w" -o bin/yevqo ./cmd/agent
+log "  → bin/yevqo ($(du -h bin/yevqo | cut -f1))"
 
 # ============================================================
 # 5. УСТАНОВКА БИНАРНИКА
 # ============================================================
 log "installing binary to \$PREFIX/bin..."
-cp bin/yevqo-agent "$PREFIX/bin/yevqo-agent"
-chmod +x "$PREFIX/bin/yevqo-agent"
+cp bin/yevqo "$PREFIX/bin/yevqo"
+chmod +x "$PREFIX/bin/yevqo"
 
 # ============================================================
 # 6. TERMUX-SERVICES
 # ============================================================
 log "setting up service..."
-SERVICE_DIR="$PREFIX/var/service/yevqo-agent"
+SERVICE_DIR="$PREFIX/var/service/yevqo"
 mkdir -p "$SERVICE_DIR"
 cp systemd/yevqo-agent.sh "$SERVICE_DIR/run"
 # Bind the service to the exact config path selected by this installer.
 sed -i "s|^CONFIG=.*|CONFIG=\"$CONFIG_FILE\"|" "$SERVICE_DIR/run"
+sed -i "s|yevqo-agent|yevqo|g" "$SERVICE_DIR/run"
 chmod +x "$SERVICE_DIR/run"
 
-sv-enable yevqo-agent 2>/dev/null || true
+sv-enable yevqo 2>/dev/null || true
 
 # Termux:Boot hook. The Termux:Boot Android add-on must also be installed by the user.
 BOOT_DIR="$HOME/.termux/boot"
@@ -196,21 +197,21 @@ fi
 # ГОТОВО
 # ============================================================
 log ""
-log " Yevqo Agent installed"
+log " Yevqo installed"
 log ""
-log "  binary:   $PREFIX/bin/yevqo-agent"
+log "  binary:   $PREFIX/bin/yevqo"
 log "  config:   $CONFIG_FILE"
 log "  data:     $DATA_ROOT"
 log "  service:  $SERVICE_DIR"
 log ""
-log "  start:    sv start yevqo-agent"
-log "  stop:     sv stop yevqo-agent"
-log "  status:   sv status yevqo-agent"
-log "  logs:     svlogtail yevqo-agent"
+log "  start:    sv start yevqo"
+log "  stop:     sv stop yevqo"
+log "  status:   sv status yevqo"
+log "  logs:     svlogtail yevqo"
 log ""
 log "  Next steps:"
 log "  1. Run 'tailscale up' and log in (if not done yet)"
 log "  2. Copy your Tailscale IP (tailscale ip -4)"
 log "  3. In VELTRIX panel, add a device with this IP"
-log "  4. Start the agent: sv start yevqo-agent"
+log "  4. Start the agent: sv start yevqo"
 log ""
