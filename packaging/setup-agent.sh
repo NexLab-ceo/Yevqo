@@ -6,8 +6,10 @@ CONFIG_FILE="$DATA_ROOT/config/agent.json"
 SERVICE_DIR="$PREFIX/var/service/veltrix-agent"
 BOOT_DIR="$HOME/.termux/boot"
 
-log(){ printf '==> %s\n' "$*"; }
-warn(){ printf 'WARNING: %s\n' "$*" >&2; }
+log(){ printf '==> %s
+' "$*"; }
+warn(){ printf 'WARNING: %s
+' "$*" >&2; }
 
 if [ ! -d /sdcard ]; then
   warn "Shared storage is not mounted. Run: termux-setup-storage"
@@ -17,13 +19,16 @@ mkdir -p "$DATA_ROOT"/{config,sites,databases,logs,cloudflared,backups}
 chmod 700 "$DATA_ROOT" "$DATA_ROOT/config" "$DATA_ROOT/backups" 2>/dev/null || true
 
 if [ ! -s "$CONFIG_FILE" ]; then
-  printf 'VELTRIX Agent setup\n'
+  printf 'VELTRIX Agent setup
+'
   read -r -p 'Control Plane WebSocket URL (example: ws://192.168.1.10:8080/ws): ' SERVER_URL
   case "$SERVER_URL" in ws://*|wss://*) ;; *) echo "URL must start with ws:// or wss://" >&2; exit 1;; esac
   read -r -s -p 'Agent pairing code from Profile > Agent pairing code: ' TOKEN
-  printf '\n'
+  printf '
+'
   [ -n "$TOKEN" ] || { echo "Token is required" >&2; exit 1; }
-  DEVICE_ID="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+  DEVICE_ID="$(od -An -N16 -tx1 /dev/urandom | tr -d ' 
+')"
   HOSTNAME_VALUE="$(getprop net.hostname 2>/dev/null || hostname 2>/dev/null || echo android-device)"
   json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
   SERVER_JSON="$(json_escape "$SERVER_URL")"
@@ -67,7 +72,8 @@ if [ ! -s "$BOOT_SOURCE" ]; then
   echo "Reinstall the current Yevqo package before enabling Agent startup." >&2
   exit 1
 fi
-install -m 0700 "$BOOT_SOURCE" "$BOOT_DIR/00-veltrix"\nif command -v sv >/dev/null 2>&1; then sv up veltrix-agent || warn "Could not start Agent service now"; fi
+install -m 0700 "$BOOT_SOURCE" "$BOOT_DIR/00-veltrix"
+if command -v sv >/dev/null 2>&1; then sv up veltrix-agent || warn "Could not start Agent service now"; fi
 
 log "Agent configured."
 log "Config: $CONFIG_FILE"
