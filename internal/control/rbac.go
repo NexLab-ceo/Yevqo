@@ -15,7 +15,7 @@ func CanWorkspaceAction(role, action string) bool {
 		return true
 	case "developer":
 		switch action {
-		case "device.read", "device.metrics",
+		case "project.read", "environment.read", "device.read", "device.metrics",
 			"create_site", "start_site", "stop_site", "restart", "deploy", "rebuild", "stop", "rollback",
 			"git_pull", "get_logs", "get_metrics", "get_site_metrics", "analyze_site_build",
 			"build_site", "cancel_build", "list_build_history", "get_build_history", "preview.deploy", "preview.delete", "list_site_releases", "rollback_site_release", "cancel_deployment_job":
@@ -32,4 +32,16 @@ func (s *Server) authorizeWorkspace(ctx context.Context, ownerID, actorID int64,
 		return shared.ErrForbidden("workspace permission denied")
 	}
 	return nil
+}
+
+
+// authorizeProjectAction resolves the owning workspace and enforces its role.
+// Projects remain owned by the workspace owner; active members receive only
+// the actions allowed by their assigned role.
+func (s *Server) authorizeProjectAction(ctx context.Context, projectID, actorID int64, action string) error {
+	var ownerID int64
+	if err := s.db.conn.QueryRowContext(ctx, "SELECT user_id FROM projects WHERE id=?", projectID).Scan(&ownerID); err != nil {
+		return err
+	}
+	return s.authorizeWorkspace(ctx, ownerID, actorID, action)
 }
