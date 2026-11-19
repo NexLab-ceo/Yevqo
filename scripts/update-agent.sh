@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
-REPO="NexLab-ceo/veltrix-dock"
+REPO="NexLab-ceo/veltrix"
 API="https://api.github.com/repos/$REPO/releases/latest"
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 TMP="$(mktemp -d)"
