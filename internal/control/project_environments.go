@@ -36,6 +36,12 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	var ownerID int64
+	if err := s.db.conn.QueryRowContext(r.Context(), "SELECT user_id FROM projects WHERE id=?", projectID).Scan(&ownerID); err != nil {
+		apiError(w, shared.ErrNotFound("project not found"))
+		return
+	}
+
 	if len(parts) == 2 {
 		switch r.Method {
 		case http.MethodGet:
@@ -146,7 +152,7 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 		}
 		switch r.Method {
 		case http.MethodGet:
-			rows, err := s.db.conn.QueryContext(r.Context(), "SELECT es.device_id,es.site_id,COALESCE(d.hostname,'Android host') FROM project_environment_sites es JOIN devices d ON d.id=es.device_id WHERE es.environment_id=? AND es.project_id=? AND d.user_id=? ORDER BY es.site_id", environmentID, projectID, u.ID)
+			rows, err := s.db.conn.QueryContext(r.Context(), "SELECT es.device_id,es.site_id,COALESCE(d.hostname,'Android host') FROM project_environment_sites es JOIN devices d ON d.id=es.device_id WHERE es.environment_id=? AND es.project_id=? AND d.user_id=? ORDER BY es.site_id", environmentID, projectID, ownerID)
 			if err != nil {
 				apiError(w, shared.ErrInternal("could not load environment applications"))
 				return
@@ -177,7 +183,7 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			var linked int
-			err = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM project_sites ps JOIN devices d ON d.id=ps.device_id JOIN sites st ON st.device_id=ps.device_id AND st.site_id=ps.site_id WHERE ps.project_id=? AND ps.device_id=? AND ps.site_id=? AND d.user_id=?", projectID, in.DeviceID, in.SiteID, u.ID).Scan(&linked)
+			err = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM project_sites ps JOIN devices d ON d.id=ps.device_id JOIN sites st ON st.device_id=ps.device_id AND st.site_id=ps.site_id WHERE ps.project_id=? AND ps.device_id=? AND ps.site_id=? AND d.user_id=?", projectID, in.DeviceID, in.SiteID, ownerID).Scan(&linked)
 			if err != nil || linked != 1 {
 				apiError(w, shared.ErrNotFound("application is not assigned to this project"))
 				return
