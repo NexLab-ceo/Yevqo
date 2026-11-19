@@ -141,6 +141,8 @@ Before finishing every task:
 
 - 2026-11-19 — Corrected the Agent package verification block after CI's workflow-file parser reported a malformed line. The verification now checks the Agent updater and shared boot-hook paths with simple content matches. Awaiting the build/check run for the corrected workflow.
 
+- 2026-11-19 — Fixed a second CI issue in the package manifest: the new Agent share-directory entry had an extra shell continuation slash, which broke the `mkdir -p` command. Corrected it to a single continuation; verify the next package workflow before marking this task complete.
+
 ## Implementation guidelines
 
 ### Go
