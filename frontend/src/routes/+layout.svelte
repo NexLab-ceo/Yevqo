@@ -12,8 +12,8 @@
   {label:'OPERATIONS',items:[['Monitoring','/monitoring','⌁'],['Logs','/logs','≡'],['Notifications','/notifications','♧'],['Reports & Export','/reports','▤']]},
   {label:'MANAGEMENT',items:[['Team & Permissions','/team','♙'],['Integrations','/integrations','⌘'],['Backup & Restore','/backups','⤓'],['Maintenance','/maintenance','⚙']]}
  ];
- $: projectMatch=$page.url.pathname.match(/^\\/projects\\/(\\d+)(?:\\/|$)/);
- $: projectId=projectMatch?.[1]||$page.url.searchParams.get('project_id')||'';
+ $: pathParts=$page.url.pathname.split('/');
+ $: projectId=(pathParts[1]==='projects'&&/^\\d+$/.test(pathParts[2]||'')?pathParts[2]:'')||$page.url.searchParams.get('project_id')||'';
  $: inProject=!!projectId;
  $: projectGroups=inProject?[
   {label:'PROJECT',items:[['Project overview',`/projects/${projectId}`,'▦']]},
