@@ -62,14 +62,14 @@ func (c *apiClient) post(path string, body any) (apiResponse, error) {
 }
 
 func run(args []string, getenv func(string) string, stdout, stderr io.Writer) int {
-	global := flag.NewFlagSet("yevqo", flag.ContinueOnError)
+	global := flag.NewFlagSet("yevqo-cli", flag.ContinueOnError)
 	global.SetOutput(stderr)
 	server := global.String("server", getenv("YEVQO_URL"), "Control Plane base URL")
 	session := global.String("session", getenv("YEVQO_SESSION"), "Control Plane session cookie")
 	if err := global.Parse(args); err != nil { return 2 }
 	rest := global.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(stderr, "usage: yevqo [--server URL] [--session COOKIE] <deploy|stop|logs> <device-id> <site-id>")
+		fmt.Fprintln(stderr, "usage: yevqo-cli [--server URL] [--session COOKIE] <deploy|stop|logs> <device-id> <site-id>")
 		return 2
 	}
 	if len(rest) != 3 {
