@@ -66,13 +66,25 @@ chmod 700 "$SERVICE_DIR/run"
 sv-enable veltrix-agent >/dev/null 2>&1 || true
 
 mkdir -p "$BOOT_DIR"
-BOOT_SOURCE="$PREFIX/share/veltrix/termux-boot.sh"
-if [ ! -s "$BOOT_SOURCE" ]; then
-  echo "Shared Termux boot hook is missing: $BOOT_SOURCE" >&2
-  echo "Reinstall the current Yevqo package before enabling Agent startup." >&2
-  exit 1
+if [ ! -s "$BOOT_DIR/00-veltrix" ]; then
+  cat > "$BOOT_DIR/00-veltrix" <<'BOOT'
+#!/data/data/com.termux/files/usr/bin/bash
+set -u
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+LOG_DIR="${HOME}/.local/var/log"
+mkdir -p "$LOG_DIR"
+exec >>"$LOG_DIR/veltrix-boot.log" 2>&1
+echo "[$(date -Iseconds)] Yevqo Agent boot hook started"
+command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock || true
+if [ -d "$PREFIX/var/service/veltrix-agent" ] || [ -L "$PREFIX/var/service/veltrix-agent" ]; then
+  sv up veltrix-agent || echo "Could not start veltrix-agent"
 fi
-install -m 0700 "$BOOT_SOURCE" "$BOOT_DIR/00-veltrix"
+echo "[$(date -Iseconds)] Yevqo Agent boot hook finished"
+BOOT
+  chmod 700 "$BOOT_DIR/00-veltrix"
+else
+  log "Existing Termux boot hook preserved: $BOOT_DIR/00-veltrix"
+fi
 if command -v sv >/dev/null 2>&1; then sv up veltrix-agent || warn "Could not start Agent service now"; fi
 
 log "Agent configured."
