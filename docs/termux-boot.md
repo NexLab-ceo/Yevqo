@@ -1,10 +1,10 @@
-# VELTRIX Dock — автозапуск в Termux
+# Yevqo — автозапуск в Termux
 
 ## Требования
 
 1. Установите приложение **Termux:Boot** из того же источника, что и Termux (рекомендуется F-Droid). Не смешивайте сборки Termux из разных источников.
 2. Откройте Termux:Boot вручную хотя бы один раз.
-3. В Termux выполните `termux-setup-storage` и разрешите доступ к общему хранилищу, если Control Plane использует `/sdcard/veltrix-control`.
+3. В Termux выполните `termux-setup-storage` и разрешите доступ к общему хранилищу, если Control Plane использует `/sdcard/yevqo-control`.
 4. В настройках Android разрешите Termux и Termux:Boot работать в фоне и отключите для них оптимизацию батареи. На некоторых прошивках автозапуск также нужно разрешить отдельно.
 
 ## Установка
@@ -19,8 +19,8 @@
 - включает wake lock;
 - запускает уже инициализированную MariaDB, только если она ещё не работает;
 - ждёт готовности MariaDB до 45 секунд;
-- поднимает только установленные сервисы `veltrix-control` и `veltrix-agent`;
-- пишет диагностику в `~/.local/var/log/veltrix-boot.log`.
+- поднимает только установленные сервисы `yevqo-control` и `yevqo-agent`;
+- пишет диагностику в `~/.local/var/log/yevqo-boot.log`.
 
 Скрипт не запускает `mysql_install_db`, не выполняет миграции вручную и не удаляет/пересоздаёт существующие файлы базы.
 
@@ -29,10 +29,10 @@
 После перезагрузки и разблокировки устройства:
 
 ```sh
-sv status veltrix-control
-sv status veltrix-agent
+sv status yevqo-control
+sv status yevqo-agent
 pgrep -a mariadbd
-tail -n 100 ~/.local/var/log/veltrix-boot.log
+tail -n 100 ~/.local/var/log/yevqo-boot.log
 ```
 
 На устройстве без Control Plane или Agent соответствующая служба просто пропускается. Автозапуск зависит от того, разрешает ли Android запуск Termux:Boot после перезагрузки; это нельзя подтвердить без теста на конкретном телефоне.
