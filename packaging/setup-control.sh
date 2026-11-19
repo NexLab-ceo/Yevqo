@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/yevqo-control}"
+DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
 if [ ! -d /sdcard ]; then
   echo "Shared storage is not available. Run termux-setup-storage and grant permission first." >&2
   exit 1
@@ -82,7 +82,7 @@ set -e
 exec 2>&1
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 BIN="$PREFIX/bin/yevqo-control"
-DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/yevqo-control}"
+DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
 [ -x "$BIN" ] || { echo "Control Plane binary missing: $BIN"; exit 1; }
 exec "$BIN" -data "$DATA_ROOT"
 RUN
