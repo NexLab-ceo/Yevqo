@@ -2,7 +2,7 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteMetrics, listSitePreviews, createSitePreview, deleteSitePreview, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream } from '$lib/api.js';
+    import { getDevice, getSite, getSiteMetrics, updateSiteDomain, listSitePreviews, createSitePreview, deleteSitePreview, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -39,6 +39,8 @@
     let logStatus = 'disconnected';
     const logReconnectDelays = [1000, 2000, 5000, 10000, 20000, 30000];
     let activeTab = 'general';
+    let domainDraft = '';
+    let domainBusy = false;
     let releases = [];
     let previews = [];
     let previewsLoading = false;
@@ -118,6 +120,7 @@
         device = deviceRes.data.device;
         online = !!deviceRes.data.online;
         site = siteRes.data.site;
+        domainDraft = site.domain || '';
         if (gitRes.ok) {
             git = { ...git, ...gitRes.data };
             gitForm = {
@@ -735,6 +738,7 @@
     <nav class="tabs">
         <button class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
         <button class:active={activeTab === 'logs'} on:click={openTerminal}>Logs</button>
+        <button class:active={activeTab === 'domains'} on:click={() => activeTab = 'domains'}>Domains</button>
         <button class:active={activeTab === 'environment'} on:click={() => activeTab = 'environment'}>Environment</button>
         <button class:active={activeTab === 'build'} on:click={() => activeTab = 'build'}>Build</button>
         <button class:active={activeTab === 'git'} on:click={() => activeTab = 'git'}>Git</button>
@@ -819,6 +823,18 @@
                     {/each}
                 </div>
             {:else}<p class="muted">Scheduled tasks пока не созданы.</p>{/if}
+        </Card>
+    {:else if activeTab === 'domains'}
+        <Card>
+            <h2 class="details-title">Domains</h2>
+            <p class="muted">Домен принадлежит этому сайту. Для публичного HTTPS настройте Cloudflare Tunnel и DNS в Cloudflare.</p>
+            <label class="field-label" for="site-domain">Primary domain</label>
+            <input id="site-domain" class="input" bind:value={domainDraft} placeholder="app.example.com" autocomplete="off"/>
+            <div class="actions">
+                <Button variant="primary" loading={domainBusy} disabled={domainBusy || !online} on:click={async()=>{domainBusy=true;const r=await updateSiteDomain(deviceId,siteId,domainDraft.trim(),'');domainBusy=false;if(r.ok){notify(r.data?.message||'Домен обновлён','success');await refresh()}else notify(r.error||'Не удалось сохранить домен','error')}}>Save domain</Button>
+                <Button variant="ghost" disabled={domainBusy||!domainDraft} on:click={()=>domainDraft=''}>Clear</Button>
+            </div>
+            <p class="muted">Cloudflare API zone и DNS automation остаются в настройках интеграции проекта/рабочего пространства; секреты туннеля не отображаются в интерфейсе.</p>
         </Card>
     {:else if activeTab === 'environment'}
         <Card>
@@ -1084,7 +1100,7 @@
     .deploy-consent input{accent-color:#F59E0B;margin:2px 0 0}
     .deploy-consent small{font-size:11px;color:#A1A1AA;margin-left:22px;line-height:1.5}
     .deployment-job{display:flex;align-items:center;gap:16px;justify-content:space-between}.deployment-job p{margin:4px 0 0}.deployment-progress{height:6px;background:#27272A;border-radius:999px;overflow:hidden;margin-top:12px}.deployment-progress div{height:100%;background:#A3E635;transition:width .2s ease}
-    .tabs{display:flex;gap:6px;border-bottom:1px solid #27272A;margin:24px 0 18px;overflow:auto}
+    .field-label{display:block;margin:12px 0 6px;color:#a1a1aa;font-size:11px}.tabs{display:flex;gap:6px;border-bottom:1px solid #27272A;margin:24px 0 18px;overflow:auto}
     .tabs button{background:transparent;border:0;border-bottom:2px solid transparent;color:#A1A1AA;padding:11px 14px;cursor:pointer;white-space:nowrap;font-size:13px}
     .tabs button.active{color:#FAFAFA;border-bottom-color:#A3E635}
     .detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px}
