@@ -1,6 +1,7 @@
 <script>
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
+    import { page } from '$app/stores';
     import { listDatabaseServers, listSites, createDatabase } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
 
@@ -22,7 +23,8 @@
     $: canCreate = !!selectedServer && validIdentifier.test(name) && validIdentifier.test(username) && password.length >= 12;
 
     onMount(async () => {
-        const [serverResult, siteResult] = await Promise.all([listDatabaseServers(), listSites()]);
+        const projectId = $page.url.searchParams.get('project_id') || '';
+        const [serverResult, siteResult] = await Promise.all([listDatabaseServers(projectId), listSites(projectId)]);
         if (serverResult.ok) {
             servers = serverResult.data?.servers || [];
             const first = servers.find((server) => server.engine === 'postgresql' && server.status === 'ready');
@@ -38,6 +40,7 @@
         const selected = availableSites.find((entry) => siteKey === `${entry.device_id}:${entry.site?.site_id}`);
         const payload = {
             server_id: Number(serverId), name, username, password,
+            ...($page.url.searchParams.get('project_id') ? { project_id: Number($page.url.searchParams.get('project_id')) } : {}),
             ...(selected ? { site_device_id: Number(selected.device_id), site_id: selected.site.site_id } : {})
         };
         const result = await createDatabase(payload);
@@ -45,7 +48,7 @@
         if (!result.ok) { error = result.error || 'Не удалось создать базу данных'; return; }
         password = '';
         notify('Database and application role created', 'success');
-        goto('/databases');
+        goto('/databases'+($page.url.searchParams.get('project_id')?'?project_id='+encodeURIComponent($page.url.searchParams.get('project_id')):''));
     }
 </script>
 
@@ -70,7 +73,7 @@
         <div class="panel">
             <h2>No ready PostgreSQL server</h2>
             <p class="muted">Create or install a PostgreSQL Database Server first. Existing databases and server data will not be modified.</p>
-            <button class="primary" on:click={() => goto('/databases/servers/new')}>Add Database Server</button>
+            <button class="primary" on:click={() => goto('/databases/servers/new'+($page.url.searchParams.get('project_id')?'?project_id='+encodeURIComponent($page.url.searchParams.get('project_id')):''))}>Add Database Server</button>
         </div>
     {:else}
         <form class="panel" on:submit|preventDefault={submit}>
