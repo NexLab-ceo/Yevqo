@@ -1,12 +1,12 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-/sdcard/veltrix-agent}"
-PRIVATE_DATA_ROOT="$PREFIX/var/lib/veltrix-agent"
+DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-/sdcard/yevqo-agent}"
+PRIVATE_DATA_ROOT="$PREFIX/var/lib/yevqo-agent"
 CONFIG_DIR="$PRIVATE_DATA_ROOT/config"
 CONFIG_FILE="$CONFIG_DIR/agent.json"
 LEGACY_CONFIG_FILE="$DATA_ROOT/config/agent.json"
-SERVICE_DIR="$PREFIX/var/service/veltrix-agent"
+SERVICE_DIR="$PREFIX/var/service/yevqo-agent"
 BOOT_DIR="$HOME/.termux/boot"
 
 log(){ printf '==> %s
@@ -72,14 +72,14 @@ cat > "$SERVICE_DIR/run" <<'RUN'
 set -e
 exec 2>&1
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-BIN="$PREFIX/bin/veltrix-agent"
-CONFIG="${VELTRIX_AGENT_CONFIG:-$PREFIX/var/lib/veltrix-agent/config/agent.json}"
+BIN="$PREFIX/bin/yevqo-agent"
+CONFIG="${VELTRIX_AGENT_CONFIG:-$PREFIX/var/lib/yevqo-agent/config/agent.json}"
 [ -x "$BIN" ] || { echo "Agent binary not found: $BIN"; exit 1; }
 [ -s "$CONFIG" ] || { echo "Agent config missing: $CONFIG"; exit 1; }
 exec "$BIN" -config "$CONFIG"
 RUN
 chmod 700 "$SERVICE_DIR/run"
-sv-enable veltrix-agent >/dev/null 2>&1 || true
+sv-enable yevqo-agent >/dev/null 2>&1 || true
 
 mkdir -p "$BOOT_DIR"
 if [ ! -s "$BOOT_DIR/00-veltrix" ]; then
@@ -92,8 +92,8 @@ mkdir -p "$LOG_DIR"
 exec >>"$LOG_DIR/veltrix-boot.log" 2>&1
 echo "[$(date -Iseconds)] Yevqo Agent boot hook started"
 command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock || true
-if [ -d "$PREFIX/var/service/veltrix-agent" ] || [ -L "$PREFIX/var/service/veltrix-agent" ]; then
-  sv up veltrix-agent || echo "Could not start veltrix-agent"
+if [ -d "$PREFIX/var/service/yevqo-agent" ] || [ -L "$PREFIX/var/service/yevqo-agent" ]; then
+  sv up yevqo-agent || echo "Could not start yevqo-agent"
 fi
 echo "[$(date -Iseconds)] Yevqo Agent boot hook finished"
 BOOT
@@ -101,12 +101,12 @@ BOOT
 else
   log "Existing Termux boot hook preserved: $BOOT_DIR/00-veltrix"
 fi
-if command -v sv >/dev/null 2>&1; then sv up veltrix-agent || warn "Could not start Agent service now"; fi
+if command -v sv >/dev/null 2>&1; then sv up yevqo-agent || warn "Could not start Agent service now"; fi
 
 log "Agent configured."
 log "Config: $CONFIG_FILE"
-log "Status: sv status veltrix-agent"
-log "Logs: svlogtail veltrix-agent"
+log "Status: sv status yevqo-agent"
+log "Logs: svlogtail yevqo-agent"
 if ! command -v cloudflared >/dev/null 2>&1; then
   log "cloudflared is optional and was not installed."
 fi
