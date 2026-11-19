@@ -1,5 +1,6 @@
 <script>
  import {onMount} from 'svelte';
+ import {page} from '$app/stores';
  import {listSites,listDevices,sendCommand} from '$lib/api.js';
  import {notify} from '$lib/stores.js';
  import Button from '$lib/components/Button.svelte';
@@ -15,7 +16,8 @@
  function decode(payload){if(!payload)return '';try{const raw=atob(payload);return new TextDecoder().decode(Uint8Array.from(raw,c=>c.charCodeAt(0)))}catch{return ''}}
  async function load(){
    loading=true;
-   const [s,d]=await Promise.all([listSites(),listDevices()]);
+   const projectId=$page.url.searchParams.get('project_id')||'';
+   const [s,d]=await Promise.all([listSites(projectId),listDevices(projectId)]);
    if(s.ok)sites=s.data.sites||[];else notify(s.error||'Не удалось загрузить сайты','error');
    if(d.ok)devices=d.data.devices||[];else notify(d.error||'Не удалось загрузить устройства','error');
    if(!selectedKey&&sites.length)selectedKey=key(sites[0]);

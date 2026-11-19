@@ -1,10 +1,11 @@
 <script>
  import {onMount,onDestroy} from 'svelte';
+ import {page} from '$app/stores';
  import {listDeployments} from '$lib/api.js';
  import {notify} from '$lib/stores.js';
  import Button from '$lib/components/Button.svelte';
  let deployments=[],loading=true,refreshing=false,filter='all',search='',refreshTimer;
- async function load(silent=false){if(refreshing)return;refreshing=true;const r=await listDeployments();if(r.ok)deployments=r.data.deployments||[];else if(!silent)notify(r.error||'Не удалось загрузить историю деплоев','error');loading=false;refreshing=false;}
+ async function load(silent=false){if(refreshing)return;refreshing=true;const r=await listDeployments($page.url.searchParams.get('project_id')||'');if(r.ok)deployments=r.data.deployments||[];else if(!silent)notify(r.error||'Не удалось загрузить историю деплоев','error');loading=false;refreshing=false;}
  onMount(()=>{load();refreshTimer=setInterval(()=>load(true),15000);});
  onDestroy(()=>{if(refreshTimer)clearInterval(refreshTimer);});
  $: successful=deployments.filter(d=>d.details?.ok===true).length;

@@ -1,6 +1,7 @@
 package control
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
 	"strings"
@@ -82,6 +83,44 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 			}
 			id, _ := res.LastInsertId()
 			writeJSON(w, http.StatusCreated, map[string]interface{}{"ok": true, "environment": map[string]interface{}{"id": id, "name": in.Name, "slug": slug, "description": in.Description}})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+		return
+	}
+
+
+	if len(parts) == 3 {
+		environmentID, parseErr := strconv.ParseInt(parts[2], 10, 64)
+		if parseErr != nil || environmentID < 1 { apiError(w, shared.ErrBadRequest("invalid environment id")); return }
+		var name, slug, description string
+		var protected bool
+		err := s.db.conn.QueryRowContext(r.Context(), "SELECT name,slug,description,is_protected FROM project_environments WHERE id=? AND project_id=?", environmentID, projectID).Scan(&name, &slug, &description, &protected)
+		if err == sql.ErrNoRows { apiError(w, shared.ErrNotFound("environment not found")); return }
+		if err != nil { apiError(w, shared.ErrInternal("could not load environment")); return }
+		switch r.Method {
+		case http.MethodPatch:
+			var in struct { Name string `json:"name"`; Description string `json:"description"` }
+			if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
+			in.Name = strings.TrimSpace(in.Name)
+			if len(in.Name) < 2 || len(in.Name) > 64 { apiError(w, shared.ErrBadRequest("environment name must be 2–64 characters")); return }
+			newSlug := projectSlug(in.Name)
+			if newSlug == "" { apiError(w, shared.ErrBadRequest("environment name must contain letters or numbers")); return }
+			if protected && newSlug != slug { apiError(w, shared.ErrBadRequest("Production is protected and cannot be renamed")); return }
+			if protected { in.Name = name; newSlug = slug }
+			_, err := s.db.conn.ExecContext(r.Context(), "UPDATE project_environments SET name=?,slug=?,description=? WHERE id=? AND project_id=?", in.Name, newSlug, strings.TrimSpace(in.Description), environmentID, projectID)
+			if err != nil { apiError(w, shared.ErrBadRequest("environment name is already in use or could not be updated")); return }
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+		case http.MethodDelete:
+			if protected || slug == "production" { apiError(w, shared.ErrBadRequest("Production is protected and cannot be deleted")); return }
+			tx, err := s.db.conn.BeginTx(r.Context(), nil)
+			if err != nil { apiError(w, shared.ErrInternal("could not start environment deletion")); return }
+			if _, err = tx.ExecContext(r.Context(), "DELETE FROM project_environment_sites WHERE project_id=? AND environment_id=?", projectID, environmentID); err == nil {
+				_, err = tx.ExecContext(r.Context(), "DELETE FROM project_environments WHERE id=? AND project_id=? AND is_protected=FALSE", environmentID, projectID)
+			}
+			if err != nil { _ = tx.Rollback(); apiError(w, shared.ErrInternal("could not delete environment")); return }
+			if err = tx.Commit(); err != nil { apiError(w, shared.ErrInternal("could not commit environment deletion")); return }
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}

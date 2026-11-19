@@ -58,6 +58,9 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO projects(user_id,name,slug,description) VALUES(?,?,?,?)`,u.ID,in.Name,slug,strings.TrimSpace(in.Description))
 		if err!=nil { apiError(w,shared.ErrBadRequest("project name is already in use"));return }
 		id,_:=res.LastInsertId()
+		for _, env := range []struct{name,slug,description string; protected bool}{{"Production","production","Live production workloads",true},{"Development","development","Development and integration workloads",false},{"Staging","staging","Pre-production validation workloads",false}} {
+			if _,envErr:=s.db.conn.ExecContext(r.Context(),`INSERT INTO project_environments(project_id,name,slug,description,is_protected) VALUES(?,?,?,?,?)`,id,env.name,env.slug,env.description,env.protected);envErr!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM projects WHERE id=? AND user_id=?`,id,u.ID);apiError(w,shared.ErrInternal("could not initialize project environments"));return }
+		}
 		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"name":in.Name,"slug":slug,"description":in.Description}})
 	default: http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
@@ -71,6 +74,14 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 	var name,slug,description string
 	err=s.db.conn.QueryRowContext(r.Context(),`SELECT name,slug,description FROM projects WHERE id=? AND user_id=?`,id,u.ID).Scan(&name,&slug,&description)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("project not found"));return }; if err!=nil { apiError(w,shared.ErrInternal("could not load project"));return }
+	if len(parts)==2 && parts[1]=="databases" && r.Method==http.MethodPost {
+		var in struct { ServerID int64 `json:"server_id"` }
+		if err:=decodeJSON(r,&in);err!=nil||in.ServerID<1 { apiError(w,shared.ErrBadRequest("invalid database server"));return }
+		var owned int
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("database server not found"));return }
+		if _,err:=s.db.conn.ExecContext(r.Context(),`INSERT IGNORE INTO project_database_servers(project_id,database_server_id) VALUES(?,?)`,id,in.ServerID);err!=nil { apiError(w,shared.ErrInternal("could not attach database server"));return }
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
+	}
 	if len(parts)==2 && r.Method==http.MethodPost && (parts[1]=="devices" || parts[1]=="sites") {
 		var in struct { DeviceID int64 `json:"device_id"`; SiteID string `json:"site_id"` }
 		if err:=decodeJSON(r,&in);err!=nil { apiError(w,shared.ErrBadRequest("invalid JSON"));return }
@@ -131,7 +142,7 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	switch r.Method {
 	case http.MethodGet:
-		rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT id,device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE user_id=? ORDER BY created_at DESC`,u.ID)
+		projectID:=int64(0); if raw:=r.URL.Query().Get("project_id"); raw!="" { parsed,parseErr:=strconv.ParseInt(raw,10,64); if parseErr!=nil||parsed<1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }; var owned int; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id=?`,parsed,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }; projectID=parsed }; query:=`SELECT id,device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE user_id=?`; args:=[]interface{}{u.ID}; if projectID>0 { query+=` AND id IN (SELECT pds.database_server_id FROM project_database_servers pds WHERE pds.project_id=?)`;args=append(args,projectID) }; query+=` ORDER BY created_at DESC`; rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
 		if err!=nil{apiError(w,shared.ErrInternal("could not load database servers"));return}
 		defer rows.Close();out:=make([]map[string]interface{},0)
 		for rows.Next(){var id,did int64;var name,engine,version,dir,network,status string;var port int;var created time.Time
@@ -276,7 +287,8 @@ func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Reques
 func (s *Server) handleDatabases(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	if r.Method!=http.MethodGet{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
-	rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.name,ds.engine,ds.device_id FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id WHERE d.user_id=? ORDER BY d.created_at DESC`,u.ID)
+	projectID:=int64(0);if raw:=r.URL.Query().Get("project_id");raw!=""{parsed,parseErr:=strconv.ParseInt(raw,10,64);if parseErr!=nil||parsed<1{apiError(w,shared.ErrBadRequest("invalid project id"));return};var owned int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id=?`,parsed,u.ID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("project not found"));return};projectID=parsed}
+	query:=`SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.name,ds.engine,ds.device_id FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id WHERE d.user_id=?`;args:=[]interface{}{u.ID};if projectID>0{query+=` AND EXISTS (SELECT 1 FROM project_database_servers pds WHERE pds.project_id=? AND pds.database_server_id=ds.id)`;args=append(args,projectID)};query+=` ORDER BY d.created_at DESC`;rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
 	if err!=nil{apiError(w,shared.ErrInternal("could not load databases"));return};defer rows.Close()
 	out:=make([]map[string]interface{},0);for rows.Next(){var id,sid,did int64;var name,status,serverName,engine string;var created time.Time;if err:=rows.Scan(&id,&sid,&name,&status,&created,&serverName,&engine,&did);err!=nil{apiError(w,shared.ErrInternal("could not read databases"));return};out=append(out,map[string]interface{}{"id":id,"server_id":sid,"name":name,"status":status,"created_at":created,"server_name":serverName,"engine":engine,"device_id":did})}
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"databases":out})
@@ -435,7 +447,8 @@ func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeployments(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	if r.Method!=http.MethodGet { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
-	rows,err:=s.db.conn.QueryContext(r.Context(),"SELECT l.id,l.action,l.details,l.created_at,COALESCE(d.hostname,'') FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=? AND l.action IN ('site_deploy','site_rebuild','site_rollback','site_restart') ORDER BY l.id DESC LIMIT 100",u.ID)
+	projectID:=int64(0); if raw:=r.URL.Query().Get("project_id"); raw!="" { parsed,parseErr:=strconv.ParseInt(raw,10,64); if parseErr!=nil||parsed<1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }; var owned int; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id=?`,parsed,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }; projectID=parsed }
+	query:=`SELECT l.id,l.action,l.details,l.created_at,COALESCE(d.hostname,'') FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=? AND l.action IN ('site_deploy','site_rebuild','site_rollback','site_restart')`; args:=[]interface{}{u.ID}; if projectID>0 { query+=` AND EXISTS (SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=l.device_id AND ps.site_id=JSON_UNQUOTE(JSON_EXTRACT(l.details,'$.site_id')))`;args=append(args,projectID) }; query+=` ORDER BY l.id DESC LIMIT 100`; rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
 	if err!=nil { apiError(w,shared.ErrInternal("could not load deployment history")); return }
 	defer rows.Close()
 	out:=make([]map[string]interface{},0)
