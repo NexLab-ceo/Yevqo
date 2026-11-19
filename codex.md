@@ -135,13 +135,15 @@ Before finishing every task:
 
 - 2026-11-19 — Fixed the combined Control Plane + Agent reboot path: Agent setup no longer replaces the Termux:Boot hook with one that skips MariaDB. The generated hook now starts the existing database, waits for readiness, then starts installed services. This preserves existing database data and only starts the existing MariaDB data directory.
 
-- 2026-11-19 — Unified Termux boot behavior: Agent setup now installs the same packaged `scripts/termux-boot.sh` hook as Control Plane instead of maintaining a second embedded copy. The Agent-only Debian package now includes that shared hook, package verification checks for it, and CI validates its shell syntax. The first-test guide now points to artifact `veltrix-android-aarch64-989` (run 44488615633). CI for these newest commits is pending.
+- 2026-11-19 — Finalized the safer combined-install boot behavior without changing package contents: Agent setup now preserves an existing `~/.termux/boot/00-veltrix` hook (including the Control Plane hook with MariaDB startup). Only when no hook exists does Agent setup create a minimal Agent-only boot hook. This avoids overwriting Control Plane startup and keeps the Agent-only package self-contained. The first-test guide is being moved to the latest verified package build.
 
 - 2026-11-19 — CI caught a malformed Agent-package `grep` verification line introduced while extending the package manifest; corrected the workflow command before accepting the change. Re-run CI on the corrected workflow commit is required.
 
 - 2026-11-19 — Corrected the Agent package verification block after CI's workflow-file parser reported a malformed line. The verification now checks the Agent updater and shared boot-hook paths with simple content matches. Awaiting the build/check run for the corrected workflow.
 
 - 2026-11-19 — Fixed a second CI issue in the package manifest: the new Agent share-directory entry had an extra shell continuation slash, which broke the `mkdir -p` command. Corrected it to a single continuation; verify the next package workflow before marking this task complete.
+
+- 2026-11-19 — Restored `.github/workflows/build.yml` byte-for-byte from the last known-good revision after exploratory package-manifest edits produced invalid workflow content. The Agent-only package remains unchanged; only its setup script is hardened. Current build run #1008 and checks run #959 are pending.
 
 ## Implementation guidelines
 
