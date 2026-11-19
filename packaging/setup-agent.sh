@@ -82,8 +82,9 @@ chmod 700 "$SERVICE_DIR/run"
 sv-enable yevqo-agent >/dev/null 2>&1 || true
 
 mkdir -p "$BOOT_DIR"
-if [ ! -s "$BOOT_DIR/00-veltrix" ]; then
-  cat > "$BOOT_DIR/00-veltrix" <<'BOOT'
+if [ -e "$BOOT_DIR/00-yevqo" ] && [ ! -e "$BOOT_DIR/00-yevqo" ]; then mv "$BOOT_DIR/00-yevqo" "$BOOT_DIR/00-yevqo"; fi
+if [ ! -s "$BOOT_DIR/00-yevqo" ]; then
+  cat > "$BOOT_DIR/00-yevqo" <<'BOOT'
 #!/data/data/com.termux/files/usr/bin/bash
 set -u
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
@@ -97,9 +98,9 @@ if [ -d "$PREFIX/var/service/yevqo-agent" ] || [ -L "$PREFIX/var/service/yevqo-a
 fi
 echo "[$(date -Iseconds)] Yevqo Agent boot hook finished"
 BOOT
-  chmod 700 "$BOOT_DIR/00-veltrix"
+  chmod 700 "$BOOT_DIR/00-yevqo"
 else
-  log "Existing Termux boot hook preserved: $BOOT_DIR/00-veltrix"
+  log "Existing Termux boot hook preserved: $BOOT_DIR/00-yevqo"
 fi
 if command -v sv >/dev/null 2>&1; then sv up yevqo-agent || warn "Could not start Agent service now"; fi
 
