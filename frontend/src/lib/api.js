@@ -183,6 +183,10 @@ export async function acceptWorkspaceInvitation(id) { return request('POST', '/a
 export async function listProjects() { return request('GET', '/api/projects'); }
 export async function createProject(name, description = '') { return request('POST', '/api/projects', { name, description }); }
 export async function getProject(id) { return request('GET', `/api/projects/${id}`); }
+export async function listProjectEnvironments(id) { return request('GET', `/api/projects/${id}/environments`); }
+export async function createProjectEnvironment(id, name, description = '') { return request('POST', `/api/projects/${id}/environments`, { name, description }); }
+export async function listEnvironmentSites(projectId, environmentId) { return request('GET', `/api/projects/${projectId}/environments/${environmentId}/sites`); }
+export async function attachEnvironmentSite(projectId, environmentId, deviceId, siteId) { return request('POST', `/api/projects/${projectId}/environments/${environmentId}/sites`, { device_id: deviceId, site_id: siteId }); }
 export async function updateProject(id, name, description = '') { return request('PATCH', `/api/projects/${id}`, { name, description }); }
 export async function deleteProject(id) { return request('DELETE', `/api/projects/${id}`); }
 export async function attachProjectDevice(projectId, deviceId) { return request('POST', `/api/projects/${projectId}/devices`, { device_id: deviceId }); }
