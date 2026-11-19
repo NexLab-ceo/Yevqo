@@ -71,6 +71,14 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 	var name,slug,description string
 	err=s.db.conn.QueryRowContext(r.Context(),`SELECT name,slug,description FROM projects WHERE id=? AND user_id=?`,id,u.ID).Scan(&name,&slug,&description)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("project not found"));return }; if err!=nil { apiError(w,shared.ErrInternal("could not load project"));return }
+	if len(parts)==2 && parts[1]=="databases" && r.Method==http.MethodPost {
+		var in struct { ServerID int64 `json:"server_id"` }
+		if err:=decodeJSON(r,&in);err!=nil||in.ServerID<1 { apiError(w,shared.ErrBadRequest("invalid database server"));return }
+		var owned int
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("database server not found"));return }
+		if _,err:=s.db.conn.ExecContext(r.Context(),`INSERT IGNORE INTO project_database_servers(project_id,database_server_id) VALUES(?,?)`,id,in.ServerID);err!=nil { apiError(w,shared.ErrInternal("could not attach database server"));return }
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
+	}
 	if len(parts)==2 && r.Method==http.MethodPost && (parts[1]=="devices" || parts[1]=="sites") {
 		var in struct { DeviceID int64 `json:"device_id"`; SiteID string `json:"site_id"` }
 		if err:=decodeJSON(r,&in);err!=nil { apiError(w,shared.ErrBadRequest("invalid JSON"));return }
