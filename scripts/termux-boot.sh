@@ -1,11 +1,11 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# VELTRIX Dock startup hook for the Termux:Boot add-on.
+# Yevqo startup hook for the Termux:Boot add-on.
 # Installed to ~/.termux/boot/00-veltrix by the installer.
 set -u
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 LOG_DIR="${HOME}/.local/var/log"
 mkdir -p "$LOG_DIR"
-exec >>"$LOG_DIR/veltrix-boot.log" 2>&1
+exec >>"$LOG_DIR/yevqo-boot.log" 2>&1
 echo "[$(date -Iseconds)] boot hook started"
 
 # Keep Android from suspending the phone while the server is active.
@@ -33,7 +33,7 @@ if command -v mysqld_safe >/dev/null 2>&1; then
 fi
 
 # Bring up only services installed on this device.
-for service in veltrix-control veltrix-agent; do
+for service in yevqo-control yevqo-agent; do
   if [ -d "${PREFIX}/var/service/$service" ] || [ -L "${PREFIX}/var/service/$service" ]; then
     echo "Starting $service"
     sv up "$service" || echo "Could not start $service"
