@@ -43,7 +43,7 @@ After the dashboard loads, sign in or register. Open **Profile → Agent pairing
 veltrix-setup-agent
 ```
 
-Use `ws://127.0.0.1:8080/ws` as the Control Plane WebSocket URL and paste the pairing code when prompted. The pairing code is the account's referral/authentication token; it is not a separate per-device token. Keep it private. The Agent-only setup must preserve any existing Agent config rather than replacing it.
+Use `ws://127.0.0.1:8080/ws` as the Control Plane WebSocket URL and paste the pairing code when prompted. The pairing code is the account's referral/authentication token; it is not a separate per-device token. Keep it private. The installer stores Agent credentials in Termux's private app storage (not shared `/sdcard` storage) and migrates a valid older shared-storage config into the private location. Existing Agent config is preserved.
 
 Check service state and logs:
 
