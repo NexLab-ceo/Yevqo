@@ -21,9 +21,9 @@ if [ ! -f "go.mod" ]; then
     exit 1
 fi
 
-DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-$PREFIX/var/lib/yevqo-agent}"
+DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-$PREFIX/var/lib/veltrix-agent}"
 
-log "VELTRIX Agent installer"
+log "Yevqo Agent installer"
 log "data root: $DATA_ROOT"
 
 # ============================================================
@@ -196,7 +196,7 @@ fi
 # ГОТОВО
 # ============================================================
 log ""
-log " VELTRIX Agent installed"
+log " Yevqo Agent installed"
 log ""
 log "  binary:   $PREFIX/bin/yevqo-agent"
 log "  config:   $CONFIG_FILE"
