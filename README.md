@@ -7,7 +7,7 @@ The `main` branch is the active Yevqo implementation. It contains the SvelteKit 
 В CI собираются два отдельных Android/Termux-пакета. Оба файла в одном выпуске всегда имеют **одинаковую версию**:
 
 - **Если вы хотите запустить панель и тестировать её на том же телефоне — скачайте `veltrix-all_<version>_aarch64.deb`.** Внутри Control Plane, Agent, веб-интерфейс, миграции и сценарии настройки. После установки выберите: сервер, агент или оба компонента.
-- **Если вам нужно только подключить телефон к чужой панели — скачайте `veltrix-agent_<version>_aarch64.deb`.** Пакет содержит только Agent и сценарий настройки. При установке (или при запуске `veltrix-setup-agent`) укажите WebSocket URL панели и токен устройства.
+- **Если вам нужно только подключить телефон к чужой панели — скачайте `veltrix-agent_<version>_aarch64.deb`.** Пакет содержит только Agent и сценарий настройки. При установке (или при запуске `veltrix-setup-agent`) укажите WebSocket URL панели и код подключения из Profile → Agent pairing code (это referral/auth token аккаунта).
 
 Пакет `veltrix-all` требует MariaDB, PHP, Git и `termux-services`. Пакет `veltrix-agent` требует PHP, Git и `termux-services`. `cloudflared` не является обязательной зависимостью: экран Domains может установить нативный пакет Termux при настройке Cloudflare Tunnel. См. [инструкцию по Cloudflare Tunnel](docs/cloudflare-tunnel.md).
 
@@ -87,7 +87,7 @@ PostgreSQL installation, database creation, application-role provisioning, encry
 
 ### Android Agent connection (Termux)
 - The Control Plane registers the Agent WebSocket endpoint at `/ws`. For an Agent running on the same Android device, set `server_url` to `ws://127.0.0.1:8080/ws`. For an Agent on another device, replace `127.0.0.1` with the Control Plane device's reachable LAN or Tailscale address.
-- Authentication is sent by the Agent as the first WebSocket binary message using the protocol `AuthRequest` envelope. Its `token` field is the user's referral/authentication token. The endpoint does not require an Authorization header or a `?token=` query parameter.
+- Authentication is sent by the Agent as the first WebSocket binary message using the protocol `AuthRequest` envelope. Its `token` field is the account's **Agent pairing code**, shown in Dashboard → Profile → Agent pairing code (the same value as the account referral/authentication token). The endpoint does not require an Authorization header or a `?token=` query parameter.
 - The WebSocket route is intentionally unauthenticated at HTTP upgrade time; authentication happens immediately after upgrade in the first protocol message.
 - The HTTP logging middleware must preserve the `http.Hijacker` interface used by Gorilla WebSocket. The Control Plane's `responseWriter` forwards hijacking so the WebSocket handshake can complete.
 
