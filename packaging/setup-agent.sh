@@ -73,7 +73,7 @@ set -e
 exec 2>&1
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 BIN="$PREFIX/bin/veltrix-agent"
-CONFIG="${VELTRIX_AGENT_CONFIG:-/data/data/com.termux/files/usr/var/lib/veltrix-agent/config/agent.json}"
+CONFIG="${VELTRIX_AGENT_CONFIG:-$PREFIX/var/lib/veltrix-agent/config/agent.json}"
 [ -x "$BIN" ] || { echo "Agent binary not found: $BIN"; exit 1; }
 [ -s "$CONFIG" ] || { echo "Agent config missing: $CONFIG"; exit 1; }
 exec "$BIN" -config "$CONFIG"
