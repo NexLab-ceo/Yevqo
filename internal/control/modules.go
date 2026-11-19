@@ -443,7 +443,8 @@ func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeployments(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	if r.Method!=http.MethodGet { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
-	rows,err:=s.db.conn.QueryContext(r.Context(),"SELECT l.id,l.action,l.details,l.created_at,COALESCE(d.hostname,'') FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=? AND l.action IN ('site_deploy','site_rebuild','site_rollback','site_restart') ORDER BY l.id DESC LIMIT 100",u.ID)
+	projectID:=int64(0); if raw:=r.URL.Query().Get("project_id"); raw!="" { parsed,parseErr:=strconv.ParseInt(raw,10,64); if parseErr!=nil||parsed<1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }; var owned int; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id=?`,parsed,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }; projectID=parsed }
+	query:=`SELECT l.id,l.action,l.details,l.created_at,COALESCE(d.hostname,'') FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=? AND l.action IN ('site_deploy','site_rebuild','site_rollback','site_restart')`; args:=[]interface{}{u.ID}; if projectID>0 { query+=` AND EXISTS (SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=l.device_id AND ps.site_id=JSON_UNQUOTE(JSON_EXTRACT(l.details,'$.site_id')))`;args=append(args,projectID) }; query+=` ORDER BY l.id DESC LIMIT 100`; rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
 	if err!=nil { apiError(w,shared.ErrInternal("could not load deployment history")); return }
 	defer rows.Close()
 	out:=make([]map[string]interface{},0)
