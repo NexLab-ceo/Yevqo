@@ -1,5 +1,6 @@
 <script>
     import { onMount } from 'svelte';
+    import { page } from '$app/stores';
     import { goto } from '$app/navigation';
     import { listSites, sendCommand } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
@@ -17,7 +18,7 @@
     // Загружаем сайты повторно по запросу пользователя.
     async function loadSites() {
         refreshing = true;
-        const res = await listSites();
+        const res = await listSites($page.url.searchParams.get('project_id') || '');
         if (res.ok) {
             sites = res.data?.sites || [];
         } else {
