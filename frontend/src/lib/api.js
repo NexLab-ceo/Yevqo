@@ -189,6 +189,7 @@ export async function updateProjectEnvironment(projectId, environmentId, name, d
 export async function deleteProjectEnvironment(projectId, environmentId) { return request('DELETE', `/api/projects/${projectId}/environments/${environmentId}`); }
 export async function listEnvironmentSites(projectId, environmentId) { return request('GET', `/api/projects/${projectId}/environments/${environmentId}/sites`); }
 export async function attachEnvironmentSite(projectId, environmentId, deviceId, siteId) { return request('POST', `/api/projects/${projectId}/environments/${environmentId}/sites`, { device_id: deviceId, site_id: siteId }); }
+export async function detachEnvironmentSite(projectId, environmentId, deviceId, siteId) { return request('DELETE', `/api/projects/${projectId}/environments/${environmentId}/sites`, { device_id: deviceId, site_id: siteId }); }
 export async function attachProjectDatabaseServer(projectId, serverId) { return request('POST', `/api/projects/${projectId}/databases`, { server_id: serverId }); }
 export async function updateProject(id, name, description = '') { return request('PATCH', `/api/projects/${id}`, { name, description }); }
 export async function deleteProject(id) { return request('DELETE', `/api/projects/${id}`); }
