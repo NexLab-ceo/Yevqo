@@ -26,7 +26,7 @@ if [ "$(uname -o)" != "Android" ]; then
     warn "not running on Android/Termux. Some steps may fail."
 fi
 
-DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
+DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/yevqo-control}"
 CONFIG_FILE="$DATA_ROOT/config/config.json"
 # Generate a strong database password only when creating a fresh config.
 # Existing configs and their database credentials are never overwritten.
@@ -177,15 +177,15 @@ log "building server binary..."
 export PATH="$PATH:$(go env GOPATH)/bin"
 bash scripts/gen-proto.sh 2>/dev/null || warn "proto generation skipped"
 mkdir -p bin
-go build -ldflags="-s -w" -o bin/veltrix-control ./cmd/control
-log "  → bin/veltrix-control ($(du -h bin/veltrix-control | cut -f1))"
+go build -ldflags="-s -w" -o bin/yevqo-control ./cmd/control
+log "  → bin/yevqo-control ($(du -h bin/yevqo-control | cut -f1))"
 
 # ============================================================
 # 7. УСТАНОВКА БИНАРНИКА
 # ============================================================
 log "installing binary to \$PREFIX/bin..."
-cp bin/veltrix-control "$PREFIX/bin/veltrix-control"
-chmod +x "$PREFIX/bin/veltrix-control"
+cp bin/yevqo-control "$PREFIX/bin/yevqo-control"
+chmod +x "$PREFIX/bin/yevqo-control"
 
 # ============================================================
 # 8. СТАТИКА (если есть)
@@ -201,13 +201,13 @@ fi
 # 9. TERMUX-SERVICES
 # ============================================================
 log "setting up service..."
-SERVICE_DIR="$PREFIX/var/service/veltrix-control"
+SERVICE_DIR="$PREFIX/var/service/yevqo-control"
 mkdir -p "$SERVICE_DIR"
-cp systemd/veltrix-control.sh "$SERVICE_DIR/run"
+cp systemd/yevqo-control.sh "$SERVICE_DIR/run"
 chmod +x "$SERVICE_DIR/run"
 
 # Автозапуск.
-sv-enable veltrix-control 2>/dev/null || true
+sv-enable yevqo-control 2>/dev/null || true
 
 # Termux:Boot hook. The Termux:Boot Android add-on must also be installed by the user.
 BOOT_DIR="$HOME/.termux/boot"
@@ -239,15 +239,15 @@ fi
 log ""
 log " VELTRIX Dock (Control Plane) installed"
 log ""
-log "  binary:   $PREFIX/bin/veltrix-control"
+log "  binary:   $PREFIX/bin/yevqo-control"
 log "  config:   $CONFIG_FILE"
 log "  data:     $DATA_ROOT"
 log "  service:  $SERVICE_DIR"
 log ""
-log "  start:    sv start veltrix-control"
-log "  stop:     sv stop veltrix-control"
-log "  status:   sv status veltrix-control"
-log "  logs:     svlogtail veltrix-control"
+log "  start:    sv start yevqo-control"
+log "  stop:     sv stop yevqo-control"
+log "  status:   sv status yevqo-control"
+log "  logs:     svlogtail yevqo-control"
 log ""
 log "  web UI:   http://localhost:8080"
 log ""
