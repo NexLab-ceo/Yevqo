@@ -19,7 +19,7 @@
 - включает wake lock;
 - запускает уже инициализированную MariaDB, только если она ещё не работает;
 - ждёт готовности MariaDB до 45 секунд;
-- поднимает только установленные сервисы `yevqo-control` и `yevqo-agent`;
+- поднимает только установленные сервисы `yevqo-control`, `yevqo-agent` или standalone `yevqo`;
 - пишет диагностику в `~/.local/var/log/yevqo-boot.log`.
 
 Скрипт не запускает `mysql_install_db`, не выполняет миграции вручную и не удаляет/пересоздаёт существующие файлы базы.
@@ -30,7 +30,8 @@
 
 ```sh
 sv status yevqo-control
-sv status yevqo-agent
+sv status yevqo-agent  # all-in-one
+sv status yevqo        # standalone Agent
 pgrep -a mariadbd
 tail -n 100 ~/.local/var/log/yevqo-boot.log
 ```
