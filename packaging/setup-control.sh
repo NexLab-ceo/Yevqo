@@ -91,7 +91,7 @@ sv-enable yevqo-control >/dev/null 2>&1 || true
 
 BOOT_DIR="$HOME/.termux/boot"
 mkdir -p "$BOOT_DIR"
-if [ -f "$SHARE/termux-boot.sh" ]; then cp "$SHARE/termux-boot.sh" "$BOOT_DIR/00-veltrix"; chmod 700 "$BOOT_DIR/00-veltrix"; fi
+if [ -f "$SHARE/termux-boot.sh" ] && [ ! -e "$BOOT_DIR/00-yevqo" ]; then cp "$SHARE/termux-boot.sh" "$BOOT_DIR/00-yevqo"; chmod 700 "$BOOT_DIR/00-yevqo"; fi
 sv up yevqo-control || warn "Could not start Control Plane service now"
 log "Control Plane configured at http://127.0.0.1:8080"
 log "Status: sv status yevqo-control"
