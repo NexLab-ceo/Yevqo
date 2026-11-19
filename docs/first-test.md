@@ -32,7 +32,7 @@ If the ZIP was extracted to another directory, change the `cd` path accordingly.
 Run the interactive setup command:
 
 ```sh
-veltrix-setup
+yevqo-setup
 ```
 
 Choose **Control Plane** for a single-phone first smoke test. Complete the prompts. The setup creates a local MariaDB database/config only when needed and preserves an existing Control Plane config. Do not delete or manually replace the data directory to fix setup errors.
@@ -40,7 +40,7 @@ Choose **Control Plane** for a single-phone first smoke test. Complete the promp
 After the dashboard loads, sign in or register. Open **Profile → Agent pairing code** and copy the code. Then configure the Agent on this same phone:
 
 ```sh
-veltrix-setup-agent
+yevqo-setup-agent
 ```
 
 Use `ws://127.0.0.1:8080/ws` as the Control Plane WebSocket URL and paste the pairing code when prompted. The pairing code is the account's referral/authentication token; it is not a separate per-device token. Keep it private. The installer stores Agent credentials in Termux's private app storage (not shared `/sdcard` storage) and migrates a valid older shared-storage config into the private location. Existing Agent config is preserved.
@@ -63,7 +63,7 @@ http://127.0.0.1:8080
 Record PASS/FAIL and the exact error for each step:
 
 - [ ] Package installs without dpkg errors.
-- [ ] `veltrix-setup` launches and completes.
+- [ ] `yevqo-setup` launches and completes.
 - [ ] MariaDB responds and the Control Plane service reaches `run`.
 - [ ] Dashboard loads at `http://127.0.0.1:8080`.
 - [ ] Account/session flow works; verify sign-in and sign-out.
