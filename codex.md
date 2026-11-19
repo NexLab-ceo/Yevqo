@@ -229,3 +229,5 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 
 
 - 2026-11-19 — Standalone Agent package simplified: package name `yevqo`, executable/service `yevqo`, setup `yevqo-setup`, updater `yevqo-update`. All-in-one keeps `yevqo-agent` to distinguish its Agent from Control Plane; deploy helper CLI becomes `yevqo-cli` to avoid a binary-name collision. Legacy data/config locations remain intact. Standalone `yevqo` resolves the private Agent config written by setup while retaining the legacy config fallback. CI validation required.
+
+- 2026-11-19 — The source-based Agent installer and the dashboard's device-connection instructions now use the standalone `yevqo` service name too. The all-in-one packaged setup retains `yevqo-agent`.
