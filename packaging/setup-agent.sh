@@ -2,7 +2,7 @@
 set -euo pipefail
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-/sdcard/yevqo-agent}"
-PRIVATE_DATA_ROOT="$PREFIX/var/lib/yevqo-agent"
+PRIVATE_DATA_ROOT="$PREFIX/var/lib/veltrix-agent"
 CONFIG_DIR="$PRIVATE_DATA_ROOT/config"
 CONFIG_FILE="$CONFIG_DIR/agent.json"
 LEGACY_CONFIG_FILE="$DATA_ROOT/config/agent.json"
@@ -35,7 +35,7 @@ if [ ! -s "$CONFIG_FILE" ] && [ -s "$LEGACY_CONFIG_FILE" ]; then
 fi
 
 if [ ! -s "$CONFIG_FILE" ]; then
-  printf 'VELTRIX Agent setup
+  printf 'Yevqo Agent setup
 '
   read -r -p 'Control Plane WebSocket URL (example: ws://192.168.1.10:8080/ws): ' SERVER_URL
   case "$SERVER_URL" in ws://*|wss://*) ;; *) echo "URL must start with ws:// or wss://" >&2; exit 1;; esac
@@ -73,7 +73,7 @@ set -e
 exec 2>&1
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 BIN="$PREFIX/bin/yevqo-agent"
-CONFIG="${VELTRIX_AGENT_CONFIG:-$PREFIX/var/lib/yevqo-agent/config/agent.json}"
+CONFIG="${VELTRIX_AGENT_CONFIG:-$PREFIX/var/lib/veltrix-agent/config/agent.json}"
 [ -x "$BIN" ] || { echo "Agent binary not found: $BIN"; exit 1; }
 [ -s "$CONFIG" ] || { echo "Agent config missing: $CONFIG"; exit 1; }
 exec "$BIN" -config "$CONFIG"
