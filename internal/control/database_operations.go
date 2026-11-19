@@ -16,6 +16,7 @@ import (
 var postgresIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
 
 type createDatabaseInput struct {
+	ProjectID int64 `json:"project_id"`
 	ServerID int64 `json:"server_id"`
 	Name string `json:"name"`
 	Username string `json:"username"`
@@ -36,6 +37,12 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 	}
 	if len(in.Password)<12 || len(in.Password)>256 || strings.IndexByte(in.Password,0)>=0 {
 		apiError(w,shared.ErrBadRequest("password must be 12–256 characters and cannot contain NUL"));return
+	}
+	if in.ProjectID < 0 { apiError(w,shared.ErrBadRequest("invalid project id"));return }
+	if in.ProjectID > 0 {
+		var projectOwned, linked int
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id=?`,in.ProjectID,u.ID).Scan(&projectOwned);err!=nil||projectOwned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM project_database_servers WHERE project_id=? AND database_server_id=?`,in.ProjectID,in.ServerID).Scan(&linked);err!=nil||linked!=1 { apiError(w,shared.ErrNotFound("database server is not assigned to this project"));return }
 	}
 	var deviceID int64;var engine,status string;var port int
 	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,u.ID).Scan(&deviceID,&engine,&status,&port)
