@@ -29,6 +29,10 @@ done
 if [ ! -s "$CONFIG_FILE" ]; then
   read -r -p 'Admin username [admin]: ' ADMIN_USER
   ADMIN_USER="${ADMIN_USER:-admin}"
+  if [[ ! "$ADMIN_USER" =~ ^[A-Za-z0-9_.-]{1,64}$ ]]; then
+    echo "Admin username must be 1-64 characters: letters, digits, dot, underscore or hyphen." >&2
+    exit 1
+  fi
   DB_PASSWORD="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"
   mysql -u root <<SQL
 CREATE DATABASE IF NOT EXISTS veltrix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
