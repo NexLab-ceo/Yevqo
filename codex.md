@@ -226,3 +226,6 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 
 
 - 2026-11-19 — Yevqo rename landed directly on `main`: Termux executables, runit service names, setup/update commands, Debian package identifiers/artifact names, systemd runner filenames, boot hook (`00-yevqo`), build workflow, and user documentation use Yevqo. Legacy `/sdcard/veltrix-control` and `$PREFIX/var/lib/veltrix-agent` data/config locations remain unchanged to preserve existing installations. Agent setup migrates the old boot-hook filename without discarding its contents. Database names and Go module/import paths remain unchanged for compatibility. CI verification is pending.
+
+
+- 2026-11-19 — Standalone Agent package simplified: package name `yevqo`, executable/service `yevqo`, setup `yevqo-setup`, updater `yevqo-update`. All-in-one keeps `yevqo-agent` to distinguish its Agent from Control Plane; deploy helper CLI becomes `yevqo-cli` to avoid a binary-name collision. Legacy data/config locations remain intact. Standalone `yevqo` resolves the private Agent config written by setup while retaining the legacy config fallback. CI validation required.
