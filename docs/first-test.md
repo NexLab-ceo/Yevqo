@@ -37,6 +37,14 @@ veltrix-setup
 
 Choose **Control Plane** for a single-phone first smoke test. Complete the prompts. The setup creates a local MariaDB database/config only when needed and preserves an existing Control Plane config. Do not delete or manually replace the data directory to fix setup errors.
 
+After the dashboard loads, sign in or register. Open **Profile → Agent pairing code** and copy the code. Then configure the Agent on this same phone:
+
+```sh
+veltrix-setup-agent
+```
+
+Use `ws://127.0.0.1:8080/ws` as the Control Plane WebSocket URL and paste the pairing code when prompted. The pairing code is the account's referral/authentication token; it is not a separate per-device token. Keep it private. The Agent-only setup must preserve any existing Agent config rather than replacing it.
+
 Check service state and logs:
 
 ```sh
