@@ -1,15 +1,15 @@
 # Yevqo
 
-The `main` branch is the active Yevqo implementation. It contains the SvelteKit Control Plane, Go Agent, Android/Termux packages, website lifecycle, database operations, Build Engine and Cloudflare Tunnel integration. Existing Termux package names, service identifiers and data directories still use the legacy `veltrix-*` names for upgrade compatibility; they are not the product's public name.
+The `main` branch is the active Yevqo implementation. The all-in-one package keeps explicit `yevqo-control` and `yevqo-agent` names. The standalone Agent package exposes the simple `yevqo`, `yevqo-setup` and `yevqo-update` commands. The deploy helper CLI is `yevqo-cli`.
 
 ## Что скачать
 
 В CI собираются два отдельных Android/Termux-пакета. Оба файла в одном выпуске всегда имеют **одинаковую версию**:
 
-- **Если вы хотите запустить панель и тестировать её на том же телефоне — скачайте `yevqo-all_<version>_aarch64.deb`.** Внутри Control Plane, Agent, веб-интерфейс, миграции и сценарии настройки. После установки выберите: сервер, агент или оба компонента.
-- **Если вам нужно только подключить телефон к чужой панели — скачайте `yevqo-agent_<version>_aarch64.deb`.** Пакет содержит только Agent и сценарий настройки. При установке (или при запуске `yevqo-setup-agent`) укажите WebSocket URL панели и код подключения из Profile → Agent pairing code (это referral/auth token аккаунта).
+- **Если нужен Control Plane и Agent на одном телефоне — скачайте `yevqo-all_<version>_aarch64.deb`.** Внутри панель, Agent, веб-интерфейс, миграции и команды `yevqo-control` / `yevqo-agent`.
+- **Если нужен только агент для подключения телефона к чужой панели — скачайте `yevqo_<version>_aarch64.deb`.** В этом пакете агент запускается командой `yevqo`, настройка — `yevqo-setup`, обновление — `yevqo-update`. Укажите WebSocket URL панели и код подключения из Profile → Agent pairing code.
 
-Пакет `yevqo-all` требует MariaDB, PHP, Git и `termux-services`. Пакет `yevqo-agent` требует PHP, Git и `termux-services`. `cloudflared` не является обязательной зависимостью: экран Domains может установить нативный пакет Termux при настройке Cloudflare Tunnel. См. [инструкцию по Cloudflare Tunnel](docs/cloudflare-tunnel.md).
+Пакет `yevqo-all` требует MariaDB, PHP, Git и `termux-services`. Пакет `yevqo` требует PHP, Git и `termux-services`. `cloudflared` не является обязательной зависимостью: экран Domains может установить нативный пакет Termux при настройке Cloudflare Tunnel. См. [инструкцию по Cloudflare Tunnel](docs/cloudflare-tunnel.md).
 
 Перед настройкой Control Plane или Agent выполните `termux-setup-storage` в Termux и разрешите доступ к общему хранилищу: конфигурация и данные по умолчанию размещаются в `/sdcard/yevqo-control` и `/sdcard/yevqo-agent`.
 
