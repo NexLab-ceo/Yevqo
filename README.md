@@ -6,12 +6,12 @@ The `main` branch is the active Yevqo implementation. It contains the SvelteKit 
 
 В CI собираются два отдельных Android/Termux-пакета. Оба файла в одном выпуске всегда имеют **одинаковую версию**:
 
-- **Если вы хотите запустить панель и тестировать её на том же телефоне — скачайте `veltrix-all_<version>_aarch64.deb`.** Внутри Control Plane, Agent, веб-интерфейс, миграции и сценарии настройки. После установки выберите: сервер, агент или оба компонента.
-- **Если вам нужно только подключить телефон к чужой панели — скачайте `veltrix-agent_<version>_aarch64.deb`.** Пакет содержит только Agent и сценарий настройки. При установке (или при запуске `veltrix-setup-agent`) укажите WebSocket URL панели и код подключения из Profile → Agent pairing code (это referral/auth token аккаунта).
+- **Если вы хотите запустить панель и тестировать её на том же телефоне — скачайте `yevqo-all_<version>_aarch64.deb`.** Внутри Control Plane, Agent, веб-интерфейс, миграции и сценарии настройки. После установки выберите: сервер, агент или оба компонента.
+- **Если вам нужно только подключить телефон к чужой панели — скачайте `yevqo-agent_<version>_aarch64.deb`.** Пакет содержит только Agent и сценарий настройки. При установке (или при запуске `yevqo-setup-agent`) укажите WebSocket URL панели и код подключения из Profile → Agent pairing code (это referral/auth token аккаунта).
 
-Пакет `veltrix-all` требует MariaDB, PHP, Git и `termux-services`. Пакет `veltrix-agent` требует PHP, Git и `termux-services`. `cloudflared` не является обязательной зависимостью: экран Domains может установить нативный пакет Termux при настройке Cloudflare Tunnel. См. [инструкцию по Cloudflare Tunnel](docs/cloudflare-tunnel.md).
+Пакет `yevqo-all` требует MariaDB, PHP, Git и `termux-services`. Пакет `yevqo-agent` требует PHP, Git и `termux-services`. `cloudflared` не является обязательной зависимостью: экран Domains может установить нативный пакет Termux при настройке Cloudflare Tunnel. См. [инструкцию по Cloudflare Tunnel](docs/cloudflare-tunnel.md).
 
-Перед настройкой Control Plane или Agent выполните `termux-setup-storage` в Termux и разрешите доступ к общему хранилищу: конфигурация и данные по умолчанию размещаются в `/sdcard/veltrix-control` и `/sdcard/veltrix-agent`.
+Перед настройкой Control Plane или Agent выполните `termux-setup-storage` в Termux и разрешите доступ к общему хранилищу: конфигурация и данные по умолчанию размещаются в `/sdcard/yevqo-control` и `/sdcard/yevqo-agent`.
 
 Для автозапуска после перезагрузки Android установите приложение **Termux:Boot** из того же источника, что и Termux, и откройте его один раз. Также разрешите Termux работать в фоне в настройках батареи Android.
 
@@ -55,7 +55,7 @@ PostgreSQL installation, database creation, application-role provisioning, encry
 
 
 ### Website backups
-- Website backups are queued asynchronously by the Control Plane. A typed Agent command creates a compressed TAR.GZ archive under $PREFIX/var/lib/veltrix-agent/backups/sites in private Termux storage. Site files continue to use the configured Agent data directory; new installs default that directory to $PREFIX/var/lib/veltrix-agent.
+- Website backups are queued asynchronously by the Control Plane. A typed Agent command creates a compressed TAR.GZ archive under $PREFIX/var/lib/yevqo-agent/backups/sites in private Termux storage. Site files continue to use the configured Agent data directory; new installs default that directory to $PREFIX/var/lib/yevqo-agent.
 - Archive files are created with private permissions, are isolated by site ID, skip symlinks and are not deleted when website metadata is removed.
 - Backup metadata is associated with the owning account and device through migration `004_backup_device_scope.sql`.
 - Restore is intentionally not exposed yet; safe extraction into a new site directory and archive verification are required first.
@@ -79,7 +79,7 @@ PostgreSQL installation, database creation, application-role provisioning, encry
 
 ### PostgreSQL database backups
 - Database backups run asynchronously through the Agent using pg_dump -Fc --no-owner --no-acl.
-- The Agent validates the database identifier, stores dumps in Termux private storage under $PREFIX/var/lib/veltrix-agent/backups, and verifies each custom archive with pg_restore --list before the Control Plane marks it verified.
+- The Agent validates the database identifier, stores dumps in Termux private storage under $PREFIX/var/lib/yevqo-agent/backups, and verifies each custom archive with pg_restore --list before the Control Plane marks it verified.
 - Restore is available only into a new database on the original ready PostgreSQL server; it never overwrites the source database. Backup download and cross-device transfer remain pending.
 
 - Storage and RAM budgets, process policy and auto-start preferences are persisted as configuration; enforcement is not claimed until runtime quota and boot integration are implemented.
