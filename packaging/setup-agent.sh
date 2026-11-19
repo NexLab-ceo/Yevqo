@@ -6,7 +6,15 @@ PRIVATE_DATA_ROOT="$PREFIX/var/lib/veltrix-agent"
 CONFIG_DIR="$PRIVATE_DATA_ROOT/config"
 CONFIG_FILE="$CONFIG_DIR/agent.json"
 LEGACY_CONFIG_FILE="$DATA_ROOT/config/agent.json"
-SERVICE_DIR="$PREFIX/var/service/yevqo-agent"
+SETUP_COMMAND="$(basename "$0")"
+if [ "$SETUP_COMMAND" = "yevqo-setup" ]; then
+  SERVICE_NAME="yevqo"
+  AGENT_BIN="yevqo"
+else
+  SERVICE_NAME="yevqo-agent"
+  AGENT_BIN="yevqo-agent"
+fi
+SERVICE_DIR="$PREFIX/var/service/$SERVICE_NAME"
 BOOT_DIR="$HOME/.termux/boot"
 
 log(){ printf '==> %s
@@ -35,7 +43,7 @@ if [ ! -s "$CONFIG_FILE" ] && [ -s "$LEGACY_CONFIG_FILE" ]; then
 fi
 
 if [ ! -s "$CONFIG_FILE" ]; then
-  printf 'Yevqo Agent setup
+  printf 'Yevqo setup
 '
   read -r -p 'Control Plane WebSocket URL (example: ws://192.168.1.10:8080/ws): ' SERVER_URL
   case "$SERVER_URL" in ws://*|wss://*) ;; *) echo "URL must start with ws:// or wss://" >&2; exit 1;; esac
@@ -66,48 +74,57 @@ else
   log "Existing Agent config preserved: $CONFIG_FILE"
 fi
 
+if [ "$SERVICE_NAME" = "yevqo" ] && [ -d "$PREFIX/var/service/yevqo-agent" ]; then
+  sv down yevqo-agent >/dev/null 2>&1 || true
+  sv-disable yevqo-agent >/dev/null 2>&1 || true
+  mv "$PREFIX/var/service/yevqo-agent" "$PREFIX/var/service/yevqo" 2>/dev/null || true
+fi
 mkdir -p "$SERVICE_DIR"
 cat > "$SERVICE_DIR/run" <<'RUN'
 #!/data/data/com.termux/files/usr/bin/sh
 set -e
 exec 2>&1
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-BIN="$PREFIX/bin/yevqo-agent"
+BIN="$PREFIX/bin/__YEVQO_AGENT_BIN__"
 CONFIG="${VELTRIX_AGENT_CONFIG:-$PREFIX/var/lib/veltrix-agent/config/agent.json}"
-[ -x "$BIN" ] || { echo "Agent binary not found: $BIN"; exit 1; }
+[ -x "$BIN" ] || { echo "Yevqo binary not found: $BIN"; exit 1; }
 [ -s "$CONFIG" ] || { echo "Agent config missing: $CONFIG"; exit 1; }
 exec "$BIN" -config "$CONFIG"
 RUN
+sed -i "s|__YEVQO_AGENT_BIN__|$AGENT_BIN|g" "$SERVICE_DIR/run"
 chmod 700 "$SERVICE_DIR/run"
-sv-enable yevqo-agent >/dev/null 2>&1 || true
+sv-enable "$SERVICE_NAME" >/dev/null 2>&1 || true
 
 mkdir -p "$BOOT_DIR"
-if [ -e "$BOOT_DIR/00-yevqo" ] && [ ! -e "$BOOT_DIR/00-yevqo" ]; then mv "$BOOT_DIR/00-yevqo" "$BOOT_DIR/00-yevqo"; fi
-if [ ! -s "$BOOT_DIR/00-yevqo" ]; then
+if [ -e "$BOOT_DIR/00-veltrix" ] && [ ! -e "$BOOT_DIR/00-yevqo" ]; then mv "$BOOT_DIR/00-veltrix" "$BOOT_DIR/00-yevqo"; fi
+if [ ! -s "$BOOT_DIR/00-yevqo" ] || grep -q "Yevqo Agent boot hook started" "$BOOT_DIR/00-yevqo" 2>/dev/null; then
   cat > "$BOOT_DIR/00-yevqo" <<'BOOT'
 #!/data/data/com.termux/files/usr/bin/bash
 set -u
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 LOG_DIR="${HOME}/.local/var/log"
 mkdir -p "$LOG_DIR"
-exec >>"$LOG_DIR/veltrix-boot.log" 2>&1
-echo "[$(date -Iseconds)] Yevqo Agent boot hook started"
+exec >>"$LOG_DIR/yevqo-boot.log" 2>&1
+echo "[$(date -Iseconds)] Yevqo boot hook started"
 command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock || true
-if [ -d "$PREFIX/var/service/yevqo-agent" ] || [ -L "$PREFIX/var/service/yevqo-agent" ]; then
-  sv up yevqo-agent || echo "Could not start yevqo-agent"
-fi
-echo "[$(date -Iseconds)] Yevqo Agent boot hook finished"
+for service in yevqo-control yevqo-agent yevqo; do
+  if [ -d "$PREFIX/var/service/$service" ] || [ -L "$PREFIX/var/service/$service" ]; then
+    sv up "$service" || echo "Could not start $service"
+  fi
+done
+echo "[$(date -Iseconds)] Yevqo boot hook finished"
 BOOT
   chmod 700 "$BOOT_DIR/00-yevqo"
 else
   log "Existing Termux boot hook preserved: $BOOT_DIR/00-yevqo"
 fi
-if command -v sv >/dev/null 2>&1; then sv up yevqo-agent || warn "Could not start Agent service now"; fi
+if command -v sv >/dev/null 2>&1; then sv up "$SERVICE_NAME" || warn "Could not start Yevqo service now"; fi
 
-log "Agent configured."
+log "Yevqo configured."
 log "Config: $CONFIG_FILE"
-log "Status: sv status yevqo-agent"
-log "Logs: svlogtail yevqo-agent"
+log "Command: $AGENT_BIN"
+log "Status: sv status $SERVICE_NAME"
+log "Logs: svlogtail $SERVICE_NAME"
 if ! command -v cloudflared >/dev/null 2>&1; then
   log "cloudflared is optional and was not installed."
 fi
