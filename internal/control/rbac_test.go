@@ -6,6 +6,9 @@ func TestCanWorkspaceActionRoleMatrix(t *testing.T) {
 	cases := []struct{ role, action string; want bool }{
 		{"Owner","device.delete",true},
 		{"Admin","device.delete",true},
+		{"Developer","project.read",true},
+		{"Developer","environment.read",true},
+		{"Developer","project.manage",false},
 		{"Developer","device.read",true},
 		{"Developer","deploy",true},
 		{"Developer","stop_site",true},
