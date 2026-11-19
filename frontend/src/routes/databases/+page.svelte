@@ -1,7 +1,7 @@
 <script>
- import {onMount} from 'svelte';import {goto} from '$app/navigation';import {listDatabaseServers,listDatabases} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
+ import {onMount} from 'svelte';import {page} from '$app/stores';import {goto} from '$app/navigation';import {listDatabaseServers,listDatabases} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
  let servers=[],databases=[],loading=true;
- async function load(){const [s,d]=await Promise.all([listDatabaseServers(),listDatabases()]);if(s.ok)servers=s.data.servers||[];else notify(s.error||'Не удалось загрузить Database Servers','error');if(d.ok)databases=d.data.databases||[];else if(d.status!==0)notify(d.error||'Не удалось загрузить базы','error');loading=false}
+ async function load(){const projectId=$page.url.searchParams.get('project_id')||'';const [s,d]=await Promise.all([listDatabaseServers(projectId),listDatabases()]);if(s.ok)servers=s.data.servers||[];else notify(s.error||'Не удалось загрузить Database Servers','error');if(d.ok)databases=d.data.databases||[];else if(d.status!==0)notify(d.error||'Не удалось загрузить базы','error');loading=false}
  onMount(load);
  function stateLabel(s){return ({planned:'Configuration saved',installing:'Installing',ready:'Ready',stopped:'Stopped',error:'Error'})[s]||s}
 </script>
