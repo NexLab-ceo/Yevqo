@@ -1,4 +1,4 @@
-// Package main — точка входа сервера VELTRIX Dock (Redmi 9).
+// Package main — точка входа сервера Yevqo (Redmi 9).
 // Загружает конфиг, создаёт сервер (миграции применяются внутри), запускает HTTP.
 package main
 
