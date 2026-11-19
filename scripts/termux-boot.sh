@@ -2,6 +2,7 @@
 # VELTRIX Dock startup hook for the Termux:Boot add-on.
 # Installed to ~/.termux/boot/00-veltrix by the installer.
 set -u
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 LOG_DIR="${HOME}/.local/var/log"
 mkdir -p "$LOG_DIR"
 exec >>"$LOG_DIR/veltrix-boot.log" 2>&1
