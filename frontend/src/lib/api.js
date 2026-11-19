@@ -86,8 +86,8 @@ export async function changePassword(currentPassword, newPassword) {
 
 // === Devices ===
 
-export async function listDevices() {
-    return request('GET', '/api/devices');
+export async function listDevices(projectId = '') {
+    return request('GET', '/api/devices' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''));
 }
 
 export async function getDevice(id) {
@@ -111,8 +111,8 @@ export function openSiteLogStream(deviceId, siteId, since = 0) {
 
 // === Sites ===
 
-export async function listSites() {
-    return request('GET', '/api/sites');
+export async function listSites(projectId = '') {
+    return request('GET', '/api/sites' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''));
 }
 
 export async function getSite(deviceId, siteId) {
@@ -193,7 +193,7 @@ export async function attachProjectDevice(projectId, deviceId) { return request(
 export async function attachProjectSite(projectId, deviceId, siteId) { return request('POST', `/api/projects/${projectId}/sites`, { device_id: deviceId, site_id: siteId }); }
 
 // === Database inventory ===
-export async function listDatabaseServers() { return request('GET', '/api/databases/servers'); }
+export async function listDatabaseServers(projectId = '') { return request('GET', '/api/databases/servers' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
 export async function createDatabaseServer(input) { return request('POST', '/api/databases/servers', input); }
 export async function getDatabaseServer(id) { return request('GET', `/api/databases/servers/${id}`); }
 export async function deleteDatabaseServer(id) { return request('DELETE', `/api/databases/servers/${id}`); }
@@ -218,7 +218,7 @@ export async function deleteSite(deviceId, siteId) { return request('DELETE', `/
 
 export async function listDomains() { return request('GET', '/api/domains'); }
 export async function updateSiteDomain(deviceId, siteId, domain, tunnelToken = '') { return request('PATCH', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId), { domain, tunnel_token: tunnelToken }); }
-export async function listDeployments() { return request('GET', '/api/deployments'); }
+export async function listDeployments(projectId = '') { return request('GET', '/api/deployments' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
 export async function getMonitoring() { return request('GET', '/api/monitoring'); }
 
 export async function refreshDeviceMetrics(deviceId) { return request('POST', `/api/devices/${deviceId}/metrics`); }
