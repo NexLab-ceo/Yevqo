@@ -1,7 +1,7 @@
 <script>
- import {onMount} from 'svelte';import {goto} from '$app/navigation';import {listDevices} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
+ import {onMount} from 'svelte';import {page} from '$app/stores';import {goto} from '$app/navigation';import {listDevices} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
  let loading=true;let items=[];let limit=1;
- onMount(async()=>{const r=await listDevices();if(r.ok){items=r.data.devices||[];limit=r.data.limit||1}else notify(r.error||'Не удалось загрузить устройства','error');loading=false});
+ onMount(async()=>{const r=await listDevices($page.url.searchParams.get('project_id')||'');if(r.ok){items=r.data.devices||[];limit=r.data.limit||1}else notify(r.error||'Не удалось загрузить устройства','error');loading=false});
 </script>
 <div class="page-header"><div><div class="eyebrow">INFRASTRUCTURE</div><h1 class="page-title">Devices</h1><p class="page-desc">Подключённые Android-телефоны и их агенты Yevqo.</p></div><Button variant="primary" on:click={()=>goto('/')}>Как подключить устройство</Button></div>
 <div class="summary"><div><strong>{items.length} / {limit}</strong><span>Телефонов подключено</span></div><div><strong>{items.filter(x=>x.status==='online').length}</strong><span>Сейчас онлайн</span></div></div>
