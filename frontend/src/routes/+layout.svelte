@@ -7,17 +7,25 @@
  import {logout,me,getSettings,saveSettings} from '$lib/api.js';
  import {locale} from '$lib/i18n.js';
  let loading=true,mobileNavOpen=false,modeSaving=false;
- const groups=[
+ const globalGroups=[
   {label:'WORKSPACE',items:[['Overview','/','◫'],['Projects','/projects','▦']]},
-  {label:'INFRASTRUCTURE',items:[['Devices','/devices','▣'],['Applications','/sites','◉'],['Databases','/databases','◈'],['Domains','/domains','◎']]},
-  {label:'DELIVERY',items:[['Build Engine','/builds','⚒'],['Deployments','/deployments','⇧']]},
   {label:'OPERATIONS',items:[['Monitoring','/monitoring','⌁'],['Logs','/logs','≡'],['Notifications','/notifications','♧'],['Reports & Export','/reports','▤']]},
   {label:'MANAGEMENT',items:[['Team & Permissions','/team','♙'],['Integrations','/integrations','⌘'],['Backup & Restore','/backups','⤓'],['Maintenance','/maintenance','⚙']]}
  ];
+ $: projectMatch=$page.url.pathname.match(/^\\/projects\\/(\\d+)(?:\\/|$)/);
+ $: projectId=projectMatch?.[1]||'';
+ $: inProject=!!projectId;
+ $: projectGroups=inProject?[
+  {label:'PROJECT',items:[['Project overview',`/projects/${projectId}`,'▦']]},
+  {label:'INFRASTRUCTURE',items:[['Devices',`/devices?project_id=${projectId}`,'▣'],['Applications',`/sites?project_id=${projectId}`,'◉'],['Databases',`/databases?project_id=${projectId}`,'◈']]},
+  {label:'DELIVERY',items:[['Build Engine',`/builds?project_id=${projectId}`,'⚒'],['Deployments',`/deployments?project_id=${projectId}`,'⇧']]},
+  {label:'OPERATIONS',items:[['Monitoring',`/monitoring?project_id=${projectId}`,'⌁'],['Logs',`/logs?project_id=${projectId}`,'≡'],['Backups',`/backups?project_id=${projectId}`,'⤓']]}
+ ]:[];
+ $: groups=inProject?projectGroups:globalGroups;
  onMount(async()=>{const [a,b]=await Promise.all([me(),getSettings()]);if(a.ok&&a.data?.user)user.set(a.data.user);if(b.ok){uiMode.set(b.data.settings?.mode||'simple');theme.set(b.data.settings?.theme==='light'?'light':'dark');locale.set(b.data.settings?.locale||'ru')}loading=false});
  $: if(!loading&&!$isAuthenticated&&!$page.url.pathname.startsWith('/login')&&!$page.url.pathname.startsWith('/register'))goto('/login');
  $: currentTitle=groups.flatMap(g=>g.items).find(i=>$page.url.pathname===i[1]||($page.url.pathname.startsWith(i[1]+'/')&&i[1]!=='/'))?.[0]||'Overview';
- function active(href,pathname){return href==='/'?pathname==='/':pathname===href||pathname.startsWith(href+'/')}
+ function active(href,pathname){const clean=href.split('?')[0];return clean==='/'?pathname==='/':pathname===clean||pathname.startsWith(clean+'/')}
  async function toggleMode(){if(modeSaving)return;modeSaving=true;const next=$uiMode==='simple'?'advanced':'simple';const r=await saveSettings({mode:next});if(r.ok)uiMode.set(next);modeSaving=false}
  async function toggleTheme(){if(modeSaving)return;modeSaving=true;const next=$theme==='dark'?'light':'dark';const r=await saveSettings({theme:next});if(r.ok)theme.set(next);else notify(r.error||'Не удалось изменить тему','error');modeSaving=false}
  async function handleLogout(){await logout();user.set(null);goto('/login')}
@@ -30,7 +38,7 @@
  {#if mobileNavOpen}<button class="mobile-scrim" aria-label="Закрыть меню" on:click={()=>mobileNavOpen=false}></button>{/if}
  <aside class:mobile-open={mobileNavOpen} class="sidebar">
   <a class="brand-lockup" href="/"><span class="brand-mark">Y</span><span class="brand-copy"><strong>Yevqo</strong></span><span class="brand-version">BETA</span></a>
-  <button class="workspace-switcher" on:click={()=>goto('/settings')}><span class="workspace-avatar">N</span><span class="workspace-copy"><strong>Personal workspace</strong><small>Free plan · Local host</small></span><span class="switch-chevron">⌄</span></button>
+  <button class="workspace-switcher" on:click={()=>goto(inProject?'/projects':'/settings')}><span class="workspace-avatar">N</span><span class="workspace-copy"><strong>{inProject?'Project workspace':'Personal workspace'}</strong><small>{inProject?'Project #'+projectId:'Free plan · Local host'}</small></span><span class="switch-chevron">⌄</span></button>
   <nav class="sidebar-nav">
    {#each groups as group}
     <section class="nav-group"><div class="nav-label">{group.label}</div>
@@ -47,7 +55,7 @@
   </div>
  </aside>
  <main class="main-area">
-  <header class="topbar"><div class="topbar-left"><button class="mobile-menu" aria-label="Открыть меню" on:click={()=>mobileNavOpen=true}>☰</button><div class="breadcrumbs"><span>Workspace</span><b>/</b><strong>{currentTitle}</strong></div></div>
+  <header class="topbar"><div class="topbar-left"><button class="mobile-menu" aria-label="Открыть меню" on:click={()=>mobileNavOpen=true}>☰</button><div class="breadcrumbs"><span>{inProject?'Project '+projectId:'Workspace'}</span><b>/</b><strong>{currentTitle}</strong></div></div>
    <div class="topbar-actions"><span class="connection-state"><i></i> Control plane</span><button class="theme-switch" on:click={toggleTheme} disabled={modeSaving} aria-label="Переключить тему" title="Переключить тему"><span>{$theme === "dark" ? "☀" : "☾"}</span>{$theme === "dark" ? "Тёмная" : "Светлая"}</button><button class="mode-switch" on:click={toggleMode} disabled={modeSaving}><span class:mode-dot-advanced={$uiMode==='advanced'} class="mode-dot"></span>{$uiMode==='advanced'?'Advanced':'Simple'}<span class="switch-arrows">⇄</span></button><button class="icon-action" aria-label="Уведомления" on:click={()=>goto('/notifications')}>♧</button><a class="profile-action" href="/profile">{($user?.username||'U').slice(0,1).toUpperCase()}</a></div>
   </header>
   <div class="page-scroll"><div class="page-container"><slot/></div></div>
