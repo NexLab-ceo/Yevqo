@@ -13,7 +13,7 @@
   {label:'MANAGEMENT',items:[['Team & Permissions','/team','♙'],['Integrations','/integrations','⌘'],['Backup & Restore','/backups','⤓'],['Maintenance','/maintenance','⚙']]}
  ];
  $: projectMatch=$page.url.pathname.match(/^\\/projects\\/(\\d+)(?:\\/|$)/);
- $: projectId=projectMatch?.[1]||'';
+ $: projectId=projectMatch?.[1]||$page.url.searchParams.get('project_id')||'';
  $: inProject=!!projectId;
  $: projectGroups=inProject?[
   {label:'PROJECT',items:[['Project overview',`/projects/${projectId}`,'▦']]},
