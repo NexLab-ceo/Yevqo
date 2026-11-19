@@ -20,7 +20,7 @@ if [ ! -s "$CONFIG_FILE" ]; then
   printf 'VELTRIX Agent setup\n'
   read -r -p 'Control Plane WebSocket URL (example: ws://192.168.1.10:8080/ws): ' SERVER_URL
   case "$SERVER_URL" in ws://*|wss://*) ;; *) echo "URL must start with ws:// or wss://" >&2; exit 1;; esac
-  read -r -s -p 'Device token from the VELTRIX panel: ' TOKEN
+  read -r -s -p 'Agent pairing code from Profile > Agent pairing code: ' TOKEN
   printf '\n'
   [ -n "$TOKEN" ] || { echo "Token is required" >&2; exit 1; }
   DEVICE_ID="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
