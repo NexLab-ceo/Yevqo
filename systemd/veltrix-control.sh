@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/sh
 # VELTRIX Dock — скрипт для termux-services.
-# Кладётся в $PREFIX/var/service/veltrix-control/run
-# Управление: sv start|stop|restart|status veltrix-control
+# Кладётся в $PREFIX/var/service/yevqo-control/run
+# Управление: sv start|stop|restart|status yevqo-control
 
 set -e
 
@@ -9,7 +9,7 @@ set -e
 exec 2>&1
 
 # Путь к бинарнику. install-control.sh кладёт его сюда.
-BIN="${PREFIX}/bin/veltrix-control"
+BIN="${PREFIX}/bin/yevqo-control"
 
 if [ ! -x "$BIN" ]; then
     echo "error: $BIN not found or not executable"
@@ -17,9 +17,9 @@ if [ ! -x "$BIN" ]; then
 fi
 
 # Корень данных (можно переопределить переменной окружения).
-DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
+DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/yevqo-control}"
 
-echo "starting veltrix-control (data=$DATA_ROOT)"
+echo "starting yevqo-control (data=$DATA_ROOT)"
 
 # exec — заменяет shell на бинарник. sv будет слать сигналы прямо ему.
 exec "$BIN" -data "$DATA_ROOT"
