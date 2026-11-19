@@ -108,12 +108,12 @@ jobs:
           install -m 0755 packaging/setup-all.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-setup"
           install -m 0755 packaging/setup-control.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-setup-control"
           install -m 0755 packaging/setup-agent.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-setup-agent"
-          install -m 0755 scripts/update-agent.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-update-agent"
-          install -m 0755 scripts/update-all.sh "build-deb-all/$PREFIX_ROOT/bin/veltrix-update-all"
+          install -m 0755 scripts/update-agent.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-update-agent"
+          install -m 0755 scripts/update-all.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-update-all"
           install -m 0755 packaging/postinst-all "build-deb-all/DEBIAN/postinst"
 
           install -m 0755 packaging/setup-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/yevqo-setup-agent"
-          install -m 0755 scripts/update-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/veltrix-update-agent"
+          install -m 0755 scripts/update-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/yevqo-update-agent"
           install -m 0755 packaging/postinst-agent "build-deb-agent/DEBIAN/postinst"
 
           cat > build-deb-all/DEBIAN/control <<EOF
@@ -166,11 +166,11 @@ jobs:
           dpkg-deb --contents "$AGENT" > /tmp/yevqo-agent.contents
           grep -q '/bin/yevqo-control$' /tmp/yevqo-all.contents
           grep -q '/bin/yevqo-agent$' /tmp/yevqo-all.contents
-          grep -q '/bin/veltrix-update-all$' /tmp/yevqo-all.contents
+          grep -q '/bin/yevqo-update-all$' /tmp/yevqo-all.contents
           grep -q '/bin/yevqo-agent$' /tmp/yevqo-agent.contents
           grep -q '/bin/yevqo-setup-agent$' /tmp/yevqo-agent.contents
-          grep -q '/bin/veltrix-update-agent$' /tmp/yevqo-agent.contents
-          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|veltrix-update-all' /tmp/yevqo-agent.contents; then
+          grep -q '/bin/yevqo-update-agent$' /tmp/yevqo-agent.contents
+          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all' /tmp/yevqo-agent.contents; then
             echo "Agent-only package contains server payload" >&2
             exit 1
           fi
@@ -180,7 +180,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: veltrix-android-aarch64-${{ github.run_number }}
+          name: yevqo-android-aarch64-${{ github.run_number }}
           if-no-files-found: error
           path: |
             yevqo-all_${{ env.VERSION }}_aarch64.deb
@@ -201,7 +201,7 @@ jobs:
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          repository: NexLab-ceo/veltrix-dock
+          repository: NexLab-ceo/veltrix
           token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
           files: |
             yevqo-agent_${{ env.VERSION }}_aarch64.deb
