@@ -67,7 +67,7 @@ if [ ! -s "$BOOT_SOURCE" ]; then
   echo "Reinstall the current Yevqo package before enabling Agent startup." >&2
   exit 1
 fi
-install -m 0700 "$BOOT_SOURCE" "$BOOT_DIR/00-veltrix"if command -v sv >/dev/null 2>&1; then sv up veltrix-agent || warn "Could not start Agent service now"; fi
+install -m 0700 "$BOOT_SOURCE" "$BOOT_DIR/00-veltrix"\nif command -v sv >/dev/null 2>&1; then sv up veltrix-agent || warn "Could not start Agent service now"; fi
 
 log "Agent configured."
 log "Config: $CONFIG_FILE"
