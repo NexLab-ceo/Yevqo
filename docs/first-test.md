@@ -103,3 +103,16 @@ sv status yevqo-agent
 - The first test should stay local. Do not configure a public domain or Cloudflare Tunnel until the local Control Plane, Agent and test site pass.
 - The Build Engine runs project code with the Termux user's permissions; only build repositories you trust.
 - This checklist does not claim the first physical Android test has already passed.
+
+
+## Standalone Agent package
+
+If this phone should only connect to another Yevqo Control Plane, install `yevqo_<version>_aarch64.deb` instead of the all-in-one package, then run:
+
+```sh
+yevqo-setup
+sv status yevqo
+svlogtail yevqo
+```
+
+The standalone package uses `yevqo` as the Agent executable and service name. The all-in-one package keeps `yevqo-agent` so it can coexist with `yevqo-control`. Do not install both packages on the same Termux environment.
