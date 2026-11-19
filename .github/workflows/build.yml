@@ -37,7 +37,8 @@ jobs:
           mkdir -p bin
           GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/yevqo-control ./cmd/control
           GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/yevqo-agent ./cmd/agent
-          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/yevqo ./cmd/yevqo
+          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/yevqo-cli ./cmd/yevqo
+          cp bin/yevqo-agent bin/yevqo
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -77,7 +78,7 @@ jobs:
           sh -n packaging/postinst-all
           sh -n packaging/postinst-agent
 
-      - name: Package yevqo-all and yevqo-agent
+      - name: Package Yevqo all-in-one and standalone Agent
         shell: bash
         run: |
           set -euo pipefail
@@ -95,8 +96,8 @@ jobs:
 
           install -m 0755 bin/yevqo-control "build-deb-all/$PREFIX_ROOT/bin/yevqo-control"
           install -m 0755 bin/yevqo-agent "build-deb-all/$PREFIX_ROOT/bin/yevqo-agent"
-          install -m 0755 bin/yevqo "build-deb-all/$PREFIX_ROOT/bin/yevqo"
-          install -m 0755 bin/yevqo-agent "build-deb-agent/$PREFIX_ROOT/bin/yevqo-agent"
+          install -m 0755 bin/yevqo-cli "build-deb-all/$PREFIX_ROOT/bin/yevqo-cli"
+          install -m 0755 bin/yevqo "build-deb-agent/$PREFIX_ROOT/bin/yevqo"
 
           cp -a public/. "build-deb-all/$PREFIX_ROOT/share/yevqo/public/"
           cp -a migrations/. "build-deb-all/$PREFIX_ROOT/share/yevqo/migrations/"
@@ -108,12 +109,11 @@ jobs:
           install -m 0755 packaging/setup-all.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-setup"
           install -m 0755 packaging/setup-control.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-setup-control"
           install -m 0755 packaging/setup-agent.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-setup-agent"
-          install -m 0755 scripts/update-agent.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-update-agent"
           install -m 0755 scripts/update-all.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-update-all"
           install -m 0755 packaging/postinst-all "build-deb-all/DEBIAN/postinst"
 
-          install -m 0755 packaging/setup-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/yevqo-setup-agent"
-          install -m 0755 scripts/update-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/yevqo-update-agent"
+          install -m 0755 packaging/setup-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/yevqo-setup"
+          install -m 0755 scripts/update-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/yevqo-update"
           install -m 0755 packaging/postinst-agent "build-deb-agent/DEBIAN/postinst"
 
           cat > build-deb-all/DEBIAN/control <<EOF
@@ -123,7 +123,7 @@ jobs:
           Maintainer: NexLab
           Depends: mariadb, php, git, curl, jq, termux-services
           Provides: veltrix-all
-          Conflicts: veltrix-all
+          Conflicts: veltrix-all, yevqo
           Replaces: veltrix-all
           Section: utils
           Priority: optional
@@ -134,50 +134,50 @@ jobs:
           EOF
 
           cat > build-deb-agent/DEBIAN/control <<EOF
-          Package: yevqo-agent
+          Package: yevqo
           Version: $VERSION
           Architecture: aarch64
           Maintainer: NexLab
           Depends: php, git, curl, jq, termux-services
-          Provides: veltrix-agent
-          Conflicts: veltrix-agent
-          Replaces: veltrix-agent
+          Conflicts: yevqo-agent, veltrix-agent, yevqo-all
+          Replaces: yevqo-agent, veltrix-agent
           Section: utils
           Priority: optional
           Homepage: https://github.com/NexLab-ceo/veltrix
-          Description: Yevqo remote Android Agent for Termux
-           Includes only the Agent executable and its interactive setup script.
+          Description: Yevqo standalone Android Agent for Termux
+           Installs the Agent as the simple yevqo command with setup and update commands.
            cloudflared is optional and can be installed separately.
           EOF
 
           chmod 0755 build-deb-all/DEBIAN/postinst build-deb-agent/DEBIAN/postinst
           dpkg-deb --build --root-owner-group build-deb-all "yevqo-all_${VERSION}_aarch64.deb"
-          dpkg-deb --build --root-owner-group build-deb-agent "yevqo-agent_${VERSION}_aarch64.deb"
+          dpkg-deb --build --root-owner-group build-deb-agent "yevqo_${VERSION}_aarch64.deb"
 
-      - name: Verify both Debian packages
+      - name: Verify all-in-one and standalone packages
         shell: bash
         run: |
           set -euo pipefail
           ALL="yevqo-all_${VERSION}_aarch64.deb"
-          AGENT="yevqo-agent_${VERSION}_aarch64.deb"
+          AGENT="yevqo_${VERSION}_aarch64.deb"
           test -s "$ALL"
           test -s "$AGENT"
           test "$(dpkg-deb --field "$ALL" Version)" = "$VERSION"
           test "$(dpkg-deb --field "$AGENT" Version)" = "$VERSION"
           test "$(dpkg-deb --field "$ALL" Package)" = "yevqo-all"
-          test "$(dpkg-deb --field "$AGENT" Package)" = "yevqo-agent"
+          test "$(dpkg-deb --field "$AGENT" Package)" = "yevqo"
           dpkg-deb --field "$ALL" Architecture | grep -x aarch64
           dpkg-deb --field "$AGENT" Architecture | grep -x aarch64
           dpkg-deb --contents "$ALL" > /tmp/yevqo-all.contents
-          dpkg-deb --contents "$AGENT" > /tmp/yevqo-agent.contents
+          dpkg-deb --contents "$AGENT" > /tmp/yevqo.contents
           grep -q '/bin/yevqo-control$' /tmp/yevqo-all.contents
           grep -q '/bin/yevqo-agent$' /tmp/yevqo-all.contents
+          grep -q '/bin/yevqo-cli$' /tmp/yevqo-all.contents
           grep -q '/bin/yevqo-update-all$' /tmp/yevqo-all.contents
-          grep -q '/bin/yevqo-agent$' /tmp/yevqo-agent.contents
-          grep -q '/bin/yevqo-setup-agent$' /tmp/yevqo-agent.contents
-          grep -q '/bin/yevqo-update-agent$' /tmp/yevqo-agent.contents
-          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all' /tmp/yevqo-agent.contents; then
-            echo "Agent-only package contains server payload" >&2
+          grep -q '/bin/yevqo$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-setup$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-update$' /tmp/yevqo.contents
+          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all|/bin/yevqo-agent$' /tmp/yevqo.contents; then
+            echo "Standalone Yevqo package contains unexpected payload" >&2
             exit 1
           fi
           dpkg-deb --info "$ALL"
@@ -190,7 +190,7 @@ jobs:
           if-no-files-found: error
           path: |
             yevqo-all_${{ env.VERSION }}_aarch64.deb
-            yevqo-agent_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
 
       - name: Publish full package to private repository
         if: github.ref_type == 'tag'
@@ -198,19 +198,19 @@ jobs:
         with:
           files: |
             yevqo-all_${{ env.VERSION }}_aarch64.deb
-            yevqo-agent_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish Agent-only release to public repository
+      - name: Publish standalone Yevqo release to public repository
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
           repository: NexLab-ceo/veltrix
           token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
           files: |
-            yevqo-agent_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
