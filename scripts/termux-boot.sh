@@ -1,6 +1,6 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # Yevqo startup hook for the Termux:Boot add-on.
-# Installed to ~/.termux/boot/00-veltrix by the installer.
+# Installed to ~/.termux/boot/00-yevqo by the installer.
 set -u
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 LOG_DIR="${HOME}/.local/var/log"
