@@ -24,7 +24,7 @@
  $: groups=inProject?projectGroups:globalGroups;
  onMount(async()=>{const [a,b]=await Promise.all([me(),getSettings()]);if(a.ok&&a.data?.user)user.set(a.data.user);if(b.ok){uiMode.set(b.data.settings?.mode||'simple');theme.set(b.data.settings?.theme==='light'?'light':'dark');locale.set(b.data.settings?.locale||'ru')}loading=false});
  $: if(!loading&&!$isAuthenticated&&!$page.url.pathname.startsWith('/login')&&!$page.url.pathname.startsWith('/register'))goto('/login');
- $: currentTitle=groups.flatMap(g=>g.items).find(i=>$page.url.pathname===i[1]||($page.url.pathname.startsWith(i[1]+'/')&&i[1]!=='/'))?.[0]||'Overview';
+ $: currentTitle=groups.flatMap(g=>g.items).find(i=>{const href=i[1].split('?')[0];return $page.url.pathname===href||($page.url.pathname.startsWith(href+'/')&&href!=='/')})?.[0]||'Overview';
  function active(href,pathname){const clean=href.split('?')[0];return clean==='/'?pathname==='/':pathname===clean||pathname.startsWith(clean+'/')}
  async function toggleMode(){if(modeSaving)return;modeSaving=true;const next=$uiMode==='simple'?'advanced':'simple';const r=await saveSettings({mode:next});if(r.ok)uiMode.set(next);modeSaving=false}
  async function toggleTheme(){if(modeSaving)return;modeSaving=true;const next=$theme==='dark'?'light':'dark';const r=await saveSettings({theme:next});if(r.ok)theme.set(next);else notify(r.error||'Не удалось изменить тему','error');modeSaving=false}
