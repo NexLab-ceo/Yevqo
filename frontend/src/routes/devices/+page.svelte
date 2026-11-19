@@ -1,5 +1,5 @@
 <script>
- import {onMount} from 'svelte';import {page} from '$app/stores';import {page} from '$app/stores';import {goto} from '$app/navigation';import {listDevices} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
+ import {onMount} from 'svelte';import {page} from '$app/stores';import {goto} from '$app/navigation';import {listDevices} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
  let loading=true;let items=[];let limit=1;
  onMount(async()=>{const r=await listDevices($page.url.searchParams.get('project_id')||'');if(r.ok){items=r.data.devices||[];limit=r.data.limit||1}else notify(r.error||'Не удалось загрузить устройства','error');loading=false});
 </script>
