@@ -122,6 +122,9 @@ jobs:
           Architecture: aarch64
           Maintainer: NexLab
           Depends: mariadb, php, git, curl, jq, termux-services
+          Provides: veltrix-all
+          Conflicts: veltrix-all
+          Replaces: veltrix-all
           Section: utils
           Priority: optional
           Homepage: https://github.com/NexLab-ceo/veltrix
@@ -136,6 +139,9 @@ jobs:
           Architecture: aarch64
           Maintainer: NexLab
           Depends: php, git, curl, jq, termux-services
+          Provides: veltrix-agent
+          Conflicts: veltrix-agent
+          Replaces: veltrix-agent
           Section: utils
           Priority: optional
           Homepage: https://github.com/NexLab-ceo/veltrix
