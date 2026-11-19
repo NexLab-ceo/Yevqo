@@ -19,7 +19,6 @@
   {label:'PROJECT',items:[['Project overview',`/projects/${projectId}`,'▦']]},
   {label:'INFRASTRUCTURE',items:[['Devices',`/devices?project_id=${projectId}`,'▣'],['Applications',`/sites?project_id=${projectId}`,'◉'],['Databases',`/databases?project_id=${projectId}`,'◈']]},
   {label:'DELIVERY',items:[['Build Engine',`/builds?project_id=${projectId}`,'⚒'],['Deployments',`/deployments?project_id=${projectId}`,'⇧']]},
-  {label:'OPERATIONS',items:[['Monitoring',`/monitoring?project_id=${projectId}`,'⌁'],['Logs',`/logs?project_id=${projectId}`,'≡'],['Backups',`/backups?project_id=${projectId}`,'⤓']]}
  ]:[];
  $: groups=inProject?projectGroups:globalGroups;
  onMount(async()=>{const [a,b]=await Promise.all([me(),getSettings()]);if(a.ok&&a.data?.user)user.set(a.data.user);if(b.ok){uiMode.set(b.data.settings?.mode||'simple');theme.set(b.data.settings?.theme==='light'?'light':'dark');locale.set(b.data.settings?.locale||'ru')}loading=false});
