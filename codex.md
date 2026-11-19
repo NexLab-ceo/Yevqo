@@ -137,6 +137,8 @@ Before finishing every task:
 
 - 2026-11-19 — Unified Termux boot behavior: Agent setup now installs the same packaged `scripts/termux-boot.sh` hook as Control Plane instead of maintaining a second embedded copy. The Agent-only Debian package now includes that shared hook, package verification checks for it, and CI validates its shell syntax. The first-test guide now points to artifact `veltrix-android-aarch64-989` (run 44488615633). CI for these newest commits is pending.
 
+- 2026-11-19 — CI caught a malformed Agent-package `grep` verification line introduced while extending the package manifest; corrected the workflow command before accepting the change. Re-run CI on the corrected workflow commit is required.
+
 ## Implementation guidelines
 
 ### Go
