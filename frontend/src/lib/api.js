@@ -185,6 +185,8 @@ export async function createProject(name, description = '') { return request('PO
 export async function getProject(id) { return request('GET', `/api/projects/${id}`); }
 export async function listProjectEnvironments(id) { return request('GET', `/api/projects/${id}/environments`); }
 export async function createProjectEnvironment(id, name, description = '') { return request('POST', `/api/projects/${id}/environments`, { name, description }); }
+export async function updateProjectEnvironment(projectId, environmentId, name, description = '') { return request('PATCH', `/api/projects/${projectId}/environments/${environmentId}`, { name, description }); }
+export async function deleteProjectEnvironment(projectId, environmentId) { return request('DELETE', `/api/projects/${projectId}/environments/${environmentId}`); }
 export async function listEnvironmentSites(projectId, environmentId) { return request('GET', `/api/projects/${projectId}/environments/${environmentId}/sites`); }
 export async function attachEnvironmentSite(projectId, environmentId, deviceId, siteId) { return request('POST', `/api/projects/${projectId}/environments/${environmentId}/sites`, { device_id: deviceId, site_id: siteId }); }
 export async function attachProjectDatabaseServer(projectId, serverId) { return request('POST', `/api/projects/${projectId}/databases`, { server_id: serverId }); }
