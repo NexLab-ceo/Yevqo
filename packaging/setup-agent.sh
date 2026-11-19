@@ -2,7 +2,10 @@
 set -euo pipefail
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-/sdcard/veltrix-agent}"
-CONFIG_FILE="$DATA_ROOT/config/agent.json"
+PRIVATE_DATA_ROOT="$PREFIX/var/lib/veltrix-agent"
+CONFIG_DIR="$PRIVATE_DATA_ROOT/config"
+CONFIG_FILE="$CONFIG_DIR/agent.json"
+LEGACY_CONFIG_FILE="$DATA_ROOT/config/agent.json"
 SERVICE_DIR="$PREFIX/var/service/veltrix-agent"
 BOOT_DIR="$HOME/.termux/boot"
 
@@ -15,8 +18,21 @@ if [ ! -d /sdcard ]; then
   warn "Shared storage is not mounted. Run: termux-setup-storage"
   exit 1
 fi
-mkdir -p "$DATA_ROOT"/{config,sites,databases,logs,cloudflared,backups}
-chmod 700 "$DATA_ROOT" "$DATA_ROOT/config" "$DATA_ROOT/backups" 2>/dev/null || true
+mkdir -p "$DATA_ROOT"/{config,sites,databases,logs,cloudflared,backups} "$CONFIG_DIR"
+chmod 700 "$DATA_ROOT" "$DATA_ROOT/config" "$DATA_ROOT/backups" "$PRIVATE_DATA_ROOT" "$CONFIG_DIR" 2>/dev/null || true
+
+# Move any older shared-storage config (which may expose the pairing token) into Termux private storage.
+if [ ! -s "$CONFIG_FILE" ] && [ -s "$LEGACY_CONFIG_FILE" ]; then
+  install -m 0600 "$LEGACY_CONFIG_FILE" "$CONFIG_FILE"
+  if jq -e '.server_url and .token and .device_id' "$CONFIG_FILE" >/dev/null 2>&1; then
+    rm -f "$LEGACY_CONFIG_FILE"
+    log "Migrated Agent credentials into private Termux storage."
+  else
+    rm -f "$CONFIG_FILE"
+    echo "Existing Agent config is invalid; it was left untouched at $LEGACY_CONFIG_FILE" >&2
+    exit 1
+  fi
+fi
 
 if [ ! -s "$CONFIG_FILE" ]; then
   printf 'VELTRIX Agent setup
@@ -57,7 +73,7 @@ set -e
 exec 2>&1
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 BIN="$PREFIX/bin/veltrix-agent"
-CONFIG="${VELTRIX_AGENT_CONFIG:-/sdcard/veltrix-agent/config/agent.json}"
+CONFIG="${VELTRIX_AGENT_CONFIG:-/data/data/com.termux/files/usr/var/lib/veltrix-agent/config/agent.json}"
 [ -x "$BIN" ] || { echo "Agent binary not found: $BIN"; exit 1; }
 [ -s "$CONFIG" ] || { echo "Agent config missing: $CONFIG"; exit 1; }
 exec "$BIN" -config "$CONFIG"
