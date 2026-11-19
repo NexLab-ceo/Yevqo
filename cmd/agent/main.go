@@ -1,4 +1,4 @@
-// Package main — точка входа агента VELTRIX Dock (телефоны пользователей).
+// Package main — точка входа агента Yevqo (телефоны пользователей).
 // Загружает конфиг, проверяет зависимости, подключается к серверу.
 package main
 
@@ -24,7 +24,7 @@ func main() {
 		log.Fatalf("load config: %v", err)
 	}
 
-	log.Printf("VELTRIX Agent v%s", agent.Version)
+	log.Printf("Yevqo Agent v%s", agent.Version)
 	log.Printf("device_id: %s", cfg.DeviceID)
 	log.Printf("data_root: %s", cfg.DataRoot)
 
