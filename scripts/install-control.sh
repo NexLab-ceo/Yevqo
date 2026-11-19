@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# VELTRIX Dock — установка сервера (Control Plane) на Redmi 9.
+# Yevqo — установка сервера (Control Plane) на Redmi 9.
 # Запуск: bash scripts/install-control.sh
 
 set -e
@@ -26,7 +26,7 @@ if [ "$(uname -o)" != "Android" ]; then
     warn "not running on Android/Termux. Some steps may fail."
 fi
 
-DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/yevqo-control}"
+DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
 CONFIG_FILE="$DATA_ROOT/config/config.json"
 # Generate a strong database password only when creating a fresh config.
 # Existing configs and their database credentials are never overwritten.
@@ -36,7 +36,7 @@ else
     DB_PASSWORD="veltrix"
 fi
 
-log "VELTRIX Dock — Control Plane installer"
+log "Yevqo — Control Plane installer"
 log "data root: $DATA_ROOT"
 
 # ============================================================
@@ -237,7 +237,7 @@ fi
 # ГОТОВО
 # ============================================================
 log ""
-log " VELTRIX Dock (Control Plane) installed"
+log " Yevqo (Control Plane) installed"
 log ""
 log "  binary:   $PREFIX/bin/yevqo-control"
 log "  config:   $CONFIG_FILE"
