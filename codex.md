@@ -139,6 +139,8 @@ Before finishing every task:
 
 - 2026-11-19 — CI caught a malformed Agent-package `grep` verification line introduced while extending the package manifest; corrected the workflow command before accepting the change. Re-run CI on the corrected workflow commit is required.
 
+- 2026-11-19 — Corrected the Agent package verification block after CI's workflow-file parser reported a malformed line. The verification now checks the Agent updater and shared boot-hook paths with simple content matches. Awaiting the build/check run for the corrected workflow.
+
 ## Implementation guidelines
 
 ### Go
