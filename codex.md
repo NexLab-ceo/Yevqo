@@ -145,6 +145,8 @@ Before finishing every task:
 
 - 2026-11-19 — Restored `.github/workflows/build.yml` byte-for-byte from the last known-good revision after exploratory package-manifest edits produced invalid workflow content. The Agent-only package remains unchanged; only its setup script is hardened. Current build run #1008 and checks run #959 are pending.
 
+- 2026-11-19 — Security hardening: Agent pairing credentials now live under `$PREFIX/var/lib/veltrix-agent/config/agent.json` in Termux private storage, not shared `/sdcard`. A valid legacy config is migrated into the private location and removed from shared storage after validation; the runit service reads the private path. The first-test guide documents this behavior. CI verification is pending.
+
 ## Implementation guidelines
 
 ### Go
