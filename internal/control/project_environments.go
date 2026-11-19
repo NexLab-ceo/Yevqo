@@ -21,13 +21,18 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 		apiError(w, shared.ErrBadRequest("invalid project id"))
 		return
 	}
-	var owned int
-	if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM projects WHERE id=? AND user_id=?", projectID, u.ID).Scan(&owned); err != nil {
-		apiError(w, shared.ErrInternal("could not verify project"))
-		return
+	action := "environment.read"
+	if r.Method != http.MethodGet {
+		action = "project.manage"
 	}
-	if owned != 1 {
-		apiError(w, shared.ErrNotFound("project not found"))
+	if err := s.authorizeProjectAction(r.Context(), projectID, u.ID, action); err != nil {
+		if err == sql.ErrNoRows {
+			apiError(w, shared.ErrNotFound("project not found"))
+		} else if strings.Contains(err.Error(), "permission denied") {
+			apiError(w, shared.ErrForbidden("workspace permission denied"))
+		} else {
+			apiError(w, shared.ErrInternal("could not verify project permissions"))
+		}
 		return
 	}
 
