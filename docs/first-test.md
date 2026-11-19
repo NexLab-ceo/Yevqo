@@ -16,8 +16,8 @@ termux-setup-storage
 
 ## Install the current CI package
 
-1. Open the successful [Yevqo build workflow run #977](https://github.com/NexLab-ceo/veltrix/actions/runs/44370256506).
-2. Download the `veltrix-android-aarch64-977` artifact and extract the ZIP in Termux-accessible storage.
+1. Open the successful [Yevqo build workflow run #989](https://github.com/NexLab-ceo/veltrix/actions/runs/44488615633).
+2. Download the `veltrix-android-aarch64-989` artifact and extract the ZIP in Termux-accessible storage.
 3. Install the all-in-one package (the artifact contains both all-in-one and Agent-only packages):
 
 ```sh
@@ -25,7 +25,7 @@ cd ~/storage/downloads
 dpkg -i ./veltrix-all_0.1.0-dev.977_aarch64.deb
 ```
 
-If the ZIP was extracted to another directory, change the `cd` path accordingly. The package targets Android/Termux aarch64.
+If the ZIP was extracted to another directory, change the `cd` path accordingly. The package targets Android/Termux aarch64. The Agent-only package is also included in the artifact; both packages now carry the same shared Termux boot hook.
 
 ## First Control Plane start
 
