@@ -213,9 +213,9 @@ sv-enable yevqo-control 2>/dev/null || true
 BOOT_DIR="$HOME/.termux/boot"
 mkdir -p "$BOOT_DIR"
 if [ -f "scripts/termux-boot.sh" ]; then
-    cp scripts/termux-boot.sh "$BOOT_DIR/00-veltrix"
-    chmod 700 "$BOOT_DIR/00-veltrix"
-    log "Termux:Boot hook installed at $BOOT_DIR/00-veltrix"
+    cp scripts/termux-boot.sh "$BOOT_DIR/00-yevqo"
+    chmod 700 "$BOOT_DIR/00-yevqo"
+    log "Termux:Boot hook installed at $BOOT_DIR/00-yevqo"
     warn "Install and open the Termux:Boot Android add-on once; then reboot to verify autostart."
 else
     warn "scripts/termux-boot.sh not found; install the boot hook manually."
