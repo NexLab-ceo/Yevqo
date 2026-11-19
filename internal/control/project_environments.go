@@ -183,6 +183,40 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+		case http.MethodDelete:
+			// Production assignments are protected just like the environment itself.
+			var protected bool
+			if err := s.db.conn.QueryRowContext(r.Context(), "SELECT is_protected FROM project_environments WHERE id=? AND project_id=?", environmentID, projectID).Scan(&protected); err != nil {
+				apiError(w, shared.ErrNotFound("environment not found"))
+				return
+			}
+			if protected {
+				apiError(w, shared.ErrBadRequest("Production application assignments are protected"))
+				return
+			}
+			var in struct {
+				DeviceID int64  `json:"device_id"`
+				SiteID   string `json:"site_id"`
+			}
+			if err := decodeJSON(r, &in); err != nil || in.DeviceID < 1 || len(in.SiteID) < 1 || len(in.SiteID) > 64 {
+				apiError(w, shared.ErrBadRequest("invalid application reference"))
+				return
+			}
+			res, err := s.db.conn.ExecContext(r.Context(), "DELETE FROM project_environment_sites WHERE project_id=? AND environment_id=? AND device_id=? AND site_id=?", projectID, environmentID, in.DeviceID, in.SiteID)
+			if err != nil {
+				apiError(w, shared.ErrInternal("could not remove application from environment"))
+				return
+			}
+			deleted, err := res.RowsAffected()
+			if err != nil {
+				apiError(w, shared.ErrInternal("could not verify environment assignment removal"))
+				return
+			}
+			if deleted == 0 {
+				apiError(w, shared.ErrNotFound("application assignment not found"))
+				return
+			}
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
