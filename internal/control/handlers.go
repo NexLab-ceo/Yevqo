@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -300,6 +301,8 @@ func (s *Server) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 		if rowsErr:=rows.Err();rowsErr!=nil{rows.Close();apiError(w,shared.ErrInternal("could not read audit log"));return}
 		rows.Close()
 	}
+	sort.Slice(out,func(i,j int)bool{return out[i].CreatedAt.After(out[j].CreatedAt)})
+	if len(out)>limit{out=out[:limit]}
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"audit_logs":out})
 }
 
