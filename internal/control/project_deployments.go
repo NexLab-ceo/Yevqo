@@ -145,7 +145,7 @@ func (s *Server) queueProjectDeployment(ctx context.Context,actorID,ownerID,proj
 	var sitePath,runtime string;var port int
 	if err:=s.db.conn.QueryRowContext(ctx,`SELECT path,runtime,port FROM sites WHERE device_id=? AND site_id=?`,in.DeviceID,in.SiteID).Scan(&sitePath,&runtime,&port);err!=nil{return 0,shared.ErrNotFound("site not found")}
 	gitCfg,err:=s.siteGitSettings(ctx,in.DeviceID,in.SiteID);if err!=nil{return 0,shared.ErrInternal("could not load site Git settings")}
-	projectIDScope,environmentID,err:=s.siteEnvironmentScope(ctx,ownerID,in.DeviceID,in.SiteID);if err!=nil{return 0,err};if projectIDScope!=projectID{return 0,shared.ErrBadRequest("deployment target is not assigned to the selected project environment")}
+	projectIDScope,environmentID,err:=s.siteEnvironmentScope(ctx,ownerID,in.DeviceID,in.SiteID);if err!=nil{return 0,err};if projectIDScope!=0&&projectIDScope!=projectID{return 0,shared.ErrBadRequest("site database connections belong to a different project environment")}
 	env,err:=s.siteRuntimeEnvironment(ctx,ownerID,in.DeviceID,in.SiteID,projectIDScope,environmentID);if err!=nil{return 0,err}
 	if _,err:=s.db.conn.ExecContext(ctx,`UPDATE sites SET git_branch=? WHERE device_id=? AND site_id=?`,branch,in.DeviceID,in.SiteID);err!=nil{return 0,shared.ErrInternal("could not save deployment branch")}
 	_ = s.db.conn.QueryRowContext(ctx,`UPDATE project_repository_sites SET deploy_branch=? WHERE project_id=? AND device_id=? AND site_id=?`,branch,projectID,in.DeviceID,in.SiteID)
@@ -202,7 +202,7 @@ func (s *Server) queueProjectRollback(ctx context.Context,actorID,ownerID,projec
 	var sitePath,runtime string;var port int
 	if err:=s.db.conn.QueryRowContext(ctx,`SELECT path,runtime,port FROM sites WHERE device_id=? AND site_id=?`,deviceID,siteID).Scan(&sitePath,&runtime,&port);err!=nil{return 0,shared.ErrNotFound("site not found")}
 	gitCfg,err:=s.siteGitSettings(ctx,deviceID,siteID);if err!=nil{return 0,shared.ErrInternal("could not load site settings for rollback")}
-	projectIDScope,environmentID,err:=s.siteEnvironmentScope(ctx,ownerID,deviceID,siteID);if err!=nil{return 0,err};if projectIDScope!=projectID{return 0,shared.ErrBadRequest("site is not assigned to this project environment")}
+	projectIDScope,environmentID,err:=s.siteEnvironmentScope(ctx,ownerID,deviceID,siteID);if err!=nil{return 0,err};if projectIDScope!=0&&projectIDScope!=projectID{return 0,shared.ErrBadRequest("site database connections belong to a different project environment")}
 	env,err:=s.siteRuntimeEnvironment(ctx,ownerID,deviceID,siteID,projectIDScope,environmentID);if err!=nil{return 0,err}
 	res,err:=s.db.conn.ExecContext(ctx,`INSERT INTO project_deployment_runs(project_id,user_id,device_id,site_id,source,branch,commit_sha,status,message) VALUES(?,?,?,?, 'rollback',?,?,'queued','Rollback queued')`,projectID,ownerID,deviceID,siteID,branch,commit)
 	if err!=nil{return 0,shared.ErrInternal("could not create rollback record")}
