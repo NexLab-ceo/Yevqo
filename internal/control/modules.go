@@ -317,17 +317,17 @@ func (s *Server) handleInstallDatabaseServer(w http.ResponseWriter,r *http.Reque
 	var deviceID int64;var engine,dataDir,status,bind,sslMode string;var port,maxConnections int;var remote bool
 	err:=s.db.conn.QueryRowContext(r.Context(),"SELECT device_id,engine,data_directory,status,port,max_connections,bind_address,remote_access,ssl_mode FROM database_servers WHERE id=? AND user_id=?",id,ownerID).Scan(&deviceID,&engine,&dataDir,&status,&port,&maxConnections,&bind,&remote,&sslMode)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}
-	if engine!="postgresql"{apiError(w,shared.ErrBadRequest("Agent installation currently supports PostgreSQL only"));return}
+	if engine!="postgresql" && engine!="mariadb" && engine!="mysql"{apiError(w,shared.ErrBadRequest("unsupported database engine"));return}
 	if status=="ready"{apiError(w,shared.ErrBadRequest("database server is already ready"));return}
 	if status!="planned"&&status!="error"{apiError(w,shared.ErrBadRequest("database server cannot be installed from its current state"));return}
 	if bind!="127.0.0.1"||remote{apiError(w,shared.ErrBadRequest("remote database access must remain disabled"));return}
 	conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
 	res,err:=s.db.conn.ExecContext(r.Context(),"UPDATE database_servers SET status='installing' WHERE id=? AND user_id=? AND status IN ('planned','error')",id,ownerID)
-	if err!=nil{apiError(w,shared.ErrInternal("could not queue PostgreSQL installation"));return}
+	if err!=nil{apiError(w,shared.ErrInternal("could not queue database server installation"));return}
 	if n,_:=res.RowsAffected();n!=1{apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return}
 	req:=&shared.InstallDatabaseServer{ServerID:id,Engine:engine,Port:uint32(port),DataDirectory:dataDir,MaxConnections:uint32(maxConnections),SSLMode:sslMode}
 	go s.runDatabaseServerInstall(id,ownerID,u.ID,deviceID,conn,req)
-	writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"server_id":id,"status":"installing","message":"PostgreSQL installation queued on the Android device"})
+	writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"server_id":id,"status":"installing","message":engine+" installation queued on the Android device"})
 }
 
 func (s *Server) runDatabaseServerInstall(id,ownerID,actorID,deviceID int64,conn *AgentConn,req *shared.InstallDatabaseServer) {
@@ -365,10 +365,10 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&port)
 		if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
 		if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
-		if engine!="postgresql"||status!="ready" { apiError(w,shared.ErrBadRequest("a ready PostgreSQL server is required to inspect roles"));return }
+		if (engine!="postgresql"&&engine!="mariadb"&&engine!="mysql")||status!="ready" { apiError(w,shared.ErrBadRequest("a supported ready database server is required to inspect users"));return }
 		conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
 		ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
-		result,err:=conn.SendCommand(ctx,"list_database_roles",&shared.ListDatabaseRoles{ServerID:id,Port:uint32(port)})
+		result,err:=conn.SendCommand(ctx,"list_database_roles",&shared.ListDatabaseRoles{Engine:engine,DataDirectory:dataDir,ServerID:id,Port:uint32(port)})
 		if err!=nil { apiError(w,shared.ErrInternal("Agent role inventory command failed"));return }
 		if !result.Ok { apiError(w,shared.ErrBadRequest(result.Message));return }
 		var inventory shared.DatabaseRolesResult
@@ -400,10 +400,10 @@ func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Reques
 	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,data_directory,port FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&dataDir,&port)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
-	if engine!="postgresql" { apiError(w,shared.ErrBadRequest("Agent lifecycle actions currently support PostgreSQL only"));return }
-	if action=="start"&&status!="stopped"&&status!="ready" { apiError(w,shared.ErrBadRequest("only a stopped PostgreSQL server can be started"));return }
-	if action=="stop"&&status=="stopped" { writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"status":"stopped","message":"PostgreSQL is already stopped"});return }
-	if action=="stop"&&status!="ready" { apiError(w,shared.ErrBadRequest("only a ready PostgreSQL server can be stopped"));return }
+	if engine!="postgresql" && engine!="mariadb" && engine!="mysql" { apiError(w,shared.ErrBadRequest("unsupported database engine"));return }
+	if action=="start"&&status!="stopped"&&status!="ready" { apiError(w,shared.ErrBadRequest("only a stopped database server can be started"));return }
+	if action=="stop"&&status=="stopped" { writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"status":"stopped","message":engine+" is already stopped"});return }
+	if action=="stop"&&status!="ready" { apiError(w,shared.ErrBadRequest("only a ready database server can be stopped"));return }
 	conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
 	previous:=status
 	if action=="stop" {
@@ -416,20 +416,20 @@ func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Reques
 		if n,_:=res.RowsAffected();n!=1 { apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return }
 	}
 	ctx,cancel:=context.WithTimeout(r.Context(),110*time.Second);defer cancel()
-	result,err:=conn.SendCommand(ctx,action+"_database_server",&shared.DatabaseServerAction{ServerID:id,Port:uint32(port),DataDirectory:dataDir})
+	result,err:=conn.SendCommand(ctx,action+"_database_server",&shared.DatabaseServerAction{Engine:engine,ServerID:id,Port:uint32(port),DataDirectory:dataDir})
 	if err!=nil||!result.Ok {
 		if previous=="ready"||previous=="stopped" { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=? AND status IN ('starting','stopping')`,previous,id,ownerID) }
-		message:="Agent PostgreSQL lifecycle command failed";if err!=nil{message=err.Error()}else if result!=nil&&result.Message!=""{message=result.Message}
+		message:="Agent database lifecycle command failed";if err!=nil{message=err.Error()}else if result!=nil&&result.Message!=""{message=result.Message}
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_"+action+"_failed",Details:map[string]interface{}{"ok":false,"server_id":id,"error":message},IP:clientIP(r)})
 		s.notifyWorkspaceEvent(r.Context(),ownerID,u.ID,"error","Database server "+action+" failed",message)
 		if err!=nil { apiError(w,shared.ErrInternal("Agent PostgreSQL lifecycle command failed"));return }
 		apiError(w,shared.ErrBadRequest(result.Message));return
 	}
 	target:="ready";if action=="stop" { target="stopped" }
-	if _,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=?`,target,id,ownerID);err!=nil { apiError(w,shared.ErrInternal("PostgreSQL action succeeded but server status could not be saved"));return }
+	if _,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=?`,target,id,ownerID);err!=nil { apiError(w,shared.ErrInternal("Database action succeeded but server status could not be saved"));return }
 	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_"+action,Details:map[string]interface{}{"server_id":id}})
-	s.notifyWorkspaceEvent(r.Context(),ownerID,u.ID,"success","Database server "+action+" completed","PostgreSQL server "+action+" completed successfully.")
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"status":target,"message":"PostgreSQL server "+action+" completed"})
+	s.notifyWorkspaceEvent(r.Context(),ownerID,u.ID,"success","Database server "+action+" completed",engine+" server "+action+" completed successfully.")
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"status":target,"message":engine+" server "+action+" completed"})
 }
 
 func (s *Server) handleDatabases(w http.ResponseWriter, r *http.Request) {
