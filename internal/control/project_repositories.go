@@ -2,6 +2,8 @@ package control
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -119,7 +121,7 @@ func (s *Server) handleProjectRepository(w http.ResponseWriter, r *http.Request)
 		var createdAt, updatedAt time.Time
 		err := s.db.conn.QueryRowContext(r.Context(), `SELECT integration_id,repository_id,full_name,clone_url,web_url,default_branch,deploy_branch,is_private,language,last_commit_sha,auto_deploy_enabled,created_at,updated_at FROM project_repositories WHERE project_id=?`, projectID).Scan(&integrationID,&repositoryID,&fullName,&cloneURL,&webURL,&defaultBranch,&deployBranch,&isPrivate,&language,&lastCommit,&autoDeploy,&createdAt,&updatedAt)
 		if err != nil {
-			if err.Error() == "sql: no rows in result set" { writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"repository":nil}); return }
+			if errors.Is(err, sql.ErrNoRows) { writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"repository":nil}); return }
 			apiError(w, shared.ErrInternal("could not load project repository"))
 			return
 		}
