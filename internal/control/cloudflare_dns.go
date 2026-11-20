@@ -119,7 +119,7 @@ type cloudflareTunnelConfig struct {
 	Config struct { Ingress []map[string]json.RawMessage `json:"ingress"`; OriginRequest json.RawMessage `json:"originRequest"` } `json:"config"`
 }
 
-func updateCloudflareIngressRules(rules []map[string]json.RawMessage, hostname, service string, remove bool) ([]map[string]json.RawMessage, bool, error) {
+func updateCloudflareIngressRules(rules []map[string]json.RawMessage, hostname, service string, remove, allowReplace bool) ([]map[string]json.RawMessage, bool, error) {
 	isCatchall := func(rule map[string]json.RawMessage) bool {
 		_, hasHostname := rule["hostname"]
 		_, hasPath := rule["path"]
@@ -136,7 +136,9 @@ func updateCloudflareIngressRules(rules []map[string]json.RawMessage, hostname, 
 	} else {
 		serviceJSON,_:=json.Marshal(service)
 		if len(matches)==1 {
-			if string(rules[matches[0]]["service"])!=string(serviceJSON) { rules[matches[0]]["service"]=serviceJSON;changed=true }
+			currentService:=string(rules[matches[0]]["service"])
+			if currentService!=string(serviceJSON) && !allowReplace { return nil,false,fmt.Errorf("an existing ingress rule for this hostname points to another origin; review or remove it manually first") }
+			if currentService!=string(serviceJSON) { rules[matches[0]]["service"]=serviceJSON;changed=true }
 		} else {
 			hostJSON,_:=json.Marshal(hostname)
 			rule:=map[string]json.RawMessage{"hostname":hostJSON,"service":serviceJSON}
@@ -154,7 +156,13 @@ func updateCloudflareIngressRules(rules []map[string]json.RawMessage, hostname, 
 	return append(regular,catchalls[0]),changed,nil
 }
 
-func updateCloudflareTunnelIngress(ctx context.Context, token, accountID, tunnelID, hostname, service string, remove bool) error {
+func cloudflareTunnelConfigPayload(current cloudflareTunnelConfig, rules []map[string]json.RawMessage) map[string]interface{} {
+	config:=map[string]interface{}{"ingress":rules}
+	if len(current.Config.OriginRequest)>0 { config["originRequest"]=current.Config.OriginRequest }
+	return map[string]interface{}{"config":config}
+}
+
+func updateCloudflareTunnelIngress(ctx context.Context, token, accountID, tunnelID, hostname, service string, remove, allowReplace bool) error {
 	if !validCloudflareAccountID(accountID)||!validCloudflareTunnelID(tunnelID)||!domainPattern.MatchString(hostname){return fmt.Errorf("invalid Cloudflare tunnel route parameters")}
 	var tunnel struct{ID string `json:"id"`;AccountTag string `json:"account_tag"`;ConfigSrc string `json:"config_src"`}
 	if err:=cloudflareAPIRequest(ctx,token,http.MethodGet,"/accounts/"+accountID+"/cfd_tunnel/"+tunnelID,nil,&tunnel);err!=nil{return err}
@@ -162,11 +170,9 @@ func updateCloudflareTunnelIngress(ctx context.Context, token, accountID, tunnel
 	var current cloudflareTunnelConfig
 	if err:=cloudflareAPIRequest(ctx,token,http.MethodGet,"/accounts/"+accountID+"/cfd_tunnel/"+tunnelID+"/configurations",nil,&current);err!=nil{return err}
 	if current.Source!="cloudflare"{return fmt.Errorf("tunnel configuration is not remotely managed")}
-	rules,changed,err:=updateCloudflareIngressRules(current.Config.Ingress,hostname,service,remove)
+	rules,changed,err:=updateCloudflareIngressRules(current.Config.Ingress,hostname,service,remove,allowReplace)
 	if err!=nil{return err};if !changed{return nil}
-	config:=map[string]interface{}{"ingress":rules}
-	if len(current.Config.OriginRequest)>0 { config["originRequest"]=current.Config.OriginRequest }
-	body:=map[string]interface{}{"config":config}
+	body:=cloudflareTunnelConfigPayload(current,rules)
 	return cloudflareAPIRequest(ctx,token,http.MethodPut,"/accounts/"+accountID+"/cfd_tunnel/"+tunnelID+"/configurations",body,nil)
 }
 
@@ -206,7 +212,7 @@ func (s *Server) removeCloudflareRouteForSite(ctx context.Context, userID, devic
 	if err==sql.ErrNoRows{return false,"",nil};if err!=nil{return false,"",err}
 	accountID,zoneID,_,token,err:=s.cloudflareCredentials(ctx,userID);if err!=nil{return false,"",err}
 	workCtx,cancel:=context.WithTimeout(ctx,30*time.Second);defer cancel()
-	if err:=updateCloudflareTunnelIngress(workCtx,token,accountID,tunnelID,hostname,"",true);err!=nil{return false,"",err}
+	if err:=updateCloudflareTunnelIngress(workCtx,token,accountID,tunnelID,hostname,"",true,false);err!=nil{return false,"",err}
 	dnsErr:=deleteCloudflareTunnelDNS(workCtx,token,zoneID,hostname,tunnelID)
 	if _,err:=s.db.conn.ExecContext(workCtx,`DELETE FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,userID,deviceID,siteID);err!=nil{return false,"",err}
 	if dnsErr!=nil{return true,"Cloudflare ingress removed; DNS record left unchanged: "+dnsErr.Error(),nil}
@@ -249,11 +255,11 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 		if occupied>0{apiError(w,shared.ErrConflict("hostname is already assigned to another Yevqo site"));return}
 		ctx,cancel:=context.WithTimeout(r.Context(),30*time.Second);defer cancel()
 		service:=fmt.Sprintf("http://127.0.0.1:%d",port)
-		if err:=updateCloudflareTunnelIngress(ctx,token,accountID,in.TunnelID,hostname,service,false);err!=nil{apiError(w,shared.ErrBadRequest("could not configure Cloudflare Tunnel ingress: "+err.Error()));return}
+		if err:=updateCloudflareTunnelIngress(ctx,token,accountID,in.TunnelID,hostname,service,false,existingErr==nil);err!=nil{apiError(w,shared.ErrBadRequest("could not configure Cloudflare Tunnel ingress: "+err.Error()));return}
 		record,err:=ensureCloudflareTunnelDNS(ctx,token,zoneID,hostname,in.TunnelID)
 		if err!=nil{
 			rollbackCtx,rollbackCancel:=context.WithTimeout(context.Background(),20*time.Second)
-			_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,"",true)
+			_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,"",true,false)
 			rollbackCancel()
 			apiError(w,shared.ErrBadRequest("could not create Cloudflare DNS record: "+err.Error()));return
 		}
