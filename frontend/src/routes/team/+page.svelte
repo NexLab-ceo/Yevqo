@@ -19,7 +19,7 @@
   const w=await listWorkspaces();
   if(w.ok){workspaces=w.data.workspaces||[];if(!selectedOwner&&workspaces.length)selectedOwner=String(workspaces[0].owner_user_id);if(!workspaces.some(x=>String(x.owner_user_id)===String(selectedOwner)))selectedOwner=String(workspaces[0]?.owner_user_id||'');}
   else notify(w.error||'Не удалось загрузить рабочие области','error');
-  const [m,i]=await Promise.all([selectedOwner?listWorkspaceMembers(selectedOwner):Promise.resolve({ok:true,data:{members:[]}}),listWorkspaceInvitations()]);
+  const selected=workspaces.find(x=>String(x.owner_user_id)===String(selectedOwner));const [m,i]=await Promise.all([selected?.can_manage_members?listWorkspaceMembers(selectedOwner):Promise.resolve({ok:true,data:{members:[]}}),listWorkspaceInvitations()]);
   if(m.ok)members=m.data.members||[];else {members=[];notify(m.error||'Управление участниками доступно только Owner/Admin','error');}
   if(i.ok)invitations=i.data.invitations||[];else notify(i.error||'Не удалось загрузить приглашения','error');
   loading=false;
