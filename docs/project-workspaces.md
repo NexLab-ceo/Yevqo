@@ -33,7 +33,7 @@ Migration `025_project_deployment_lifecycle.sql` adds site targets, webhook regi
 
 A project can store one verified GitHub App repository binding. The authenticated project owner/admin selects an installed GitHub App and a repository; the Control Plane verifies that the installation belongs to the repository owner, reads repository metadata, and checks the selected deployment branch before persisting the binding. The project Source Repository tab can display and disconnect the binding.
 
-The binding stores repository metadata and the selected branch, not a long-lived GitHub token. Installation credentials remain encrypted in the existing integration record; short-lived installation tokens are requested when needed. Disconnecting the GitHub App cascades removal of project bindings associated with that installation.
+The binding stores repository metadata and the selected branch, not a long-lived GitHub token. Installation credentials remain encrypted in the existing integration record; short-lived installation tokens are requested when needed. Disconnecting the GitHub App removes managed push webhooks, restores each linked site's original Git/webhook settings, and then removes the dependent project repository bindings.
 
 Migration `024_project_repositories.sql` is additive and must be applied through the normal migration/upgrade process. It has not been applied to a live or production database as part of this work.
 
