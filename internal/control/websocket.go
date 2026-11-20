@@ -338,6 +338,7 @@ func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 	case "deployment_job":
 		var job shared.DeploymentJobEvent
 		if err := shared.Unmarshal(ev.Payload, &job); err == nil && c.Device != nil && validLogSiteID(job.SiteId) {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second); srv.persistDeploymentJobEvent(ctx, c.Device.UserID, c.Device.ID, job); cancel()
 			if srv.logStreams != nil { srv.logStreams.publishDeployment(c.Device.UserID, c.Device.ID, job) }
 		}
 	case "status":
