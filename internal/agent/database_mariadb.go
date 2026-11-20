@@ -91,7 +91,7 @@ func installMariaDBServer(req shared.InstallDatabaseServer) (*shared.DatabaseSer
 	out, err := exec.CommandContext(ctx, installDB, args...).CombinedOutput()
 	if err != nil { return nil, fmt.Errorf("MariaDB system-table initialization failed: %s", trimOutput(string(out))) }
 	if req.SSLMode != "" && req.SSLMode != "disable" && req.SSLMode != "prefer" && req.SSLMode != "require" { return nil, fmt.Errorf("unsupported MariaDB SSL mode") }
-	if err := startMariaDB(dataDir, req.Port, req.MaxConnections); err != nil { return nil, err }
+	if err := startMariaDB(dataDir, req.Port, req.MaxConnections, req.SSLMode); err != nil { return nil, err }
 	cli, err := mariaCLI(); if err != nil { return nil, err }
 	versionOut, _ := exec.CommandContext(ctx, cli, "--version").CombinedOutput()
 	version := strings.TrimSpace(string(versionOut)); if version == "" { version = "MariaDB (version unavailable)" }
@@ -112,12 +112,31 @@ func getTermuxFreeSpace(path string, out *syscallStatfs) bool {
 	out.available = st.Bavail * uint64(st.Bsize); return true
 }
 
-func startMariaDB(dataDir string, port uint32, maxConnections uint32) error {
+func ensureMariaDBSSL(dataDir string) (string, string, error) {
+	cert := filepath.Join(dataDir, "server.crt")
+	key := filepath.Join(dataDir, "server.key")
+	certInfo, certErr := os.Lstat(cert); keyInfo, keyErr := os.Lstat(key)
+	if certErr == nil || keyErr == nil {
+		if certErr != nil || keyErr != nil || certInfo.Mode()&os.ModeSymlink != 0 || keyInfo.Mode()&os.ModeSymlink != 0 || !certInfo.Mode().IsRegular() || !keyInfo.Mode().IsRegular() { return "", "", fmt.Errorf("existing MariaDB SSL certificate paths are unsafe") }
+		if err := os.Chmod(key, 0o600); err != nil { return "", "", err }
+		return cert, key, nil
+	}
+	if !os.IsNotExist(certErr) || !os.IsNotExist(keyErr) { return "", "", fmt.Errorf("could not inspect MariaDB SSL certificate paths") }
+	openssl, err := exec.LookPath("openssl"); if err != nil { return "", "", fmt.Errorf("openssl is required for MariaDB SSL; install the Termux openssl package") }
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second); defer cancel()
+	out, err := exec.CommandContext(ctx, openssl, "req", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-x509", "-days", "3650", "-out", cert, "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1").CombinedOutput()
+	if err != nil { _ = os.Remove(cert); _ = os.Remove(key); return "", "", fmt.Errorf("generate MariaDB SSL certificate: %s", trimOutput(string(out))) }
+	if err := os.Chmod(key, 0o600); err != nil { return "", "", err }; if err := os.Chmod(cert, 0o644); err != nil { return "", "", err }
+	return cert, key, nil
+}
+
+func startMariaDB(dataDir string, port uint32, maxConnections uint32, sslMode string) error {
 	safe, err := exec.LookPath("mariadbd-safe"); if err != nil { safe, err = exec.LookPath("mysqld_safe") }
 	if err != nil { return fmt.Errorf("mariadbd-safe is not installed") }
 	if err := os.MkdirAll(filepath.Join(dataDir, "run"), 0o700); err != nil { return err }
 	logPath := filepath.Join(dataDir, "mariadb.log")
 	args := []string{"--datadir=" + dataDir, "--socket=" + mariaSocket(dataDir), "--pid-file=" + filepath.Join(dataDir, "run", "mariadb.pid"), "--port=" + strconv.Itoa(int(port)), "--bind-address=127.0.0.1", "--max-connections=" + strconv.Itoa(int(maxConnections)), "--log-error=" + logPath, "--skip-name-resolve"}
+	if sslMode == "" || sslMode == "require" || sslMode == "prefer" { cert,key,sslErr := ensureMariaDBSSL(dataDir); if sslErr != nil { return sslErr }; args = append(args, "--ssl-ca="+cert, "--ssl-cert="+cert, "--ssl-key="+key) } else if sslMode != "disable" { return fmt.Errorf("unsupported MariaDB SSL mode") }
 	if _, err := os.Stat(mariaSocket(dataDir)); err == nil { if waitMariaDB(dataDir, 3*time.Second) == nil { return nil } }
 	cmd := exec.Command(safe, args...); cmd.Stdout = io.Discard; cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil { return fmt.Errorf("could not start MariaDB: %w", err) }
@@ -141,7 +160,7 @@ func manageMariaDBServer(req shared.DatabaseServerAction, action string) error {
 	prefix := os.Getenv("PREFIX"); if prefix == "" { return fmt.Errorf("Termux PREFIX is not set") }
 	dataDir, err := resolveTermuxPath(prefix, req.DataDirectory); if err != nil { return err }
 	info, err := os.Lstat(dataDir); if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() { return fmt.Errorf("MariaDB data directory is unavailable or unsafe") }
-	if action == "start" { max := req.MaxConnections; if max < 1 { max = 100 }; return startMariaDB(dataDir, req.Port, max) }
+	if action == "start" { max := req.MaxConnections; if max < 1 { max = 100 }; return startMariaDB(dataDir, req.Port, max, req.SSLMode) }
 	admin, err := exec.LookPath("mariadb-admin"); if err != nil { admin, err = exec.LookPath("mysqladmin") }; if err != nil { return fmt.Errorf("mariadb-admin is not installed") }
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second); defer cancel()
 	out, err := exec.CommandContext(ctx, admin, append(mariaAdminArgs(dataDir), "shutdown")...).CombinedOutput()
@@ -164,7 +183,9 @@ func testMariaDBConnection(req shared.TestDatabaseConnection) error {
 	if req.DatabaseID < 1 || !mariaIdentifier.MatchString(req.Database) || !mariaIdentifier.MatchString(req.Username) || req.Port < 1024 || req.Port > 65535 || len(req.Password) < 12 || len(req.Password) > 256 { return fmt.Errorf("invalid MariaDB connection request") }
 	cli, err := mariaCLI(); if err != nil { return err }
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second); defer cancel()
-	cmd := exec.CommandContext(ctx, cli, "--protocol=TCP", "-h", "127.0.0.1", "-P", fmt.Sprint(req.Port), "-u", req.Username, req.Database, "-Nse", "SELECT 1")
+	args := []string{"--protocol=TCP", "-h", "127.0.0.1", "-P", fmt.Sprint(req.Port), "-u", req.Username, req.Database, "-Nse", "SELECT 1"}
+	if req.SSLMode == "require" { args = append(args, "--ssl") } else if req.SSLMode == "disable" { args = append(args, "--skip-ssl") } else if req.SSLMode != "" && req.SSLMode != "prefer" { return fmt.Errorf("invalid MariaDB SSL mode") }
+	cmd := exec.CommandContext(ctx, cli, args...)
 	cmd.Env = append(os.Environ(), "MYSQL_PWD="+req.Password)
 	out, err := cmd.Output(); if err != nil { if ctx.Err() != nil { return fmt.Errorf("MariaDB connection test timed out") }; return fmt.Errorf("MariaDB connection test failed") }
 	if strings.TrimSpace(string(out)) != "1" { return fmt.Errorf("MariaDB returned an unexpected connection test result") }
