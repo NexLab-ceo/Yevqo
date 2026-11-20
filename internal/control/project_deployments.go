@@ -201,15 +201,14 @@ func (s *Server) persistDeploymentLog(ctx context.Context, deviceID int64, siteI
 func (s *Server) queueProjectRollback(ctx context.Context,actorID,ownerID,projectID,deviceID int64,siteID,branch,commit string)(int64,error){
 	if !validLogSiteID(siteID)||!releaseCommitPattern.MatchString(commit){return 0,shared.ErrBadRequest("valid site and release commit are required")}
 	conn,online:=s.hub.Get(deviceID);if !online||conn==nil{return 0,shared.ErrBadRequest("Android Agent is offline")}
-	var sitePath,runtime string;var port int
-	if err:=s.db.conn.QueryRowContext(ctx,`SELECT path,runtime,port FROM sites WHERE device_id=? AND site_id=?`,deviceID,siteID).Scan(&sitePath,&runtime,&port);err!=nil{return 0,shared.ErrNotFound("site not found")}
-	gitCfg,err:=s.siteGitSettings(ctx,deviceID,siteID);if err!=nil{return 0,shared.ErrInternal("could not load site settings for rollback")}
+	var sitePath,runtime,rootDir,startCommand string;var port int
+	if err:=s.db.conn.QueryRowContext(ctx,`SELECT path,runtime,port,root_dir,start_command FROM sites WHERE device_id=? AND site_id=?`,deviceID,siteID).Scan(&sitePath,&runtime,&port,&rootDir,&startCommand);err!=nil{return 0,shared.ErrNotFound("site not found")}
 	projectIDScope,environmentID,err:=s.siteEnvironmentScope(ctx,ownerID,deviceID,siteID);if err!=nil{return 0,err};if projectIDScope!=0&&projectIDScope!=projectID{return 0,shared.ErrBadRequest("site database connections belong to a different project environment")}
 	env,err:=s.siteRuntimeEnvironment(ctx,ownerID,deviceID,siteID,projectIDScope,environmentID);if err!=nil{return 0,err}
 	res,err:=s.db.conn.ExecContext(ctx,`INSERT INTO project_deployment_runs(project_id,user_id,device_id,site_id,source,branch,commit_sha,status,message) VALUES(?,?,?,?, 'rollback',?,?,'queued','Rollback queued')`,projectID,ownerID,deviceID,siteID,branch,commit)
 	if err!=nil{return 0,shared.ErrInternal("could not create rollback record")}
 	runID,_:=res.LastInsertId()
-	payload:=&shared.RollbackSiteRelease{SiteId:siteID,Commit:commit,RootDir:gitCfg.RootDir,Runtime:runtime,Port:uint32(port),StartCommand:gitCfg.StartCommand,Env:env}
+	payload:=&shared.RollbackSiteRelease{SiteId:siteID,Commit:commit,RootDir:rootDir,Runtime:runtime,Port:uint32(port),StartCommand:startCommand,Env:env}
 	go func(){
 		runCtx,cancel:=context.WithTimeout(context.Background(),10*time.Minute);defer cancel()
 		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE project_deployment_runs SET status='running',started_at=UTC_TIMESTAMP(),message='Activating immutable release' WHERE id=? AND status='queued'`,runID)
