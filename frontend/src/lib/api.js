@@ -204,13 +204,13 @@ export async function deleteDatabaseServer(id) { return request('DELETE', `/api/
 export async function listDatabases(projectId = '') { return request('GET', '/api/databases' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
 
 // === Operations ===
-export async function listLogs(limit = 100) { return request('GET', `/api/logs?limit=${limit}`); }
+export async function listLogs(limit = 100, projectId = '') { return request('GET', `/api/logs?limit=${limit}` + (projectId ? `&project_id=${encodeURIComponent(projectId)}` : '')); }
 export async function listAuditLogs(limit = 100) { return request('GET', `/api/audit-logs?limit=${limit}`); }
 export async function listNotifications() { return request('GET', '/api/notifications'); }
 export async function markNotificationRead(id) { return request('POST', '/api/notifications', { id }); }
 export async function getSettings() { return request('GET', '/api/settings'); }
 export async function saveSettings(settings) { return request('PUT', '/api/settings', settings); }
-export async function getReports() { return request('GET', '/api/reports'); }
+export async function getReports(projectId = '') { return request('GET', '/api/reports' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
 export async function listBackups() { return request('GET', '/api/backups'); }
 export async function createControlPlaneBackup() { return request('POST', '/admin/api/backups/control-plane', {}); }
 export async function getDatabaseBackupChunk(id, offset, length = 262144) { return request('GET', `/api/backups/${id}/chunk?offset=${offset}&length=${length}`); }
@@ -220,10 +220,10 @@ export async function deleteBackupSchedule(id) { return request('DELETE', `/api/
 
 export async function deleteSite(deviceId, siteId) { return request('DELETE', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}`); }
 
-export async function listDomains() { return request('GET', '/api/domains'); }
+export async function listDomains(projectId = '') { return request('GET', '/api/domains' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
 export async function updateSiteDomain(deviceId, siteId, domain, tunnelToken = '') { return request('PATCH', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId), { domain, tunnel_token: tunnelToken }); }
 export async function listDeployments(projectId = '') { return request('GET', '/api/deployments' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
-export async function getMonitoring() { return request('GET', '/api/monitoring'); }
+export async function getMonitoring(projectId = '') { return request('GET', '/api/monitoring' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
 
 export async function refreshDeviceMetrics(deviceId) { return request('POST', `/api/devices/${deviceId}/metrics`); }
 
