@@ -16,16 +16,17 @@ func (s *Server) handleRestoreSiteBackup(w http.ResponseWriter,r *http.Request){
 	if r.Method!=http.MethodPost{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
 	u:=UserFromContext(r.Context())
 	var in struct{BackupID int64 `json:"backup_id"`}
+	ownerID,_,accessErr:=s.authorizeBackup(r.Context(),in.BackupID,u.ID,"backup.manage");if accessErr!=nil{apiError(w,accessErr);return}
 	if err:=decodeJSON(r,&in);err!=nil||in.BackupID<1{apiError(w,shared.ErrBadRequest("invalid site restore request"));return}
 	var deviceID int64;var fileName,status,resourceType,resourceID string;var size int64
-	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,file_name,status,resource_type,resource_id,size_bytes FROM backups WHERE id=? AND user_id=?`,in.BackupID,u.ID).Scan(&deviceID,&fileName,&status,&resourceType,&resourceID,&size)
+	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,file_name,status,resource_type,resource_id,size_bytes FROM backups WHERE id=? AND user_id=?`,in.BackupID,ownerID).Scan(&deviceID,&fileName,&status,&resourceType,&resourceID,&size)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("site backup not found"));return}
 	if err!=nil{apiError(w,shared.ErrInternal("could not load site backup"));return}
 	if resourceType!="site"||status!="completed"||size<1{apiError(w,shared.ErrBadRequest("only completed website backups can be restored"));return}
 	parts:=strings.SplitN(resourceID,":",2)
 	if len(parts)!=2||parts[0]!=strconv.FormatInt(deviceID,10)||!validBackupSiteID(parts[1]){apiError(w,shared.ErrBadRequest("invalid website backup scope"));return}
 	var owned int
-	if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,deviceID,parts[1],u.ID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("target website no longer exists"));return}
+	if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,deviceID,parts[1],ownerID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("target website no longer exists"));return}
 	conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("source device is offline"));return}
 	ctx,cancel:=context.WithTimeout(r.Context(),5*time.Minute);defer cancel()
 	result,err:=conn.SendCommand(ctx,"restore_site_backup",&shared.RestoreSiteBackup{SiteId:parts[1],FileName:fileName})
