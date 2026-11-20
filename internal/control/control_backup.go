@@ -49,8 +49,7 @@ func (s *Server) handleControlPlaneBackup(w http.ResponseWriter, r *http.Request
 	}
 	cnf := cnfFile.Name()
 	defer os.Remove(cnf)
-	cnfContent := fmt.Sprintf("[client]\\nuser=%s\\npassword=%s\\nhost=%s\\nport=%s\\nprotocol=tcp\\n",
-		cnfEscape(cfg.User), cnfEscape(cfg.Passwd), cnfEscape(host), cnfEscape(port))
+	cnfContent := mysqlClientDefaultsFile(cfg.User, cfg.Passwd, host, port)
 	if err := cnfFile.Chmod(0600); err != nil {
 		_ = cnfFile.Close()
 		apiError(w, shared.ErrInternal("could not secure database credentials"))
@@ -123,6 +122,11 @@ func (s *Server) handleControlPlaneBackup(w http.ResponseWriter, r *http.Request
 		"ok": true, "file_name": name, "path": path, "size_bytes": info.Size(),
 		"created_at": time.Now().UTC(), "message": "Control Plane database backup created",
 	})
+}
+
+func mysqlClientDefaultsFile(user, password, host, port string) string {
+	return fmt.Sprintf("[client]\nuser=%s\npassword=%s\nhost=%s\nport=%s\nprotocol=tcp\n",
+		cnfEscape(user), cnfEscape(password), cnfEscape(host), cnfEscape(port))
 }
 
 func cnfEscape(value string) string {

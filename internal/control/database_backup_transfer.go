@@ -32,7 +32,7 @@ func (s *Server) handleDatabaseBackupChunk(w http.ResponseWriter,r *http.Request
   if len(target)!=2 || target[0]!=strconv.FormatInt(deviceID,10) || !validBackupSiteID(target[1]) { apiError(w,shared.ErrBadRequest("invalid site backup scope"));return }
   result,err=conn.SendCommand(ctx,"read_site_backup_chunk",&shared.ReadSiteBackupChunk{SiteId:target[1],FileName:fileName,Offset:offset,Length:length})
  } else { apiError(w,shared.ErrBadRequest("backup is not available for download"));return }
- if err!=nil{apiError(w,shared.ErrInternal("Agent backup transfer command failed"));return};if !result.Ok{apiError(w,shared.ErrBadRequest(result.Message));return}
+ if err!=nil{apiError(w,shared.ErrInternal("Agent backup transfer command failed"));return};if result==nil{apiError(w,shared.ErrInternal("Agent returned an empty backup chunk response"));return};if !result.Ok{apiError(w,shared.ErrBadRequest(result.Message));return}
  var chunk shared.DatabaseBackupChunk;if err:=shared.Unmarshal(result.Payload,&chunk);err!=nil{apiError(w,shared.ErrInternal("invalid backup chunk response"));return}
  if chunk.TotalSize!=size||chunk.Offset!=offset||len(chunk.Data)>length{apiError(w,shared.ErrInternal("backup chunk metadata mismatch"));return}
  writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"data":chunk.Data,"offset":chunk.Offset,"total_size":chunk.TotalSize,"eof":chunk.EOF})

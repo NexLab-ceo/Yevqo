@@ -31,6 +31,7 @@ func (s *Server) handleRestoreSiteBackup(w http.ResponseWriter,r *http.Request){
 	ctx,cancel:=context.WithTimeout(r.Context(),5*time.Minute);defer cancel()
 	result,err:=conn.SendCommand(ctx,"restore_site_backup",&shared.RestoreSiteBackup{SiteId:parts[1],FileName:fileName})
 	if err!=nil{apiError(w,shared.ErrInternal("site restore command failed"));return}
+	if result==nil{apiError(w,shared.ErrInternal("Agent returned an empty site restore response"));return}
 	if !result.Ok{apiError(w,shared.ErrBadRequest(result.Message));return}
 	_,_ = s.db.conn.ExecContext(r.Context(),`UPDATE sites SET status='stopped',pid=0 WHERE device_id=? AND site_id=?`,deviceID,parts[1])
 	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"site_backup_restored",Details:map[string]interface{}{"backup_id":in.BackupID,"site_id":parts[1]}})
