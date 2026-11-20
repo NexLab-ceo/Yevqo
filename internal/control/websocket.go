@@ -204,7 +204,12 @@ func (c *AgentConn) writePump() {
 func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 	ctx := context.Background()
 
-	user, err := srv.db.GetUserByReferralCode(ctx, req.Token)
+	if c.Device != nil {
+		c.sendAuthError("connection is already authenticated")
+		return
+	}
+
+	user, err := srv.db.UserByAgentToken(ctx, req.Token)
 	if err != nil {
 		c.sendAuthError("invalid token")
 		return
