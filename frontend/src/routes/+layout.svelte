@@ -51,7 +51,7 @@
    {/each}
    
   </nav>
-  <div class="sidebar-bottom">
+  <div class="sidebar-bottom"><div class="sidebar-meta"><span><i></i>{ru?"Control Plane подключён":"Control Plane connected"}</span><small>Yevqo Control Panel · v1.0.0</small></div>
    
    <div class="account-row"><span class="account-avatar">{($user?.username||'U').slice(0,1).toUpperCase()}</span><span class="account-copy"><strong>{$user?.username||'User'}</strong><small>{$user?.email||'Personal account'}</small></span><button class="account-menu" title="Выйти" aria-label="Выйти" on:click={handleLogout}>↗</button></div>
   </div>
