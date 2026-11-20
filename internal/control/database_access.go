@@ -50,6 +50,24 @@ func (s *Server) authorizeDatabaseInstance(ctx context.Context, databaseID, acto
 
 // authorizeDeviceOwner resolves the workspace owner for a device-scoped
 // resource and applies the requested role permission.
+// authorizeBackup resolves backup ownership before read, restore or transfer operations.
+func (s *Server) authorizeBackup(ctx context.Context, backupID, actorID int64, action string) (ownerID, deviceID int64, err error) {
+	if backupID < 1 {
+		return 0, 0, shared.ErrBadRequest("invalid backup id")
+	}
+	err = s.db.conn.QueryRowContext(ctx, "SELECT user_id,device_id FROM backups WHERE id=?", backupID).Scan(&ownerID, &deviceID)
+	if err == sql.ErrNoRows {
+		return 0, 0, shared.ErrNotFound("backup not found")
+	}
+	if err != nil {
+		return 0, 0, shared.ErrInternal("could not resolve backup owner")
+	}
+	if err = s.authorizeWorkspace(ctx, ownerID, actorID, action); err != nil {
+		return 0, 0, err
+	}
+	return ownerID, deviceID, nil
+}
+
 func (s *Server) authorizeDeviceOwner(ctx context.Context, deviceID, actorID int64, action string) (ownerID int64, err error) {
 	if deviceID < 1 {
 		return 0, shared.ErrBadRequest("invalid device id")
