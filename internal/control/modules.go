@@ -318,6 +318,7 @@ func (s *Server) handleInstallDatabaseServer(w http.ResponseWriter,r *http.Reque
 	err:=s.db.conn.QueryRowContext(r.Context(),"SELECT device_id,engine,data_directory,status,port,max_connections,bind_address,remote_access,ssl_mode FROM database_servers WHERE id=? AND user_id=?",id,ownerID).Scan(&deviceID,&engine,&dataDir,&status,&port,&maxConnections,&bind,&remote,&sslMode)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}
 	if engine!="postgresql" && engine!="mariadb" && engine!="mysql"{apiError(w,shared.ErrBadRequest("unsupported database engine"));return}
+	if engine=="mariadb" || engine=="mysql" { dataDir = strings.TrimRight(dataDir, "/") + "/server-" + fmt.Sprint(id); if _,err:=s.db.conn.ExecContext(r.Context(), "UPDATE database_servers SET data_directory=? WHERE id=? AND user_id=?", dataDir,id,ownerID);err!=nil{apiError(w,shared.ErrInternal("could not reserve isolated MariaDB data directory"));return} }
 	if status=="ready"{apiError(w,shared.ErrBadRequest("database server is already ready"));return}
 	if status!="planned"&&status!="error"{apiError(w,shared.ErrBadRequest("database server cannot be installed from its current state"));return}
 	if bind!="127.0.0.1"||remote{apiError(w,shared.ErrBadRequest("remote database access must remain disabled"));return}
@@ -361,8 +362,8 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 	id,err:=strconv.ParseInt(parts[0],10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid server id"));return}
 	action:="database.manage";if r.Method==http.MethodGet{action="database.read"};ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,u.ID,action);if accessErr!=nil{apiError(w,accessErr);return}
 	if len(parts)==2&&parts[1]=="roles"&&r.Method==http.MethodGet {
-		var deviceID int64;var engine,status,dataDir string;var port int
-		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port,data_directory FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&port,&dataDir)
+		var deviceID int64;var engine,status,dataDir string;var port,maxConnections int
+		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port,data_directory,max_connections FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&port,&dataDir,&maxConnections)
 		if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
 		if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
 		if (engine!="postgresql"&&engine!="mariadb"&&engine!="mysql")||status!="ready" { apiError(w,shared.ErrBadRequest("a supported ready database server is required to inspect users"));return }
@@ -416,7 +417,7 @@ func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Reques
 		if n,_:=res.RowsAffected();n!=1 { apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return }
 	}
 	ctx,cancel:=context.WithTimeout(r.Context(),110*time.Second);defer cancel()
-	result,err:=conn.SendCommand(ctx,action+"_database_server",&shared.DatabaseServerAction{Engine:engine,ServerID:id,Port:uint32(port),DataDirectory:dataDir})
+	result,err:=conn.SendCommand(ctx,action+"_database_server",&shared.DatabaseServerAction{Engine:engine,MaxConnections:uint32(maxConnections),ServerID:id,Port:uint32(port),DataDirectory:dataDir})
 	if err!=nil||!result.Ok {
 		if previous=="ready"||previous=="stopped" { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=? AND status IN ('starting','stopping')`,previous,id,ownerID) }
 		message:="Agent database lifecycle command failed";if err!=nil{message=err.Error()}else if result!=nil&&result.Message!=""{message=result.Message}
