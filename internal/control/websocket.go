@@ -48,8 +48,14 @@ func NewHub() *Hub {
 
 func (h *Hub) Add(a *AgentConn) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	previous := h.conns[a.Device.ID]
 	h.conns[a.Device.ID] = a
+	h.mu.Unlock()
+	// A device has one active socket. Close the replaced connection after
+	// releasing the hub lock; its deferred cleanup cannot remove the new one.
+	if previous != nil && previous != a && previous.ws != nil {
+		_ = previous.ws.Close()
+	}
 }
 
 func (h *Hub) Remove(deviceID int64) {
