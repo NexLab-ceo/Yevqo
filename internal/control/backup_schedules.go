@@ -150,13 +150,13 @@ func (s *Server) queueScheduledBackup(item dueBackupSchedule) {
 		go func(){ s.runSiteBackup(id,item.UserID,item.UserID,item.DeviceID,conn,&shared.CreateSiteBackup{SiteId:item.SiteID}); if err:=s.applyScheduledBackupRetention(item,id); err!=nil { s.failBackupSchedule(item,"backup created but retention failed: "+err.Error()); return }; s.finishScheduledBackup(item,id) }()
 		return
 	}
-	var serverID int64; var database string; var port int; var engine,status,serverStatus string
-	err = s.db.conn.QueryRowContext(ctx,`SELECT ds.id,db.name,ds.port,ds.engine,db.status,ds.status FROM db_instances db JOIN database_servers ds ON ds.id=db.server_id WHERE db.id=? AND db.user_id=? AND ds.device_id=?`,item.DatabaseID,item.UserID,item.DeviceID).Scan(&serverID,&database,&port,&engine,&status,&serverStatus)
-	if err != nil || engine!="postgresql" || status!="ready" || serverStatus!="ready" { s.failBackupSchedule(item,"database or PostgreSQL server is not ready"); return }
-	res,err := s.db.conn.ExecContext(ctx,`INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,'database',?,?,0,'queued')`,item.UserID,item.DeviceID,serverID,fmt.Sprint(item.DatabaseID),fmt.Sprintf("scheduled-%d.dump",item.DatabaseID))
+	var serverID int64; var database,dataDir string; var port int; var engine,status,serverStatus string
+	err = s.db.conn.QueryRowContext(ctx,`SELECT ds.id,db.name,ds.port,ds.engine,db.status,ds.status,ds.data_directory FROM db_instances db JOIN database_servers ds ON ds.id=db.server_id WHERE db.id=? AND db.user_id=? AND ds.device_id=?`,item.DatabaseID,item.UserID,item.DeviceID).Scan(&serverID,&database,&port,&engine,&status,&serverStatus,&dataDir)
+	if err != nil || (engine!="postgresql" && engine!="mariadb" && engine!="mysql") || status!="ready" || serverStatus!="ready" { s.failBackupSchedule(item,"database server is not ready"); return }
+	res,err := s.db.conn.ExecContext(ctx,`INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,'database',?,?,0,'queued')`,item.UserID,item.DeviceID,serverID,fmt.Sprint(item.DatabaseID),fmt.Sprintf("scheduled-%d",item.DatabaseID))
 	if err != nil { s.failBackupSchedule(item,"could not queue database backup"); return }
 	id,_ := res.LastInsertId()
-	go func(){ s.runDatabaseBackup(id,item.UserID,item.UserID,item.DeviceID,conn,&shared.CreateDatabaseBackup{DatabaseID:item.DatabaseID,ServerID:serverID,Database:database,Port:uint32(port)}); if err:=s.applyScheduledBackupRetention(item,id); err!=nil { s.failBackupSchedule(item,"backup created but retention failed: "+err.Error()); return }; s.finishScheduledBackup(item,id) }()
+	go func(){ s.runDatabaseBackup(id,item.UserID,item.UserID,item.DeviceID,conn,&shared.CreateDatabaseBackup{Engine:engine,DataDirectory:dataDir,DatabaseID:item.DatabaseID,ServerID:serverID,Database:database,Port:uint32(port)}); if err:=s.applyScheduledBackupRetention(item,id); err!=nil { s.failBackupSchedule(item,"backup created but retention failed: "+err.Error()); return }; s.finishScheduledBackup(item,id) }()
 }
 
 func (s *Server) applyScheduledBackupRetention(item dueBackupSchedule, backupID int64) error {
