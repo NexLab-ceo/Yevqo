@@ -66,7 +66,7 @@ func (s *Server) handleProjectDeployments(w http.ResponseWriter,r *http.Request)
 	parts:=strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/projects/"),"/"),"/")
 	if len(parts)<2 || parts[1]!="deployments" || len(parts)>4 { http.NotFound(w,r);return }
 	projectID,err:=strconv.ParseInt(parts[0],10,64);if err!=nil||projectID<1{apiError(w,shared.ErrBadRequest("invalid project id"));return}
-	ownerID,accessErr:=s.authorizeProjectOwner(r.Context(),projectID,u.ID,"project.read");if accessErr!=nil{apiError(w,accessErr);return}
+	action:="project.read";if r.Method!=http.MethodGet{action="project.manage"};ownerID,accessErr:=s.authorizeProjectOwner(r.Context(),projectID,u.ID,action);if accessErr!=nil{apiError(w,accessErr);return}
 	if r.Method==http.MethodGet && len(parts)==2 {
 		rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT id,device_id,site_id,source,branch,commit_sha,agent_job_id,status,progress,message,created_at,started_at,finished_at FROM project_deployment_runs WHERE project_id=? ORDER BY id DESC LIMIT 100`,projectID)
 		if err!=nil{apiError(w,shared.ErrInternal("could not load project deployment history"));return};defer rows.Close()
