@@ -129,7 +129,9 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = s.db.conn.ExecContext(context.Background(), `UPDATE github_webhook_deliveries SET status=? WHERE device_id=? AND site_id=? AND delivery_id=?`, status, deviceID, parts[1], delivery)
 		runStatus := "succeeded"; if status == "failed" { runStatus = "failed" }; s.finishWebhookDeploymentRun(runID, runStatus, message)
-		if s.notificationPreferenceEnabled(context.Background(),userID,map[bool]string{true:"deployment_errors",false:"system"}[status=="failed"]) { _, _ = s.db.conn.ExecContext(context.Background(), `INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`, userID, map[bool]string{true:"error",false:"success"}[status=="failed"], title, truncateNotification(message)) }
+		var finalRunStatus string;_ = s.db.conn.QueryRowContext(context.Background(),`SELECT status FROM project_deployment_runs WHERE id=?`,runID).Scan(&finalRunStatus)
+		if finalRunStatus=="cancelled"{title="Deployment cancelled: "+parts[1];message="Automatic deployment was cancelled.";status="cancelled"}
+		if s.notificationPreferenceEnabled(context.Background(),userID,map[bool]string{true:"deployment_errors",false:"system"}[status=="failed"]) { notificationType:="success";if status=="failed"{notificationType="error"}else if status=="cancelled"{notificationType="warning"};_, _ = s.db.conn.ExecContext(context.Background(), `INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`, userID, notificationType, title, truncateNotification(message)) }
 		_ = s.db.Log(context.Background(), &shared.LogEntry{UserID: shared.PtrInt64(userID), DeviceID: shared.PtrInt64(deviceID), Action: "github_webhook_deployment_"+status, Details: map[string]interface{}{"site_id": parts[1], "commit": event.After, "delivery": delivery}})
 	}()
 }
