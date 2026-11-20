@@ -89,7 +89,7 @@ func (s *Server) siteGitSettings(ctx context.Context, deviceID int64, siteID str
 			token, err := s.githubAppTokenForRepository(ctx,userID,out.GitURL)
 			if err != nil { return nil, shared.ErrInternal("could not refresh GitHub App installation token") }
 			out.GitToken = token
-		} } else { return nil, mapErr }
+		} else if mapErr != sql.ErrNoRows { return nil, mapErr }
 	}
 	return &out, nil
 }
