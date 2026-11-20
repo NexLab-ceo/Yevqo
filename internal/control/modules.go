@@ -946,7 +946,7 @@ func (s *Server) runDatabaseRestore(jobID,backupID,targetID,ownerID,actorID,devi
 	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='running' WHERE id=? AND user_id=?`,jobID,ownerID)
 	ctx,cancel:=context.WithTimeout(context.Background(),13*time.Minute);defer cancel()
 	result,err:=conn.SendCommand(ctx,"restore_database_backup",req)
-	if err!=nil||!result.Ok {
+	if err!=nil||result==nil||!result.Ok {
 		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Agent restore failed' WHERE id=? AND user_id=?`,jobID,ownerID)
 		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,targetID,ownerID)
 		message:="Agent database restore failed";if err!=nil{message=err.Error()}else if result!=nil&&result.Message!=""{message=result.Message}
