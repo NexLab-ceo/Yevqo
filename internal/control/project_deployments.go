@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"fmt"
 	"database/sql"
 	"net/http"
 	"strconv"
@@ -130,7 +131,11 @@ func (s *Server) queueProjectDeployment(ctx context.Context,actorID,ownerID,proj
 	token,err:=s.githubAppTokenForIntegration(ctx,ownerID,integrationID,owner);if err!=nil{return 0,shared.ErrForbidden("GitHub App installation is unavailable")}
 	apiCtx,cancel:=context.WithTimeout(ctx,20*time.Second);defer cancel()
 	branchInfo,err:=s.fetchGitHubBranch(apiCtx,token,owner,name,branch);if err!=nil{return 0,shared.ErrBadRequest("deployment branch is not accessible")}
-	if in.Commit==""{in.Commit=branchInfo.Commit.SHA}
+	if in.Commit==""{in.Commit=branchInfo.Commit.SHA}else{
+		var commitInfo struct{SHA string `json:"sha"`}
+		commitURL:=fmt.Sprintf("https://api.github.com/repos/%s/%s/commits/%s",url.PathEscape(owner),url.PathEscape(name),url.PathEscape(in.Commit))
+		if err:=githubAPIGet(apiCtx,token,commitURL,&commitInfo);err!=nil||!strings.EqualFold(commitInfo.SHA,in.Commit){return 0,shared.ErrBadRequest("commit SHA is not available in the connected repository")}
+	}
 	if _,online:=s.hub.Get(in.DeviceID);!online{return 0,shared.ErrBadRequest("Android Agent is offline")}
 	var sitePath,runtime string;var port int
 	if err:=s.db.conn.QueryRowContext(ctx,`SELECT path,runtime,port FROM sites WHERE device_id=? AND site_id=?`,in.DeviceID,in.SiteID).Scan(&sitePath,&runtime,&port);err!=nil{return 0,shared.ErrNotFound("site not found")}
