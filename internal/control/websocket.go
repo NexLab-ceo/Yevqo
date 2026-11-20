@@ -90,6 +90,18 @@ func (h *Hub) List() []*AgentConn {
 	return out
 }
 
+// CloseUserConnections revokes live sessions after an Agent token rotation.
+func (h *Hub) CloseUserConnections(userID int64) int {
+	closed := 0
+	for _, conn := range h.List() {
+		if conn != nil && conn.Device != nil && conn.Device.UserID == userID && conn.ws != nil {
+			_ = conn.ws.Close()
+			closed++
+		}
+	}
+	return closed
+}
+
 // AgentConn — одно соединение с агентом.
 type AgentConn struct {
 	Device    *shared.Device
