@@ -18,7 +18,7 @@ The `main` branch is the active Yevqo implementation. The all-in-one package kee
 
 ### Workspace and operations foundation
 - Projects can group workspace devices, websites and database servers. Resources can be attached/detached without deleting the underlying data; a project can be deleted without deleting its devices, sites, files or databases.
-- Projects have Production, Development and Staging environments. Environment application/database-server assignments are organizational metadata; they do not yet create isolated database instances or automatically switch runtime connections. Production rename/delete and assignment removal are blocked server-side.
+- Projects have Production, Development and Staging environments. Environment assignments scope database inventory and runtime credential injection; a site/database link created in an environment must target a site assigned to that same environment. This is application-level scoping, not OS/container isolation. Production rename/delete and assignment removal are blocked server-side.
 - Database Server configurations are stored as `planned` metadata until an Agent installation is confirmed. Saving a configuration does not install packages or modify an Android device.
 - Database Server records remain owned by the workspace owner; server-side role checks govern member access. A server cannot be removed while database metadata references it.
 - Account settings persist Simple / Advanced mode, locale and theme.
@@ -30,6 +30,14 @@ Project workspace and environment behavior, role boundaries, resource detach saf
 ### Important implementation boundary
 PostgreSQL installation, database creation, application-role provisioning, encrypted credential storage, website process injection and local database backup are now wired through typed Agent commands. Backup restore, bounded backup download/transfer and scheduled backups have API/Agent command flows; end-to-end Agent validation and export remain open. Managed MariaDB/MySQL lifecycle, existing-cluster adoption and full credential rotation remain pending. The UI reports device-side actions only after the Agent confirms them.
 
+
+
+### GitHub App and automatic Deploy
+- GitHub PAT connections remain supported. GitHub App connections accept the App ID, installation ID and PEM private key; the private key is encrypted at rest and is never returned to the browser.
+- Control Plane signs short-lived RS256 App JWTs and requests installation access tokens just in time. Tokens are refreshed for private HTTPS GitHub repository operations and are not persisted as long-lived credentials.
+- The App installation needs read-only Contents and Metadata permissions and must be installed on the account or organization that owns the repository.
+- Push webhooks use per-site HMAC-SHA256 secrets, branch filtering, exact commit checkout and delivery-ID replay protection. Automatic Deploy requires explicit consent to execute repository code.
+- Live GitHub App installation and private-repository deployment still require configuring a GitHub App and verifying it against a real installation.
 
 ### Website lifecycle and operations
 - Site creation is an explicit typed Agent command. It creates a new site directory and a starter file without overwriting an existing directory.
