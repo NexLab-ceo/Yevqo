@@ -40,5 +40,7 @@ The App should request only Metadata and Contents read access until a feature pr
 
 - Repository listing is backed by the verified installation token.
 - Installation linking uses a short-lived, single-use state tied to the signed-in Yevqo account.
-- Project-level repository import, branch synchronization UI and automatic deployment-on-push are not claimed complete by this integration screen alone.
-- Existing site Git configuration and signed GitHub webhook handling remain separate, already implemented platform capabilities.
+- Projects can now persist one verified GitHub App repository binding through `POST /api/projects/{id}/repository`. The Control Plane verifies that the selected installation belongs to the repository owner, fetches repository metadata and confirms the selected deployment branch before saving it. The project Source Repository tab supports connect, view and disconnect.
+- The repository binding is stored by additive migration `024_project_repositories.sql`; it is not applied to an existing/production database automatically. Disconnecting the GitHub App removes dependent project bindings through the migration foreign key.
+- Branches can be selected by entering a branch name; the Control Plane verifies that the branch exists and is visible to the installation. A full branch browser/synchronization UI is still open.
+- Project-level automatic deployment-on-push, PR/checks UI and deployment lifecycle are still not claimed complete. Existing signed per-site GitHub push webhook handling remains a separate implemented capability.
