@@ -76,7 +76,7 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label" for="password">Пароль (12–72 символа)</label>
+                <label class="form-label" for="password">Пароль (12–72 байта)</label>
                 <input
                     id="password"
                     class="input"
