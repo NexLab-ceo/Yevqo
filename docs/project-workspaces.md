@@ -7,6 +7,7 @@ Yevqo projects are organizational scopes over existing workspace resources. Atta
 - Projects and resources remain owned by the workspace owner.
 - Active workspace members are authorized on the server for each operation; the dashboard is not an authorization boundary.
 - Owners and Admins can manage project resources, databases, backups, and environments.
+- Owners and Admins can invite/remove members and change active member roles; Developers cannot manage workspace membership.
 - Developers can read project/device state and use the explicitly allowed application build/deploy actions. Database and backup management are not granted to Developers.
 - Resource IDs are resolved to their owning workspace before reads or mutations.
 
