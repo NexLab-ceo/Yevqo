@@ -26,44 +26,74 @@ type scheduledTaskView struct {
 	LastError string `json:"last_error,omitempty"`
 }
 
-func (s *Server) handleScheduledTasks(w http.ResponseWriter,r *http.Request){
-	u:=UserFromContext(r.Context())
-	if r.Method==http.MethodGet{
-		deviceID,err:=strconv.ParseInt(r.URL.Query().Get("device_id"),10,64);if err!=nil||deviceID<1{apiError(w,shared.ErrBadRequest("device_id is required"));return}
-		siteID:=strings.TrimSpace(r.URL.Query().Get("site_id"));if !validBackupSiteID(siteID){apiError(w,shared.ErrBadRequest("invalid site_id"));return}
+func (s *Server) handleScheduledTasks(w http.ResponseWriter, r *http.Request) {
+	u := UserFromContext(r.Context())
+	if r.Method == http.MethodGet {
+		deviceID, err := strconv.ParseInt(r.URL.Query().Get("device_id"), 10, 64)
+		if err != nil || deviceID < 1 { apiError(w, shared.ErrBadRequest("device_id is required")); return }
+		siteID := strings.TrimSpace(r.URL.Query().Get("site_id"))
+		if !validBackupSiteID(siteID) { apiError(w, shared.ErrBadRequest("invalid site_id")); return }
+		ownerID, accessErr := s.authorizeDeviceOwner(r.Context(), deviceID, u.ID, "device.read")
+		if accessErr != nil { apiError(w, accessErr); return }
+		if err := s.authorizeWorkspace(r.Context(), ownerID, u.ID, "device.read"); err != nil { apiError(w, err); return }
 		var owned int
-		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,deviceID,siteID,u.ID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("site not found"));return}
-		rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT id,device_id,site_id,name,command,interval_minutes,enabled,next_run_at,last_run_at,last_status,COALESCE(last_output,''),COALESCE(last_error,'') FROM scheduled_tasks WHERE user_id=? AND device_id=? AND site_id=? ORDER BY created_at DESC`,u.ID,deviceID,siteID)
-		if err!=nil{apiError(w,shared.ErrInternal("could not load scheduled tasks"));return};defer rows.Close()
-		out:=make([]scheduledTaskView,0)
-		for rows.Next(){var item scheduledTaskView;if err:=rows.Scan(&item.ID,&item.DeviceID,&item.SiteID,&item.Name,&item.Command,&item.IntervalMinutes,&item.Enabled,&item.NextRunAt,&item.LastRunAt,&item.LastStatus,&item.LastOutput,&item.LastError);err!=nil{apiError(w,shared.ErrInternal("could not read scheduled tasks"));return};out=append(out,item)}
-		if err:=rows.Err();err!=nil{apiError(w,shared.ErrInternal("could not read scheduled tasks"));return}
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"tasks":out});return
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites WHERE device_id=? AND site_id=?`, deviceID, siteID).Scan(&owned); err != nil || owned != 1 {
+			apiError(w, shared.ErrNotFound("site not found")); return
+		}
+		rows, err := s.db.conn.QueryContext(r.Context(), `SELECT id,device_id,site_id,name,command,interval_minutes,enabled,next_run_at,last_run_at,last_status,COALESCE(last_output,''),COALESCE(last_error,'') FROM scheduled_tasks WHERE user_id=? AND device_id=? AND site_id=? ORDER BY created_at DESC`, ownerID, deviceID, siteID)
+		if err != nil { apiError(w, shared.ErrInternal("could not load scheduled tasks")); return }
+		defer rows.Close()
+		out := make([]scheduledTaskView, 0)
+		for rows.Next() {
+			var item scheduledTaskView
+			if err := rows.Scan(&item.ID,&item.DeviceID,&item.SiteID,&item.Name,&item.Command,&item.IntervalMinutes,&item.Enabled,&item.NextRunAt,&item.LastRunAt,&item.LastStatus,&item.LastOutput,&item.LastError); err != nil { apiError(w, shared.ErrInternal("could not read scheduled tasks")); return }
+			out = append(out, item)
+		}
+		if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read scheduled tasks")); return }
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"tasks":out})
+		return
 	}
-	if r.Method==http.MethodPost{
-		var in struct{DeviceID int64 `json:"device_id"`;SiteID string `json:"site_id"`;Name string `json:"name"`;Command string `json:"command"`;IntervalMinutes int `json:"interval_minutes"`}
-		if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid scheduled task"));return}
-		in.Name=strings.TrimSpace(in.Name);in.Command=strings.TrimSpace(in.Command)
-		if in.DeviceID<1||!validBackupSiteID(in.SiteID)||len(in.Name)<1||len(in.Name)>100||len(in.Command)<1||len(in.Command)>4096||strings.IndexByte(in.Command,0)>=0||in.IntervalMinutes<15||in.IntervalMinutes>43200{apiError(w,shared.ErrBadRequest("name, command and interval (15 minutes–30 days) are required"));return}
+	if r.Method == http.MethodPost {
+		var in struct { DeviceID int64 `json:"device_id"`; SiteID string `json:"site_id"`; Name string `json:"name"`; Command string `json:"command"`; IntervalMinutes int `json:"interval_minutes"` }
+		if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid scheduled task")); return }
+		in.Name, in.Command = strings.TrimSpace(in.Name), strings.TrimSpace(in.Command)
+		if in.DeviceID < 1 || !validBackupSiteID(in.SiteID) || len(in.Name) < 1 || len(in.Name) > 100 || len(in.Command) < 1 || len(in.Command) > 4096 || strings.IndexByte(in.Command, 0) >= 0 || in.IntervalMinutes < 15 || in.IntervalMinutes > 43200 {
+			apiError(w, shared.ErrBadRequest("name, command and interval (15 minutes–30 days) are required")); return
+		}
+		ownerID, accessErr := s.authorizeDeviceOwner(r.Context(), in.DeviceID, u.ID, "site.configure")
+		if accessErr != nil { apiError(w, accessErr); return }
 		var owned int
-		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,in.DeviceID,in.SiteID,u.ID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("site not found"));return}
-		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO scheduled_tasks(user_id,device_id,site_id,name,command,interval_minutes,next_run_at) VALUES(?,?,?,?,?,?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? MINUTE))`,u.ID,in.DeviceID,in.SiteID,in.Name,in.Command,in.IntervalMinutes,in.IntervalMinutes)
-		if err!=nil{apiError(w,shared.ErrInternal("could not create scheduled task"));return}
-		id,_:=res.LastInsertId()
-		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"scheduled_task_created",Details:map[string]interface{}{"task_id":id,"site_id":in.SiteID}})
-		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"task_id":id});return
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites WHERE device_id=? AND site_id=?`, in.DeviceID, in.SiteID).Scan(&owned); err != nil || owned != 1 {
+			apiError(w, shared.ErrNotFound("site not found")); return
+		}
+		res, err := s.db.conn.ExecContext(r.Context(), `INSERT INTO scheduled_tasks(user_id,device_id,site_id,name,command,interval_minutes,next_run_at) VALUES(?,?,?,?,?,?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? MINUTE))`, ownerID,in.DeviceID,in.SiteID,in.Name,in.Command,in.IntervalMinutes,in.IntervalMinutes)
+		if err != nil { apiError(w, shared.ErrInternal("could not create scheduled task")); return }
+		id, _ := res.LastInsertId()
+		_ = s.db.Log(r.Context(), &shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"scheduled_task_created",Details:map[string]interface{}{"task_id":id,"site_id":in.SiteID}})
+		writeJSON(w, http.StatusCreated, map[string]interface{}{"ok":true,"task_id":id})
+		return
 	}
-	if r.Method==http.MethodPatch||r.Method==http.MethodDelete{
-		raw:=strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/scheduled-tasks/"),"/")
-		id,err:=strconv.ParseInt(raw,10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid task id"));return}
-		if r.Method==http.MethodDelete{res,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM scheduled_tasks WHERE id=? AND user_id=?`,id,u.ID);if err!=nil{apiError(w,shared.ErrInternal("could not delete task"));return};n,_:=res.RowsAffected();if n==0{apiError(w,shared.ErrNotFound("task not found"));return};writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return}
-		var in struct{Enabled bool `json:"enabled"`}
-		if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid task update"));return}
-		res,err:=s.db.conn.ExecContext(r.Context(),`UPDATE scheduled_tasks SET enabled=?,next_run_at=IF(?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL interval_minutes MINUTE),next_run_at) WHERE id=? AND user_id=?`,in.Enabled,in.Enabled,id,u.ID)
-		if err!=nil{apiError(w,shared.ErrInternal("could not update task"));return};n,_:=res.RowsAffected();if n==0{apiError(w,shared.ErrNotFound("task not found"));return}
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"enabled":in.Enabled});return
+	if r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+		raw := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/scheduled-tasks/"), "/")
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id < 1 { apiError(w, shared.ErrBadRequest("invalid task id")); return }
+		var ownerID int64
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT user_id FROM scheduled_tasks WHERE id=?`, id).Scan(&ownerID); err != nil { apiError(w, shared.ErrNotFound("task not found")); return }
+		if err := s.authorizeWorkspace(r.Context(), ownerID, u.ID, "site.configure"); err != nil { apiError(w, err); return }
+		if r.Method == http.MethodDelete {
+			res, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM scheduled_tasks WHERE id=? AND user_id=?`, id, ownerID)
+			if err != nil { apiError(w, shared.ErrInternal("could not delete task")); return }
+			n, _ := res.RowsAffected(); if n == 0 { apiError(w, shared.ErrNotFound("task not found")); return }
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true}); return
+		}
+		var in struct { Enabled bool `json:"enabled"` }
+		if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid task update")); return }
+		res, err := s.db.conn.ExecContext(r.Context(), `UPDATE scheduled_tasks SET enabled=?,next_run_at=IF(?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL interval_minutes MINUTE),next_run_at) WHERE id=? AND user_id=?`, in.Enabled,in.Enabled,id,ownerID)
+		if err != nil { apiError(w, shared.ErrInternal("could not update task")); return }
+		n, _ := res.RowsAffected(); if n == 0 { apiError(w, shared.ErrNotFound("task not found")); return }
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"enabled":in.Enabled}); return
 	}
-	http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
+	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 }
 
 type dueScheduledTask struct{ID,UserID,DeviceID int64;SiteID,Name,Command string;IntervalMinutes int}
