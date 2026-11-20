@@ -178,5 +178,5 @@ func (s *Server) createWebhookDeploymentRun(ctx context.Context,userID,deviceID 
 func (s *Server) finishWebhookDeploymentRun(runID int64,status,message string){
 	if runID<1{return};if len(message)>1000{message=message[:1000]}
 	progress:=0;if status=="succeeded"{progress=100}
-	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE project_deployment_runs SET status=?,progress=?,message=?,finished_at=UTC_TIMESTAMP() WHERE id=?`,status,progress,message,runID)
+	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE project_deployment_runs SET status=IF(status='cancelled','cancelled',?),progress=IF(status='cancelled',0,?),message=?,finished_at=UTC_TIMESTAMP() WHERE id=?`,status,progress,message,runID)
 }
