@@ -39,34 +39,37 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 		apiError(w,shared.ErrBadRequest("password must be 12–256 characters and cannot contain NUL"));return
 	}
 	if in.ProjectID < 0 { apiError(w,shared.ErrBadRequest("invalid project id"));return }
+	ownerID,deviceID,err:=s.authorizeDatabaseServer(r.Context(),in.ServerID,u.ID,"database.manage")
+	if err!=nil { apiError(w,err);return }
+	var engine,status string;var port int
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT engine,status,port FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,ownerID).Scan(&engine,&status,&port)
+	if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
 	if in.ProjectID > 0 {
-		var projectOwned, linked int
-		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id=?`,in.ProjectID,u.ID).Scan(&projectOwned);err!=nil||projectOwned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }
+		if err:=s.authorizeProjectAction(r.Context(),in.ProjectID,u.ID,"database.manage");err!=nil { apiError(w,err);return }
+		var projectOwner int64
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT user_id FROM projects WHERE id=?`,in.ProjectID).Scan(&projectOwner);err!=nil||projectOwner!=ownerID { apiError(w,shared.ErrNotFound("project not found"));return }
+		var linked int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM project_database_servers WHERE project_id=? AND database_server_id=?`,in.ProjectID,in.ServerID).Scan(&linked);err!=nil||linked!=1 { apiError(w,shared.ErrNotFound("database server is not assigned to this project"));return }
 	}
-	var deviceID int64;var engine,status string;var port int
-	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,u.ID).Scan(&deviceID,&engine,&status,&port)
-	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
-	if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
 	if engine!="postgresql" { apiError(w,shared.ErrBadRequest("database creation currently supports PostgreSQL only"));return }
 	if status!="ready" { apiError(w,shared.ErrBadRequest("database server must be ready"));return }
 	if in.SiteID!="" {
 		if in.SiteDeviceID==0 { in.SiteDeviceID=deviceID }
 		if in.SiteDeviceID!=deviceID || len(in.SiteID)>64 { apiError(w,shared.ErrBadRequest("site and database must be on the same device for localhost connections"));return }
 		var exists int
-		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites WHERE device_id=? AND site_id=?`,in.SiteDeviceID,in.SiteID).Scan(&exists);err!=nil||exists!=1 { apiError(w,shared.ErrNotFound("site not found on selected device"));return }
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,in.SiteDeviceID,in.SiteID,ownerID).Scan(&exists);err!=nil||exists!=1 { apiError(w,shared.ErrNotFound("site not found on selected device"));return }
 	}
 	conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
 	ctx,cancel:=context.WithTimeout(r.Context(),2*time.Minute);defer cancel()
 	var duplicate int
 	if err:=s.db.conn.QueryRowContext(ctx,`SELECT COUNT(*) FROM db_instances WHERE server_id=? AND name=?`,in.ServerID,in.Name).Scan(&duplicate);err!=nil { apiError(w,shared.ErrInternal("could not validate database name"));return }
 	if duplicate>0 { apiError(w,shared.ErrBadRequest("database name already exists"));return }
-	res,err:=s.db.conn.ExecContext(ctx,`INSERT INTO db_instances(user_id,server_id,name,status) VALUES(?,?,?,'planned')`,u.ID,in.ServerID,in.Name)
+	res,err:=s.db.conn.ExecContext(ctx,`INSERT INTO db_instances(user_id,server_id,name,status) VALUES(?,?,?,'planned')`,ownerID,in.ServerID,in.Name)
 	if err!=nil { apiError(w,shared.ErrBadRequest("database name already exists or could not be reserved"));return }
 	databaseID,_:=res.LastInsertId()
 	cmdResult,err:=conn.SendCommand(ctx,"create_database",&shared.CreateDatabase{DatabaseID:databaseID,ServerID:in.ServerID,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)})
 	if err!=nil || !cmdResult.Ok {
-		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,databaseID,u.ID)
+		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,databaseID,ownerID)
 		if err!=nil { apiError(w,shared.ErrInternal("Agent database creation command failed"));return }
 		apiError(w,shared.ErrBadRequest(cmdResult.Message));return
 	}
@@ -74,8 +77,8 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 	if err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=?`,databaseID);apiError(w,shared.ErrInternal("could not protect database credentials"));return }
 	tx,err:=s.db.conn.BeginTx(ctx,nil);if err!=nil { apiError(w,shared.ErrInternal("database created but metadata transaction could not start"));return }
 	_,err=tx.ExecContext(ctx,`INSERT INTO database_credentials(database_id,username,ciphertext,nonce,key_version) VALUES(?,?,?,?,1)`,databaseID,in.Username,ciphertext,nonce)
-	if err==nil { _,err=tx.ExecContext(ctx,`UPDATE db_instances SET status='ready' WHERE id=? AND user_id=?`,databaseID,u.ID) }
-	if err==nil && in.SiteID!="" { _,err=tx.ExecContext(ctx,`INSERT INTO site_database_connections(user_id,device_id,site_id,database_id) VALUES(?,?,?,?)`,u.ID,in.SiteDeviceID,in.SiteID,databaseID) }
+	if err==nil { _,err=tx.ExecContext(ctx,`UPDATE db_instances SET status='ready' WHERE id=? AND user_id=?`,databaseID,ownerID) }
+	if err==nil && in.SiteID!="" { _,err=tx.ExecContext(ctx,`INSERT INTO site_database_connections(user_id,device_id,site_id,database_id) VALUES(?,?,?,?)`,ownerID,in.SiteDeviceID,in.SiteID,databaseID) }
 	if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("database created but credential metadata could not be saved; do not retry blindly"));return }
 	if err=tx.Commit();err!=nil { apiError(w,shared.ErrInternal("database created but metadata commit failed; inspect database inventory before retrying"));return }
 	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_created",Details:map[string]interface{}{"database_id":databaseID,"server_id":in.ServerID,"database":in.Name,"username":in.Username}})
@@ -159,6 +162,7 @@ func (s *Server) handleDatabaseByID(w http.ResponseWriter,r *http.Request) {
 	raw:=strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/databases/"),"/")
 	id,err:=strconv.ParseInt(raw,10,64)
 	if err!=nil||id<1 { apiError(w,shared.ErrBadRequest("invalid database id"));return }
+	ownerID,_,_,accessErr:=s.authorizeDatabaseInstance(r.Context(),id,ownerID,"database.read");if accessErr!=nil{apiError(w,accessErr);return}
 	var databaseID,serverID,deviceID int64
 	var name,status,serverName,engine,sslMode string
 	var username sql.NullString
@@ -168,11 +172,11 @@ func (s *Server) handleDatabaseByID(w http.ResponseWriter,r *http.Request) {
 	err=s.db.conn.QueryRowContext(r.Context(),`SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.device_id,ds.name,ds.engine,ds.port,ds.ssl_mode,dc.username,(SELECT status FROM database_restore_jobs WHERE target_database_id=d.id ORDER BY id DESC LIMIT 1)
 		FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id
 		LEFT JOIN database_credentials dc ON dc.database_id=d.id
-		WHERE d.id=? AND d.user_id=?`,id,u.ID).Scan(&databaseID,&serverID,&name,&status,&created,&deviceID,&serverName,&engine,&port,&sslMode,&username,&restoreStatus)
+		WHERE d.id=? AND d.user_id=?`,id,ownerID).Scan(&databaseID,&serverID,&name,&status,&created,&deviceID,&serverName,&engine,&port,&sslMode,&username,&restoreStatus)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database not found"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load database details"));return }
 	var linkedSites int
-	if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM site_database_connections WHERE database_id=? AND user_id=?`,id,u.ID).Scan(&linkedSites);err!=nil { apiError(w,shared.ErrInternal("could not load database connections"));return }
+	if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM site_database_connections WHERE database_id=? AND user_id=?`,id,ownerID).Scan(&linkedSites);err!=nil { apiError(w,shared.ErrInternal("could not load database connections"));return }
 	user:=""
 	if username.Valid { user=username.String }
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"database":map[string]interface{}{
@@ -188,11 +192,12 @@ func (s *Server) handleDatabaseConnectionTest(w http.ResponseWriter,r *http.Requ
 	u:=UserFromContext(r.Context())
 	raw:=strings.TrimSuffix(strings.TrimPrefix(r.URL.Path,"/api/databases/"),"/test")
 	id,err:=strconv.ParseInt(strings.Trim(raw,"/"),10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid database id"));return}
+	ownerID,_,_,accessErr:=s.authorizeDatabaseInstance(r.Context(),id,ownerID,"database.read");if accessErr!=nil{apiError(w,accessErr);return}
 	var name,serverStatus,databaseStatus,sslMode string;var deviceID int64;var port int;var username sql.NullString;var ciphertext,nonce []byte
 	err=s.db.conn.QueryRowContext(r.Context(),`SELECT d.name,ds.device_id,ds.port,ds.ssl_mode,ds.status,d.status,dc.username,dc.ciphertext,dc.nonce
 		FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id
 		JOIN database_credentials dc ON dc.database_id=d.id
-		WHERE d.id=? AND d.user_id=?`,id,u.ID).Scan(&name,&deviceID,&port,&sslMode,&serverStatus,&databaseStatus,&username,&ciphertext,&nonce)
+		WHERE d.id=? AND d.user_id=?`,id,ownerID).Scan(&name,&deviceID,&port,&sslMode,&serverStatus,&databaseStatus,&username,&ciphertext,&nonce)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database credentials not found"));return}
 	if err!=nil{apiError(w,shared.ErrInternal("could not load database connection"));return}
 	if databaseStatus!="ready"||serverStatus!="ready"||!username.Valid{apiError(w,shared.ErrBadRequest("database and server must be ready"));return}
