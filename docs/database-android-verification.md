@@ -91,3 +91,41 @@ try {
 - [ ] Production/существующие пользовательские базы не изменялись.
 
 Запишите модель Android, версию Termux/PostgreSQL, Server ID и результаты пунктов, не публикуя пароль. CI и статический анализ не заменяют тест на телефоне.
+
+
+## 6. MariaDB/MySQL-compatible server and PDO_MYSQL site connection
+
+Use this flow only with a disposable MariaDB server and database. The Termux `mysql` engine option currently uses the MariaDB package and MySQL-compatible protocol; it does not install Oracle MySQL Server.
+
+1. Create a MariaDB server in Database Servers. Use the default Yevqo data directory, loopback-only network access and TLS mode `require`.
+2. Install it from the server page and wait for Agent status `ready`. Confirm the persisted directory ends in `server-<SERVER_ID>`; do not point it at an existing non-empty MariaDB data directory.
+3. Create a test database and application user, then run **Test connection**. Verify the application user has privileges only on its own database.
+4. Create a test PHP site, attach the MariaDB database and restart the site so Control Plane injects `DB_CONNECTION=mysql`.
+5. Temporarily use this PHP check (never echo credentials):
+
+```php
+<?php
+header('Content-Type: application/json; charset=utf-8');
+try {
+    if (!in_array('mysql', PDO::getAvailableDrivers(), true)) {
+        throw new RuntimeException('PDO_MYSQL driver unavailable');
+    }
+    $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
+        getenv('DB_HOST') ?: '127.0.0.1',
+        getenv('DB_PORT') ?: '3306',
+        getenv('DB_DATABASE') ?: '');
+    $pdo = new PDO($dsn, getenv('DB_USERNAME') ?: '', getenv('DB_PASSWORD') ?: '', [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
+    echo json_encode(['ok' => true, 'result' => $pdo->query('SELECT DATABASE() AS db, CURRENT_USER() AS user, 1 AS connection_ok')->fetch(PDO::FETCH_ASSOC)]);
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'error' => 'PDO_MYSQL/database connection check failed']);
+}
+```
+
+6. Verify `ok: true`, the expected database/user and `connection_ok: 1`, then immediately delete the temporary PHP file.
+7. Create a MariaDB SQL backup, restore it into a new database name, compare the rows and verify the original database remains unchanged. Stop/start the server and repeat the connection test.
+
+The Control Plane API and CI tests do not prove a physical Termux install or restore; record the device model, Termux/MariaDB version and outcomes without credentials.
