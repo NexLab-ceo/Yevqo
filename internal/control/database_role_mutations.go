@@ -45,7 +45,7 @@ func (s *Server) handleDatabaseServerRoleMutation(w http.ResponseWriter, r *http
 	var deviceID int64
 	var engine, status string
 	var port int
-	err := s.db.conn.QueryRowContext(r.Context(), `SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`, serverID, ownerID).Scan(&deviceID, &engine, &status, &port)
+	err := s.db.conn.QueryRowContext(r.Context(), `SELECT device_id,engine,status,port,data_directory FROM database_servers WHERE id=? AND user_id=?`, serverID, ownerID).Scan(&deviceID, &engine, &status, &port, &dataDir)
 	if err == sql.ErrNoRows {
 		apiError(w, shared.ErrNotFound("database server not found"))
 		return
@@ -65,10 +65,10 @@ func (s *Server) handleDatabaseServerRoleMutation(w http.ResponseWriter, r *http
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 	defer cancel()
-	req := &shared.ManageDatabaseRole{ServerID: serverID, Port: uint32(port), Name: in.Name, Password: in.Password}
+	req := &shared.ManageDatabaseRole{Engine:engine,DataDirectory:dataDir,ServerID: serverID, Port: uint32(port), Name: in.Name, Password: in.Password}
 	result, err := conn.SendCommand(ctx, in.Action+"_database_role", req)
 	if err != nil {
-		apiError(w, shared.ErrInternal("Agent PostgreSQL role command failed"))
+		apiError(w, shared.ErrInternal("Agent database user command failed"))
 		return
 	}
 	if !result.Ok {
@@ -76,5 +76,5 @@ func (s *Server) handleDatabaseServerRoleMutation(w http.ResponseWriter, r *http
 		return
 	}
 	_ = s.db.Log(context.Background(), &shared.LogEntry{UserID: shared.PtrInt64(u.ID), DeviceID: shared.PtrInt64(deviceID), Action: "database_role_"+in.Action, Details: map[string]interface{}{"server_id": serverID, "role": in.Name}})
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": "PostgreSQL role "+in.Action+" completed"})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": engine+" user "+in.Action+" completed"})
 }
