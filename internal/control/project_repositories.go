@@ -195,7 +195,7 @@ func (s *Server) handleProjectRepositoryBranches(w http.ResponseWriter,r *http.R
 	ctx,cancel:=context.WithTimeout(r.Context(),60*time.Second);defer cancel()
 	token,fullName,_,_,err:=s.projectRepositoryToken(ctx,userID,projectID);if err!=nil{apiError(w,shared.ErrNotFound("project repository not connected"));return}
 	owner,name,_,_:=parseGitHubRepositoryName(fullName)
-	requestedPage:=0;if raw:=r.URL.Query().Get("page");raw!=""{if n,e:=strconv.Atoi(raw);e==nil&&n>0&&n<=100{requestedPage=n}}
+	requestedPage:=0;if raw:=r.URL.Query().Get("page");raw!=""{if n,e:=strconv.Atoi(raw);e==nil&&n>0&&n<=1000{requestedPage=n}}
 	type branchItem struct{Name string `json:"name"`;Protected bool `json:"protected"`;Commit struct{SHA string `json:"sha"`} `json:"commit"`}
 	all:=make([]branchItem,0);startPage,endPage:=1,10;if requestedPage>0{startPage,endPage=requestedPage,requestedPage}
 	nextPage:=0
@@ -205,7 +205,7 @@ func (s *Server) handleProjectRepositoryBranches(w http.ResponseWriter,r *http.R
 		if err:=githubAPIGet(ctx,token,endpoint,&items);err!=nil{writeJSON(w,http.StatusBadGateway,map[string]interface{}{"ok":false,"error":"GitHub branches are unavailable; verify Contents read permission"});return}
 		all=append(all,items...)
 		if len(items)<100{break}
-		if page==endPage{nextPage=page+1}
+		if page==endPage&&page<1000{nextPage=page+1}
 	}
 	out:=make([]map[string]interface{},0,len(all));for _,b:=range all{out=append(out,map[string]interface{}{"name":b.Name,"protected":b.Protected,"commit_sha":b.Commit.SHA})}
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"branches":out,"next_page":nextPage,"total_loaded":len(out)})
