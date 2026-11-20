@@ -397,8 +397,8 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Request,id int64,action string) {
 	u:=UserFromContext(r.Context())
 	ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,u.ID,"database.manage");if accessErr!=nil{apiError(w,accessErr);return}
-	var deviceID int64;var engine,status,dataDir string;var port,maxConnections int
-	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,data_directory,port,max_connections FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&dataDir,&port,&maxConnections)
+	var deviceID int64;var engine,status,dataDir,sslMode string;var port,maxConnections int
+	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,data_directory,port,max_connections,ssl_mode FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&dataDir,&port,&maxConnections,&sslMode)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
 	if engine!="postgresql" && engine!="mariadb" && engine!="mysql" { apiError(w,shared.ErrBadRequest("unsupported database engine"));return }
@@ -417,7 +417,7 @@ func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Reques
 		if n,_:=res.RowsAffected();n!=1 { apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return }
 	}
 	ctx,cancel:=context.WithTimeout(r.Context(),110*time.Second);defer cancel()
-	result,err:=conn.SendCommand(ctx,action+"_database_server",&shared.DatabaseServerAction{Engine:engine,MaxConnections:uint32(maxConnections),ServerID:id,Port:uint32(port),DataDirectory:dataDir})
+	result,err:=conn.SendCommand(ctx,action+"_database_server",&shared.DatabaseServerAction{Engine:engine,MaxConnections:uint32(maxConnections),SSLMode:sslMode,ServerID:id,Port:uint32(port),DataDirectory:dataDir})
 	if err!=nil||!result.Ok {
 		if previous=="ready"||previous=="stopped" { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=? AND status IN ('starting','stopping')`,previous,id,ownerID) }
 		message:="Agent database lifecycle command failed";if err!=nil{message=err.Error()}else if result!=nil&&result.Message!=""{message=result.Message}
