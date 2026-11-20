@@ -57,6 +57,7 @@ type InstallDatabaseServer struct {
 }
 
 type DatabaseServerAction struct {
+	SSLMode string `json:"ssl_mode,omitempty"`
 	MaxConnections uint32 `json:"max_connections,omitempty"`
 	Engine string `json:"engine,omitempty"`
 	ServerID int64 `json:"server_id"`
