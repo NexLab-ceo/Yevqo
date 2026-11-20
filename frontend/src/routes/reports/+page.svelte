@@ -1,5 +1,6 @@
 <script>
  import { onMount } from 'svelte';
+ import { page } from '$app/stores';
  import { getReports, listLogs } from '$lib/api.js';
  import { notify } from '$lib/stores.js';
  import Button from '$lib/components/Button.svelte';
@@ -21,7 +22,7 @@
 
  async function load() {
    loading = true;
-   const [summary, audit] = await Promise.all([getReports(), listLogs(200)]);
+   const projectId = $page.url.searchParams.get('project_id') || ''; const [summary, audit] = await Promise.all([getReports(projectId), listLogs(200, projectId)]);
    if (summary.ok) report = summary.data?.report || null;
    else notify(summary.error || 'Не удалось загрузить сводку', 'error');
    if (audit.ok) logs = audit.data?.logs || [];
