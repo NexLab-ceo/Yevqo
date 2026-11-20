@@ -48,6 +48,24 @@ func TestCoreMigrationIsAdditive(t *testing.T) {
 	}
 }
 
+func TestProjectEnvironmentDatabaseMigrationIsAdditive(t *testing.T) {
+	path := filepath.Join("..", "..", "migrations", "022_project_environment_databases.sql")
+	content, err := os.ReadFile(path)
+	if err != nil { t.Fatalf("read project environment database migration: %v", err) }
+	statements := splitSQL(string(content))
+	if len(statements) != 1 { t.Fatalf("migration has %d statements, want 1", len(statements)) }
+	normalized := strings.ToLower(strings.TrimSpace(statements[0]))
+	if !strings.HasPrefix(normalized, "create table if not exists project_environment_database_servers ") {
+		t.Fatalf("migration must create the environment database assignment table additively: %q", statements[0])
+	}
+	for _, required := range []string{"primary key", "foreign key (project_id)", "foreign key (environment_id)", "foreign key (database_server_id)", "on delete cascade"} {
+		if !strings.Contains(normalized, required) { t.Errorf("migration is missing %q", required) }
+	}
+	for _, forbidden := range []string{"drop table", "truncate table", "delete from", "drop column", "alter table"} {
+		if strings.Contains(normalized, forbidden) { t.Errorf("migration contains non-additive SQL %q", forbidden) }
+	}
+}
+
 func TestP2MigrationIsAdditiveAndContainsPlatformTables(t *testing.T) {
 	path := filepath.Join("..", "..", "migrations", "020_p2_platform_foundations.sql")
 	content, err := os.ReadFile(path)
