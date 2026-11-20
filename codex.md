@@ -142,6 +142,8 @@ Before finishing every task:
 
 ### Progress history
 
+- 2026-11-20 — Began Control Panel product-spec implementation on `main`: consolidated global navigation to Overview, Projects, Deployments, Logs, Devices and Settings; restored the canonical dark-green Yevqo design tokens and shell styling. Existing routes and APIs are preserved. Visual/build verification pending; global search, complete EN/RU coverage and official GitHub App installation callback remain open.
+
 - 2026-11-20 — Unified registration and password-change validation: passwords must be 12–72 bytes, cannot have leading/trailing whitespace, and are validated consistently before bcrypt hashing. Updated registration UI and added boundary/UTF-8 tests. Existing accounts and stored hashes are untouched; CI verification is pending.
 
 - 2026-11-20 — Full main CI passed at `755e16f` (build run 44744440881; PR checks run 44744440856): Go tests, Android ARM64, frontend, setup/updater validation, and both package verifications. No release was published.
