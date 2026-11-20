@@ -160,6 +160,7 @@ func (s *Server) handleProjectRepository(w http.ResponseWriter, r *http.Request)
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_repository_connected",Details:map[string]interface{}{"project_id":projectID,"repository":repository.FullName,"branch":branch},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"repository":map[string]interface{}{"integration_id":in.IntegrationID,"repository_id":repository.ID,"full_name":repository.FullName,"clone_url":repository.CloneURL,"web_url":repository.HTMLURL,"default_branch":repository.DefaultBranch,"branch":branch,"private":repository.Private,"language":repository.Language,"last_commit_sha":branchDetails.Commit.SHA}})
 	case http.MethodDelete:
+		s.deleteProjectRepositoryHooks(r.Context(),ownerID,projectID)
 		tx,err:=s.db.conn.BeginTx(r.Context(),nil);if err!=nil{apiError(w,shared.ErrInternal("could not start repository disconnect"));return}
 		rows,err:=tx.QueryContext(r.Context(),`SELECT device_id,site_id,previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc FROM project_repository_sites WHERE project_id=?`,projectID)
 		if err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not load linked deployment targets"));return}
@@ -299,6 +300,7 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		if err:=decodeJSON(r,&in);err!=nil||in.DeviceID<1||!validLogSiteID(in.SiteID){apiError(w,shared.ErrBadRequest("valid device_id and site_id are required"));return}
 		var previousURL sql.NullString;var previousBranch string;var previousWebhookEnabled bool;var previousWebhookSecret []byte
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc FROM project_repository_sites WHERE project_id=? AND device_id=? AND site_id=?`,projectID,in.DeviceID,in.SiteID).Scan(&previousURL,&previousBranch,&previousWebhookEnabled,&previousWebhookSecret);err!=nil{apiError(w,shared.ErrNotFound("deployment target not found"));return}
+		s.deleteProjectRepositorySiteHook(r.Context(),ownerID,projectID,in.DeviceID,in.SiteID)
 		tx,err:=s.db.conn.BeginTx(r.Context(),nil);if err!=nil{apiError(w,shared.ErrInternal("could not start deployment target detach"));return}
 		if _,err=tx.ExecContext(r.Context(),`UPDATE sites SET git_url=?,git_branch=?,github_webhook_enabled=?,github_webhook_secret_enc=?,github_webhook_updated_at=NOW() WHERE device_id=? AND site_id=?`,nullableString(previousURL.String),previousBranch,previousWebhookEnabled,previousWebhookSecret,in.DeviceID,in.SiteID);err==nil{_,err=tx.ExecContext(r.Context(),`DELETE FROM project_repository_sites WHERE project_id=? AND device_id=? AND site_id=?`,projectID,in.DeviceID,in.SiteID)}
 		if err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not restore original site Git settings"));return};if err=tx.Commit();err!=nil{apiError(w,shared.ErrInternal("could not commit deployment target detach"));return}
