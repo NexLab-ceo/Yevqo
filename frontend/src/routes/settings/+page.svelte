@@ -2,14 +2,14 @@
  import {onMount} from 'svelte';
  import {getSettings,saveSettings} from '$lib/api.js';
  import {notify,uiMode,theme,user,workspaceName,compactMode} from '$lib/stores.js';
- import {locale} from '$lib/i18n.js';
+ import {locale} from '$lib/i18n.js';import {setDatePreferences} from '$lib/date.js';
  import Button from '$lib/components/Button.svelte';
  let tab='general',loading=true,saving=false;
  let settings={workspace_name:'Personal workspace',locale:'ru',timezone:'UTC',date_format:'locale',theme:'dark',mode:'simple',compact_mode:false,notifications:{system:true,deployment_errors:true,device_events:true,project_updates:true}};
  $: ru=$locale!=='en';
  const tabs=[['general','General','Общие'],['appearance','Appearance','Внешний вид'],['notifications','Notifications','Уведомления'],['account','Account','Аккаунт'],['security','Security','Безопасность'],['integrations','Integrations','Интеграции'],['about','About','О системе']];
- onMount(async()=>{const r=await getSettings();if(r.ok){settings={...settings,...r.data.settings,notifications:{...settings.notifications,...(r.data.settings?.notifications||{})}};locale.set(settings.locale);uiMode.set(settings.mode);theme.set(settings.theme||'dark');workspaceName.set(settings.workspace_name);compactMode.set(!!settings.compact_mode)}else notify(r.error||'Could not load settings','error');loading=false});
- async function save(){saving=true;const r=await saveSettings(settings);saving=false;if(r.ok){locale.set(settings.locale);uiMode.set(settings.mode);theme.set(settings.theme||'dark');workspaceName.set(settings.workspace_name);compactMode.set(!!settings.compact_mode);notify(ru?'Настройки сохранены':'Settings saved','success')}else notify(r.error||'Could not save settings','error')}
+ onMount(async()=>{const r=await getSettings();if(r.ok){settings={...settings,...r.data.settings,notifications:{...settings.notifications,...(r.data.settings?.notifications||{})}};locale.set(settings.locale);uiMode.set(settings.mode);theme.set(settings.theme||'dark');workspaceName.set(settings.workspace_name);compactMode.set(!!settings.compact_mode);setDatePreferences(settings)}else notify(r.error||'Could not load settings','error');loading=false});
+ async function save(){saving=true;const r=await saveSettings(settings);saving=false;if(r.ok){locale.set(settings.locale);uiMode.set(settings.mode);theme.set(settings.theme||'dark');workspaceName.set(settings.workspace_name);compactMode.set(!!settings.compact_mode);setDatePreferences(settings);notify(ru?'Настройки сохранены':'Settings saved','success')}else notify(r.error||'Could not save settings','error')}
 </script>
 <svelte:head><title>{ru?'Настройки':'Settings'} · Yevqo</title></svelte:head>
 <div class="page-header"><div><div class="eyebrow">WORKSPACE / PREFERENCES</div><h1 class="page-title">{ru?'Настройки':'Settings'}</h1><p class="page-desc">{ru?'Настрой панель, уведомления и параметры аккаунта.':'Configure your workspace, notifications and account preferences.'}</p></div><Button variant="primary" loading={saving} disabled={loading} on:click={save}>{ru?'Сохранить изменения':'Save changes'}</Button></div>
