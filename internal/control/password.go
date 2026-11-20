@@ -2,7 +2,6 @@ package control
 
 import (
 	"net/http"
-	"strings"
 
 	"veltrix/internal/shared"
 )
@@ -31,8 +30,8 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		apiError(w, shared.ErrUnauthorized("current password is incorrect"))
 		return
 	}
-	if len(req.NewPassword) < 12 || len(req.NewPassword) > 72 || strings.TrimSpace(req.NewPassword) != req.NewPassword {
-		apiError(w, shared.ErrBadRequest("new password must be 12-72 bytes and have no leading or trailing spaces"))
+	if err := validateAccountPassword(req.NewPassword); err != nil {
+		apiError(w, err)
 		return
 	}
 	if req.NewPassword == req.CurrentPassword {
