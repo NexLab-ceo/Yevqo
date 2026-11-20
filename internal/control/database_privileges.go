@@ -20,6 +20,7 @@ type databasePrivilegeInput struct {
 
 func (s *Server) handleDatabaseServerPrivileges(w http.ResponseWriter,r *http.Request,serverID int64){
  u:=UserFromContext(r.Context());var in databasePrivilegeInput
+	ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),serverID,u.ID,"database.manage");if accessErr!=nil{apiError(w,accessErr);return}
  if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid privilege JSON"));return}
  in.Action=strings.TrimSpace(in.Action);in.Database=strings.TrimSpace(in.Database);in.Role=strings.TrimSpace(in.Role);in.Privilege=strings.ToUpper(strings.TrimSpace(in.Privilege))
  if in.Action!="grant"&&in.Action!="revoke"{apiError(w,shared.ErrBadRequest("action must be grant or revoke"));return}
@@ -27,7 +28,7 @@ func (s *Server) handleDatabaseServerPrivileges(w http.ResponseWriter,r *http.Re
  if in.Scope==""{in.Scope="database"}
  if in.Scope=="database" {if in.Privilege!="CONNECT"&&in.Privilege!="CREATE"&&in.Privilege!="TEMPORARY"{apiError(w,shared.ErrBadRequest("database privilege must be CONNECT, CREATE or TEMPORARY"));return};if in.Schema!=""{apiError(w,shared.ErrBadRequest("schema must be empty for database scope"));return}} else if in.Scope=="schema" {if len(in.Schema)<1||len(in.Schema)>63||!postgresIdentifier.MatchString(in.Schema){apiError(w,shared.ErrBadRequest("invalid schema name"));return};if in.Privilege!="USAGE"&&in.Privilege!="CREATE"{apiError(w,shared.ErrBadRequest("schema privilege must be USAGE or CREATE"));return}} else{apiError(w,shared.ErrBadRequest("scope must be database or schema"));return}
  var deviceID int64;var engine,status string;var port int
- err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`,serverID,u.ID).Scan(&deviceID,&engine,&status,&port)
+ err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`,serverID,ownerID).Scan(&deviceID,&engine,&status,&port)
  if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}
  if engine!="postgresql"||status!="ready"{apiError(w,shared.ErrBadRequest("a ready PostgreSQL server is required"));return}
  // PostgreSQL validates database, schema and role existence during the typed operation.
