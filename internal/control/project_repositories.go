@@ -277,7 +277,7 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 				if registerErr==nil{hookID=registeredID;hookRegistered=true}else if existingHookID>0{apiError(w,shared.ErrBadRequest("existing GitHub webhook could not be updated; grant repository administration write permission or remove the old webhook"));return}
 			}
 			if !hookRegistered{
-				if existingHookID>0&&len(currentWebhookSecret)>0{webhookSecret=currentWebhookSecret;webhookEnabled=true}else{
+				if existingHookID>0&&len(currentWebhookSecret)>0{webhookSecret=currentWebhookSecret;webhookEnabled=true;hookID=existingHookID;hookRegistered=true}else{
 					raw:=make([]byte,32);if _,err:=rand.Read(raw);err!=nil{apiError(w,shared.ErrInternal("could not create webhook secret"));return}
 					secret=base64.RawURLEncoding.EncodeToString(raw);nonce,ciphertext,err:=encryptCredential(s.credentialKey,[]byte(secret));if err!=nil{apiError(w,shared.ErrInternal("could not encrypt webhook secret"));return};webhookSecret=append(nonce,ciphertext...);webhookEnabled=true
 				}
