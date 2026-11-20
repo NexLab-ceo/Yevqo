@@ -57,7 +57,7 @@ func runMariaSQL(ctx context.Context, dataDir, database, sqlText string) error {
 	}
 	return nil
 }
-func mariaSQLLiteral(v string) string { return "'" + strings.ReplaceAll(v, "'", "''") + "'" }
+func mariaSQLLiteral(v string) string { v = strings.ReplaceAll(v, "\\", "\\\\"); return "'" + strings.ReplaceAll(v, "'", "''") + "'" }
 func mariaQuoteIdentifier(v string) string { return "`" + strings.ReplaceAll(v, "`", "``") + "`" }
 
 func installMariaDBServer(req shared.InstallDatabaseServer) (*shared.DatabaseServerInstallResult, error) {
@@ -286,7 +286,7 @@ func restoreMariaDBBackup(req shared.RestoreDatabaseBackup) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute); defer cancel()
 	if err := runMariaSQL(ctx, dataDir, "", createSQL); err != nil { return err }
 	cli, err := mariaCLI(); if err != nil { _ = runMariaSQL(context.Background(), dataDir, "", "DROP DATABASE "+mariaQuoteIdentifier(req.Database.Database)+"; DROP USER "+mariaQuoteIdentifier(req.Database.Username)+"@'127.0.0.1';"); return err }
-	f, err := os.Open(full); if err != nil { return err }
+	f, err := os.Open(full); if err != nil { cleanupCtx, cancelCleanup := context.WithTimeout(context.Background(), 30*time.Second); _ = runMariaSQL(cleanupCtx, dataDir, "", "DROP DATABASE IF EXISTS "+mariaQuoteIdentifier(req.Database.Database)+"; DROP USER IF EXISTS "+mariaQuoteIdentifier(req.Database.Username)+"@'127.0.0.1';"); cancelCleanup(); return err }
 	reader, writer := io.Pipe()
 	go func() { rewriteErr := rewriteMariaDBDump(f, writer, req.Database.Database); _ = writer.CloseWithError(rewriteErr); _ = f.Close() }()
 	cmd := exec.CommandContext(ctx, cli, append(mariaAdminArgs(dataDir), req.Database.Database)...); cmd.Stdin = reader
