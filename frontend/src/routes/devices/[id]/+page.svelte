@@ -1,8 +1,9 @@
 <script>
     import { onMount } from 'svelte';
+    import { locale } from '$lib/i18n.js';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, deleteDevice, deleteSite, sendCommand, listAppTemplates, attachProjectSite } from '$lib/api.js';
+    import { getDevice, deleteDevice, deleteSite, sendCommand, listAppTemplates, attachProjectSite, listLogs } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -10,6 +11,8 @@
     import Modal from '$lib/components/Modal.svelte';
 
     let device = null;
+    let activeTab='overview',deviceLogs=[],logsLoading=false;
+    $: ru=$locale!=='en';
     let sites = [];
     let appTemplates = [];
     let online = false;
@@ -48,6 +51,8 @@
         sites = res.data.sites || [];
         online = res.data.online;
     }
+
+    async function selectTab(tab){activeTab=tab;if(tab==='activity'&&!deviceLogs.length){logsLoading=true;const r=await listLogs(100);if(r.ok)deviceLogs=(r.data.logs||[]).filter(x=>x.device===device?.hostname);else notify(r.error||'Could not load device activity','error');logsLoading=false}}
 
     // Отправка команды агенту.
     async function runCommand(action, payload = {}) {
@@ -230,6 +235,8 @@
         </div>
     </div>
 
+    <nav class="device-tabs"><button class:active={activeTab==='overview'} on:click={()=>selectTab('overview')}>{ru?'Обзор':'Overview'}</button><button class:active={activeTab==='projects'} on:click={()=>selectTab('projects')}>{ru?'Проекты':'Projects'}</button><button class:active={activeTab==='activity'} on:click={()=>selectTab('activity')}>{ru?'Активность':'Activity'}</button><button class:active={activeTab==='settings'} on:click={()=>selectTab('settings')}>{ru?'Настройки':'Settings'}</button></nav>
+    {#if activeTab==='overview'}
     <div class="device-capabilities">
         <span class="device-platform">{device.platform || 'Платформа не определена'} · {device.architecture || 'архитектура неизвестна'}</span>
         {#each (device.capabilities || []) as capability (capability)}
@@ -296,6 +303,13 @@
         </div>
     {/if}
 
+    {:else if activeTab==='projects'}
+      <section class="panel device-tab-panel"><h2>{ru?'Проекты устройства':'Device projects'}</h2>{#if $page.url.searchParams.get('project_id')}<p>{ru?'Открыта карточка устройства из проекта.':'This device was opened from a project.'}</p><a class="device-tab-link" href={'/projects/'+$page.url.searchParams.get('project_id')}>{ru?'Открыть проект':'Open project'} →</a>{:else}<p>{ru?'Связи устройств с проектами управляются из карточки проекта.':'Device-to-project membership is managed from the project details page.'}</p><a class="device-tab-link" href="/projects">{ru?'Открыть проекты':'Open projects'} →</a>{/if}</section>
+    {:else if activeTab==='activity'}
+      <section class="panel device-tab-panel"><h2>{ru?'Активность устройства':'Device activity'}</h2>{#if logsLoading}<div class="empty">{ru?'Загрузка…':'Loading…'}</div>{:else if deviceLogs.length}{#each deviceLogs as event}<div class="device-log-row"><strong>{String(event.action||'event').replaceAll('_',' ')}</strong><small>{event.created_at?new Date(event.created_at).toLocaleString():'—'}</small><p>{typeof event.details==='string'?event.details:JSON.stringify(event.details||{})}</p></div>{/each}{:else}<div class="empty">{ru?'Событий для этого устройства пока нет.':'No activity recorded for this device yet.'}</div>{/if}</section>
+    {:else}
+      <section class="panel device-tab-panel"><h2>{ru?'Настройки устройства':'Device settings'}</h2><div class="device-setting"><span>{ru?'Имя устройства':'Device name'}</span><strong>{device.hostname||'—'}</strong></div><div class="device-setting"><span>Device ID</span><strong>{device.device_id}</strong></div><div class="device-setting"><span>{ru?'Операционная система':'Operating system'}</span><strong>{device.platform||'—'} · {device.architecture||'—'}</strong></div><div class="device-setting"><span>Agent</span><strong>{device.agent_version||'—'}</strong></div><div class="device-setting"><span>IP</span><strong>{device.tailscale_ip||'—'}</strong></div><p class="settings-note">{ru?'Переименование и изменение сетевых параметров пока не поддерживаются Agent API.':'Renaming and network configuration changes are not supported by the Agent API yet.'}</p><Button variant="danger" on:click={()=>showDeleteModal=true}>{ru?'Отвязать устройство':'Unpair device'}</Button></section>
+    {/if}
     <!-- Модалка: удаление -->
     <Modal open={showDeleteModal} title="Отвязать устройство?" onClose={() => showDeleteModal = false}>
         <p class="modal-text">
@@ -356,6 +370,7 @@
 {/if}
 
 <style>
+.device-tabs{display:flex;gap:4px;overflow-x:auto;padding:4px;margin-bottom:14px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card)}.device-tabs button{padding:7px 10px;white-space:nowrap;border:0;border-radius:6px;background:transparent;color:var(--text-muted);font-size:10px}.device-tabs button.active{background:var(--bg-elevated);color:var(--accent)}.device-tab-panel{padding:16px}.device-tab-panel h2{font-size:13px;margin-bottom:10px}.device-tab-panel p,.settings-note{font-size:10px;color:var(--text-muted);line-height:1.6}.device-tab-link{display:inline-block;margin-top:10px;color:var(--accent);font-size:10px}.device-log-row,.device-setting{padding:10px 0;border-bottom:1px solid var(--border)}.device-log-row{display:grid;gap:4px}.device-log-row strong,.device-setting strong{font-size:10px}.device-log-row small,.device-setting span{font-size:9px;color:var(--text-muted)}.device-log-row p{overflow-wrap:anywhere}.device-setting{display:flex;justify-content:space-between;gap:12px}.settings-note{margin:12px 0}
     .header-actions {
         display: flex;
         align-items: center;
