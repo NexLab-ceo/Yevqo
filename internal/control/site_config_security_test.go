@@ -76,3 +76,9 @@ func TestSiteDatabaseEnvironmentFilterRequiresPairedScope(t *testing.T) {
 		}
 	}
 }
+
+func TestDatabaseConnectionDriverByEngine(t *testing.T) {
+	for engine, want := range map[string]string{"postgresql":"pgsql","mariadb":"mysql","mysql":"mysql","":"pgsql"} {
+		if got := databaseConnectionDriver(engine); got != want { t.Errorf("databaseConnectionDriver(%q) = %q, want %q", engine, got, want) }
+	}
+}
