@@ -58,13 +58,13 @@ func (s *Server) handleBackupTransfer(w http.ResponseWriter,r *http.Request){
 		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,'database',?,?,?,'queued')`,ownerID,targetDeviceID,targetServerID,fmt.Sprintf("transfer:%d",backupID),targetFileName,size)
 		if err!=nil{apiError(w,shared.ErrInternal("could not create target backup record"));return};newBackupID,_=res.LastInsertId()
 	}
-	go s.runBackupTransfer(backupID,newBackupID,ownerID,sourceConn,targetConn,sourceDeviceID,targetDeviceID,resourceType,sourceSiteID,targetSiteID,sourceServerID.Int64,targetServerID,fileName,targetFileName,size)
+	go s.runBackupTransfer(backupID,newBackupID,ownerID,u.ID,sourceConn,targetConn,sourceDeviceID,targetDeviceID,resourceType,sourceSiteID,targetSiteID,sourceServerID.Int64,targetServerID,fileName,targetFileName,size)
 	writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"backup_id":newBackupID,"status":"queued","target_device_id":targetDeviceID,"file_name":targetFileName})
 }
 
-func (s *Server) runBackupTransfer(sourceID,targetID,userID int64,sourceConn,targetConn *AgentConn,sourceDevice,targetDevice int64,resourceType,sourceSite,targetSite string,sourceServer,targetServer int64,sourceFile,targetFile string,total int64){
-	_,_ = s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='running' WHERE id=? AND user_id=?`,targetID,userID)
-	var transferBytes [16]byte;if _,err:=rand.Read(transferBytes[:]);err!=nil{s.failBackupTransfer(targetID,userID,"could not initialize transfer");return}
+func (s *Server) runBackupTransfer(sourceID,targetID,ownerID,actorID int64,sourceConn,targetConn *AgentConn,sourceDevice,targetDevice int64,resourceType,sourceSite,targetSite string,sourceServer,targetServer int64,sourceFile,targetFile string,total int64){
+	_,_ = s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='running' WHERE id=? AND user_id=?`,targetID,ownerID)
+	var transferBytes [16]byte;if _,err:=rand.Read(transferBytes[:]);err!=nil{s.failBackupTransfer(targetID,ownerID,actorID,"could not initialize transfer");return}
 	transferID:=hex.EncodeToString(transferBytes[:])
 	offset:=int64(0)
 	for offset<total{
@@ -74,30 +74,30 @@ func (s *Server) runBackupTransfer(sourceID,targetID,userID int64,sourceConn,tar
 		ctx,cancel:=context.WithTimeout(context.Background(),45*time.Second)
 		readResult,err:=sourceConn.SendCommand(ctx,readCommand,readPayload)
 		cancel()
-		if err!=nil||readResult==nil||!readResult.Ok{s.abortBackupTransfer(targetConn,transferID,resourceType,targetSite,targetServer,targetFile);s.failBackupTransfer(targetID,userID,"source backup read failed");return}
+		if err!=nil||readResult==nil||!readResult.Ok{s.abortBackupTransfer(targetConn,transferID,resourceType,targetSite,targetServer,targetFile);s.failBackupTransfer(targetID,ownerID,actorID,"source backup read failed");return}
 		var chunk shared.DatabaseBackupChunk
-		if err:=shared.Unmarshal(readResult.Payload,&chunk);err!=nil||chunk.Offset!=offset||chunk.TotalSize!=total||len(chunk.Data)==0||len(chunk.Data)>length||offset+int64(len(chunk.Data))>total||chunk.EOF!=(offset+int64(len(chunk.Data))==total){s.abortBackupTransfer(targetConn,transferID,resourceType,targetSite,targetServer,targetFile);s.failBackupTransfer(targetID,userID,"source backup chunk validation failed");return}
+		if err:=shared.Unmarshal(readResult.Payload,&chunk);err!=nil||chunk.Offset!=offset||chunk.TotalSize!=total||len(chunk.Data)==0||len(chunk.Data)>length||offset+int64(len(chunk.Data))>total||chunk.EOF!=(offset+int64(len(chunk.Data))==total){s.abortBackupTransfer(targetConn,transferID,resourceType,targetSite,targetServer,targetFile);s.failBackupTransfer(targetID,ownerID,actorID,"source backup chunk validation failed");return}
 		final:=offset+int64(len(chunk.Data))==total
 		writeReq:=&shared.WriteBackupChunk{TransferID:transferID,ResourceType:resourceType,SiteId:targetSite,ServerID:targetServer,FileName:targetFile,Offset:offset,TotalSize:total,Data:chunk.Data,Final:final}
 		ctx,cancel=context.WithTimeout(context.Background(),45*time.Second)
 		writeResult,writeErr:=targetConn.SendCommand(ctx,"write_backup_chunk",writeReq)
 		cancel()
-		if writeErr!=nil||writeResult==nil||!writeResult.Ok{s.abortBackupTransfer(targetConn,transferID,resourceType,targetSite,targetServer,targetFile);s.failBackupTransfer(targetID,userID,"target backup write failed");return}
+		if writeErr!=nil||writeResult==nil||!writeResult.Ok{s.abortBackupTransfer(targetConn,transferID,resourceType,targetSite,targetServer,targetFile);s.failBackupTransfer(targetID,ownerID,actorID,"target backup write failed");return}
 		var accepted shared.WriteBackupChunkResult
-		if err:=shared.Unmarshal(writeResult.Payload,&accepted);err!=nil||accepted.Received!=offset+int64(len(chunk.Data))||(final&&!accepted.Complete){s.abortBackupTransfer(targetConn,transferID,resourceType,targetSite,targetServer,targetFile);s.failBackupTransfer(targetID,userID,"target backup chunk acknowledgement was invalid");return}
+		if err:=shared.Unmarshal(writeResult.Payload,&accepted);err!=nil||accepted.Received!=offset+int64(len(chunk.Data))||(final&&!accepted.Complete){s.abortBackupTransfer(targetConn,transferID,resourceType,targetSite,targetServer,targetFile);s.failBackupTransfer(targetID,ownerID,actorID,"target backup chunk acknowledgement was invalid");return}
 		offset=accepted.Received
 	}
 	finalStatus:="verified";if resourceType=="site"{finalStatus="completed"}
-	_,_ = s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status=? WHERE id=? AND user_id=?`,finalStatus,targetID,userID)
-	_,_ = s.db.conn.ExecContext(context.Background(),`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,userID,"success","Backup transfer completed",fmt.Sprintf("Backup #%d was copied to device %d and verified.",sourceID,targetDevice))
-	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(targetDevice),Action:"backup_transferred",Details:map[string]interface{}{"source_backup_id":sourceID,"backup_id":targetID,"resource_type":resourceType,"size_bytes":total}})
+	_,_ = s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status=? WHERE id=? AND user_id=?`,finalStatus,targetID,ownerID)
+	s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"success","Backup transfer completed",fmt.Sprintf("Backup #%d was copied to device %d and verified.",sourceID,targetDevice))
+	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(actorID),DeviceID:shared.PtrInt64(targetDevice),Action:"backup_transferred",Details:map[string]interface{}{"source_backup_id":sourceID,"backup_id":targetID,"resource_type":resourceType,"size_bytes":total}})
 }
 
 func (s *Server) abortBackupTransfer(conn *AgentConn,id,resourceType,site string,server int64,file string){
 	ctx,cancel:=context.WithTimeout(context.Background(),10*time.Second);defer cancel()
 	_,_ = conn.SendCommand(ctx,"write_backup_chunk",&shared.WriteBackupChunk{TransferID:id,ResourceType:resourceType,SiteId:site,ServerID:server,FileName:file,Abort:true})
 }
-func (s *Server) failBackupTransfer(id,userID int64,reason string){
-	_,_ = s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='failed' WHERE id=? AND user_id=?`,id,userID)
-	_,_ = s.db.conn.ExecContext(context.Background(),`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,userID,"error","Backup transfer failed",reason)
+func (s *Server) failBackupTransfer(id,ownerID,actorID int64,reason string){
+	_,_ = s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='failed' WHERE id=? AND user_id=?`,id,ownerID)
+	s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Backup transfer failed",reason)
 }
