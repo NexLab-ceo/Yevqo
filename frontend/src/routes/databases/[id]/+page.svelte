@@ -32,7 +32,7 @@
     let statsError = '';
     let downloadingBackupID = '';
 
-    function scopedQuery() { const q = new URLSearchParams(); const p = $route.url.searchParams.get('project_id'); const e = $route.url.searchParams.get('environment_id'); if (p) q.set('project_id', p); if (e) q.set('environment_id', e); return q.size ? '?' + q.toString() : ''; }
+    function scopedQuery() { const q = new URLSearchParams(); const p = $route.url.searchParams.get('project_id'); const e = $route.url.searchParams.get('environment_id'); if (p) q.set('project_id', p); if (e) q.set('environment_id', e); const query = q.toString(); return query ? '?' + query : ''; }
 
     $: deviceSites = database ? sites.filter((entry) => Number(entry.device_id) === Number(database.device_id)) : [];
     $: availableSites = deviceSites.filter((entry) => !connections.some((link) => link.site_id === entry.site?.site_id));
