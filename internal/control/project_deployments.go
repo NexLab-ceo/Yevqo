@@ -123,7 +123,7 @@ func (s *Server) queueProjectDeployment(ctx context.Context,actorID,ownerID,proj
 	if in.DeviceID<1||!validLogSiteID(in.SiteID){return 0,shared.ErrBadRequest("valid deployment target is required")}
 	if !in.AllowProjectCode{return 0,shared.ErrForbidden("explicit project-code consent is required")}
 	var fullName,branch string;var integrationID int64
-	err:=s.db.conn.QueryRowContext(ctx,`SELECT pr.full_name,prs.deploy_branch,pr.integration_id FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id WHERE prs.project_id=? AND prs.device_id=? AND prs.site_id=? AND prs.auto_deploy_enabled IN (TRUE,FALSE)`,projectID,in.DeviceID,in.SiteID).Scan(&fullName,&branch,&integrationID)
+	err:=s.db.conn.QueryRowContext(ctx,`SELECT pr.full_name,prs.deploy_branch,pr.integration_id FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id WHERE prs.project_id=? AND prs.device_id=? AND prs.site_id=?`,projectID,in.DeviceID,in.SiteID).Scan(&fullName,&branch,&integrationID)
 	if err!=nil{return 0,shared.ErrBadRequest("connect this project repository to the selected site first")}
 	if strings.TrimSpace(in.Branch)!=""{branch=strings.TrimSpace(in.Branch)}
 	if !gitBranchPattern.MatchString(branch)||strings.Contains(branch,"..")||strings.Contains(branch,"@{")||strings.HasSuffix(branch,"/")||strings.HasSuffix(branch,"."){return 0,shared.ErrBadRequest("invalid deployment branch")}
@@ -137,7 +137,7 @@ func (s *Server) queueProjectDeployment(ctx context.Context,actorID,ownerID,proj
 	var sitePath,runtime string;var port int
 	if err:=s.db.conn.QueryRowContext(ctx,`SELECT path,runtime,port FROM sites WHERE device_id=? AND site_id=?`,in.DeviceID,in.SiteID).Scan(&sitePath,&runtime,&port);err!=nil{return 0,shared.ErrNotFound("site not found")}
 	gitCfg,err:=s.siteGitSettings(ctx,in.DeviceID,in.SiteID);if err!=nil{return 0,shared.ErrInternal("could not load site Git settings")}
-	projectIDScope,environmentID,err:=s.siteEnvironmentScope(ctx,ownerID,in.DeviceID,in.SiteID);if err!=nil{return 0,err}
+	projectIDScope,environmentID,err:=s.siteEnvironmentScope(ctx,ownerID,in.DeviceID,in.SiteID);if err!=nil{return 0,err};if projectIDScope!=projectID{return 0,shared.ErrBadRequest("deployment target is not assigned to the selected project environment")}
 	env,err:=s.siteRuntimeEnvironment(ctx,ownerID,in.DeviceID,in.SiteID,projectIDScope,environmentID);if err!=nil{return 0,err}
 	if _,err:=s.db.conn.ExecContext(ctx,`UPDATE sites SET git_branch=? WHERE device_id=? AND site_id=?`,branch,in.DeviceID,in.SiteID);err!=nil{return 0,shared.ErrInternal("could not save deployment branch")}
 	_ = s.db.conn.QueryRowContext(ctx,`UPDATE project_repository_sites SET deploy_branch=? WHERE project_id=? AND device_id=? AND site_id=?`,branch,projectID,in.DeviceID,in.SiteID)
@@ -145,7 +145,7 @@ func (s *Server) queueProjectDeployment(ctx context.Context,actorID,ownerID,proj
 	if err!=nil{return 0,shared.ErrInternal("could not create deployment record")}
 	runID,_:=res.LastInsertId()
 	action:=&shared.SiteAction{SiteId:in.SiteID,Path:sitePath,Port:uint32(port),Runtime:runtime,GitURL:gitCfg.GitURL,GitBranch:branch,GitCommit:in.Commit,BuildCommand:gitCfg.BuildCommand,RootDir:gitCfg.RootDir,GitToken:gitCfg.GitToken,HealthCheckPath:gitCfg.HealthCheckPath,CloneTimeoutSeconds:gitCfg.CloneTimeoutSeconds,BuildTimeoutSeconds:gitCfg.BuildTimeoutSeconds,HealthCheckTimeoutSeconds:gitCfg.HealthCheckTimeoutSeconds,StartCommand:gitCfg.StartCommand,AllowProjectCode:true,Env:env}
-	conn,_:=s.hub.Get(in.DeviceID)
+	conn,online:=s.hub.Get(in.DeviceID);if !online||conn==nil{_,_=s.db.conn.ExecContext(ctx,`UPDATE project_deployment_runs SET status='failed',message='Agent disconnected before deployment started',finished_at=UTC_TIMESTAMP() WHERE id=?`,runID);return runID,nil}
 	go s.runTrackedProjectDeployment(runID,ownerID,actorID,in.DeviceID,conn,action)
 	return runID,nil
 }
@@ -163,7 +163,7 @@ func (s *Server) runTrackedProjectDeployment(runID,ownerID,actorID,deviceID int6
 		if started.CommitHash!=""{_,_=s.db.conn.ExecContext(context.Background(),`UPDATE sites SET deployed_commit=?,deployed_at=UTC_TIMESTAMP() WHERE device_id=? AND site_id=?`,started.CommitHash,deviceID,action.SiteId)}
 	}
 	if len(message)>1000{message=message[:1000]}
-	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE project_deployment_runs SET status=?,progress=?,message=?,finished_at=UTC_TIMESTAMP(),commit_sha=IF(?='',commit_sha,?) WHERE id=?`,status,map[bool]int{true:100,false:0}[status=="succeeded"],message,started.CommitHash,started.CommitHash,runID)
+	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE project_deployment_runs SET status=IF(status='cancelled','cancelled',?),progress=IF(status='cancelled',0,?),message=?,finished_at=UTC_TIMESTAMP(),commit_sha=IF(?='',commit_sha,?) WHERE id=?`,status,map[bool]int{true:100,false:0}[status=="succeeded"],message,started.CommitHash,started.CommitHash,runID)
 	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(actorID),DeviceID:shared.PtrInt64(deviceID),Action:"project_deployment_"+status,Details:map[string]interface{}{"deployment_id":runID,"site_id":action.SiteId,"commit":started.CommitHash,"error":func()string{if status=="failed"{return message};return ""}()}})
 	if status=="failed"{s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Deployment failed: "+action.SiteId,message)}else{s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"success","Deployment completed: "+action.SiteId,message)}
 }
