@@ -102,7 +102,7 @@ func TestProjectEnvironmentDatabaseInstancesMigrationIsAdditiveAndScoped(t *test
 	content, err := os.ReadFile(path)
 	if err != nil { t.Fatalf("read project environment database instances migration: %v", err) }
 	statements := splitSQL(string(content))
-	if len(statements) != 2 { t.Fatalf("migration has %d statements, want 2", len(statements)) }
+	if len(statements) != 3 { t.Fatalf("migration has %d statements, want 3", len(statements)) }
 	normalized := strings.ToLower(strings.Join(statements, "\n"))
 	for _, required := range []string{"alter table project_environments","add unique key uq_project_environments_project_id_id (project_id, id)","create table if not exists project_environment_databases","primary key (project_id, database_id)","foreign key (project_id, environment_id)","references project_environments(project_id, id)","foreign key (database_id)","having count(distinct eds.environment_id) = 1"} {
 		if !strings.Contains(normalized, required) { t.Errorf("migration is missing %q", required) }
@@ -130,7 +130,7 @@ func TestCloudflareTunnelRouteMigrationIsAdditive(t *testing.T) {
 	content, err := os.ReadFile(path)
 	if err != nil { t.Fatalf("read Cloudflare tunnel route migration: %v", err) }
 	statements := splitSQL(string(content))
-	if len(statements) != 3 { t.Fatalf("migration has %d statements, want 3", len(statements)) }
+	if len(statements) != 2 { t.Fatalf("migration has %d statements, want 2", len(statements)) }
 	normalized := strings.ToLower(strings.Join(statements, "\n"))
 	for _, required := range []string{"alter table cloudflare_accounts","add column account_id","create table if not exists site_cloudflare_routes","primary key (device_id, site_id)","unique key uq_site_cloudflare_routes_user_hostname"} {
 		if !strings.Contains(normalized, required) { t.Errorf("migration is missing %q", required) }
