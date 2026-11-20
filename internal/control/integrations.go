@@ -269,6 +269,13 @@ func (s *Server) handleIntegrationByID(w http.ResponseWriter, r *http.Request) {
 	var provider,account string
 	err=s.db.conn.QueryRowContext(r.Context(),`SELECT provider,account_name FROM integrations WHERE id=? AND user_id=?`,id,u.ID).Scan(&provider,&account)
 	if err!=nil { apiError(w,shared.ErrNotFound("integration not found"));return }
+	if provider=="github_app"{
+		rows,queryErr:=s.db.conn.QueryContext(r.Context(),`SELECT project_id FROM project_repositories WHERE integration_id=?`,id)
+		if queryErr!=nil{apiError(w,shared.ErrInternal("could not inspect linked project repositories"));return}
+		projectIDs:=make([]int64,0);for rows.Next(){var projectID int64;if scanErr:=rows.Scan(&projectID);scanErr!=nil{rows.Close();apiError(w,shared.ErrInternal("could not inspect linked project repositories"));return};projectIDs=append(projectIDs,projectID)}
+		if rows.Err()!=nil{rows.Close();apiError(w,shared.ErrInternal("could not inspect linked project repositories"));return};rows.Close()
+		for _,projectID:=range projectIDs{s.deleteProjectRepositoryHooks(r.Context(),u.ID,projectID);if restoreErr:=s.restoreProjectRepositoryTargets(r.Context(),projectID);restoreErr!=nil{apiError(w,shared.ErrInternal("could not restore project site Git settings before disconnect"));return}}
+	}
 	if _,err=s.db.conn.ExecContext(r.Context(),`DELETE FROM integrations WHERE id=? AND user_id=?`,id,u.ID);err!=nil { apiError(w,shared.ErrInternal("could not revoke integration"));return }
 	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),Action:"integration_disconnected",Details:map[string]interface{}{"provider":provider,"account":account}})
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
