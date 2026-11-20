@@ -129,7 +129,7 @@ func siteDatabaseEnvironmentFilter(projectID, environmentID int64) (string, []in
 		[]interface{}{projectID, environmentID}, nil
 }
 
-func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID int64, siteID string, projectID, environmentID int64) (map[string]string,error) {
+func databaseConnectionDriver(engine string) string { if engine == "mariadb" || engine == "mysql" { return "mysql" }; return "pgsql" }\n\nfunc (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID int64, siteID string, projectID, environmentID int64) (map[string]string,error) {
 	filter, filterArgs, err := siteDatabaseEnvironmentFilter(projectID, environmentID)
 	if err != nil { return nil, err }
 	if projectID > 0 {
@@ -148,7 +148,7 @@ func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID i
 			return nil, shared.ErrBadRequest("select the project environment before starting a site with managed database connections")
 		}
 	}
-	query := `SELECT d.name,ds.port,ds.ssl_mode,dc.username,dc.ciphertext,dc.nonce
+	query := `SELECT d.name,ds.port,ds.ssl_mode,dc.username,dc.ciphertext,dc.nonce,ds.engine
 		FROM site_database_connections c
 		JOIN db_instances d ON d.id=c.database_id
 		JOIN database_servers ds ON ds.id=d.server_id AND ds.user_id=d.user_id
@@ -158,11 +158,11 @@ func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID i
 	args = append(args, filterArgs...)
 	rows,err:=s.db.conn.QueryContext(ctx,query,args...)
 	if err!=nil{return nil,err};defer rows.Close()
-	type databaseEnv struct { Name string `json:"name"`; Host string `json:"host"`; Port int `json:"port"`; SSLMode string `json:"ssl_mode"`; Username string `json:"username"`; Password string `json:"password"` }
+	type databaseEnv struct { Name string `json:"name"`; Engine string `json:"engine"`; Host string `json:"host"`; Port int `json:"port"`; SSLMode string `json:"ssl_mode"`; Username string `json:"username"`; Password string `json:"password"` }
 	all:=make([]databaseEnv,0)
 	for rows.Next(){
 		var item databaseEnv;var ciphertext,nonce []byte
-		if err:=rows.Scan(&item.Name,&item.Port,&item.SSLMode,&item.Username,&ciphertext,&nonce);err!=nil{return nil,err}
+		if err:=rows.Scan(&item.Name,&item.Port,&item.SSLMode,&item.Username,&ciphertext,&nonce,&item.Engine);err!=nil{return nil,err}
 		plain,err:=decryptCredential(s.credentialKey,nonce,ciphertext);if err!=nil{return nil,err}
 		item.Host="127.0.0.1";item.Password=string(plain);all=append(all,item)
 	}
@@ -170,7 +170,7 @@ func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID i
 	if len(all)==0{return nil,nil}
 	encoded,err:=json.Marshal(all);if err!=nil{return nil,err}
 	first:=all[0]
-	return map[string]string{"DB_CONNECTION":"pgsql","DB_HOST":first.Host,"DB_PORT":strconv.Itoa(first.Port),"DB_SSLMODE":first.SSLMode,"DB_DATABASE":first.Name,"DB_USERNAME":first.Username,"DB_PASSWORD":first.Password,"VELTRIX_DATABASES":string(encoded)},nil
+	return map[string]string{"DB_CONNECTION":databaseConnectionDriver(first.Engine),"DB_HOST":first.Host,"DB_PORT":strconv.Itoa(first.Port),"DB_SSLMODE":first.SSLMode,"DB_DATABASE":first.Name,"DB_USERNAME":first.Username,"DB_PASSWORD":first.Password,"VELTRIX_DATABASES":string(encoded)},nil
 }
 
 func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +180,7 @@ func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Reques
 		if databaseID, _ := strconv.ParseInt(r.URL.Query().Get("database_id"), 10, 64); databaseID > 0 {
 			ownerID, _, _, accessErr := s.authorizeDatabaseInstance(r.Context(), databaseID, u.ID, "database.read")
 			if accessErr != nil { apiError(w, accessErr); return }
-			rows, err := s.db.conn.QueryContext(r.Context(), `SELECT c.id,c.device_id,c.site_id,d.name,dc.username,ds.port
+			rows, err := s.db.conn.QueryContext(r.Context(), `SELECT c.id,c.device_id,c.site_id,d.name,dc.username,ds.port,ds.engine
 				FROM site_database_connections c JOIN db_instances d ON d.id=c.database_id
 				JOIN database_servers ds ON ds.id=d.server_id JOIN database_credentials dc ON dc.database_id=d.id
 				WHERE c.user_id=? AND c.database_id=? ORDER BY c.id`, ownerID, databaseID)
@@ -191,8 +191,8 @@ func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Reques
 				var id, deviceID int64
 				var siteID, name, username string
 				var port int
-				if err := rows.Scan(&id, &deviceID, &siteID, &name, &username, &port); err != nil { apiError(w, shared.ErrInternal("could not read database links")); return }
-				out = append(out, map[string]interface{}{"id": id, "device_id": deviceID, "site_id": siteID, "database": name, "username": username, "host": "127.0.0.1", "port": port})
+				if err := rows.Scan(&id, &deviceID, &siteID, &name, &username, &port, &engine); err != nil { apiError(w, shared.ErrInternal("could not read database links")); return }
+				out = append(out, map[string]interface{}{"id": id, "device_id": deviceID, "site_id": siteID, "database": name, "engine": engine, "username": username, "host": "127.0.0.1", "port": port})
 			}
 			if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read database links")); return }
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "connections": out})
