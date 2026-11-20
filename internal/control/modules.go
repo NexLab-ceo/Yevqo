@@ -544,25 +544,35 @@ func (s *Server) handleNotifications(w http.ResponseWriter,r *http.Request) {
 }
 
 func (s *Server) handleSettings(w http.ResponseWriter,r *http.Request) {
-	u:=UserFromContext(r.Context())
-	if r.Method==http.MethodGet{
-		rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT setting_key,setting_value FROM user_settings WHERE user_id=?`,u.ID);if err!=nil{apiError(w,shared.ErrInternal("could not load settings"));return};defer rows.Close()
-		settings:=map[string]interface{}{};for rows.Next(){var k string;var v []byte;if rows.Scan(&k,&v)==nil{var parsed interface{};if json.Unmarshal(v,&parsed)==nil{settings[k]=parsed}}}
-		if _,ok:=settings["mode"];!ok{settings["mode"]="simple"};if _,ok:=settings["locale"];!ok{settings["locale"]="ru"};if _,ok:=settings["theme"];!ok{settings["theme"]="dark"}
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"settings":settings});return
-	}
-	if r.Method==http.MethodPut{
-		var in map[string]json.RawMessage;if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
-		allowed:=map[string]bool{"mode":true,"locale":true,"theme":true,"notifications":true}
-		for key,raw:=range in{if !allowed[key]{apiError(w,shared.ErrBadRequest("unsupported setting: "+key));return}
-			if key=="mode"{var v string;if json.Unmarshal(raw,&v)!=nil||(v!="simple"&&v!="advanced"){apiError(w,shared.ErrBadRequest("mode must be simple or advanced"));return}}
-			if key=="locale"{var v string;if json.Unmarshal(raw,&v)!=nil||(v!="ru"&&v!="en"){apiError(w,shared.ErrBadRequest("locale must be ru or en"));return}}
-			if key=="theme"{var v string;if json.Unmarshal(raw,&v)!=nil||(v!="dark"&&v!="light"){apiError(w,shared.ErrBadRequest("theme must be dark or light"));return}}
-			_,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO user_settings(user_id,setting_key,setting_value) VALUES(?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)`,u.ID,key,[]byte(raw));if err!=nil{apiError(w,shared.ErrInternal("could not save settings"));return}
-		}
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
-	}
-	http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
+ u:=UserFromContext(r.Context())
+ if r.Method==http.MethodGet{
+  rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT setting_key,setting_value FROM user_settings WHERE user_id=?`,u.ID);if err!=nil{apiError(w,shared.ErrInternal("could not load settings"));return};defer rows.Close()
+  settings:=map[string]interface{}{};for rows.Next(){var k string;var v []byte;if rows.Scan(&k,&v)==nil{var parsed interface{};if json.Unmarshal(v,&parsed)==nil{settings[k]=parsed}}}
+  if _,ok:=settings["mode"];!ok{settings["mode"]="simple"};if _,ok:=settings["locale"];!ok{settings["locale"]="ru"};if _,ok:=settings["theme"];!ok{settings["theme"]="dark"}
+  if _,ok:=settings["workspace_name"];!ok{settings["workspace_name"]="Personal workspace"}
+  if _,ok:=settings["timezone"];!ok{settings["timezone"]="UTC"}
+  if _,ok:=settings["date_format"];!ok{settings["date_format"]="locale"}
+  if _,ok:=settings["notifications"];!ok{settings["notifications"]=map[string]bool{"system":true,"deployment_errors":true,"device_events":true,"project_updates":true}}
+  writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"settings":settings});return
+ }
+ if r.Method==http.MethodPut{
+  var in map[string]json.RawMessage;if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
+  allowed:=map[string]bool{"mode":true,"locale":true,"theme":true,"notifications":true,"workspace_name":true,"timezone":true,"date_format":true}
+  for key,raw:=range in{if !allowed[key]{apiError(w,shared.ErrBadRequest("unsupported setting: "+key));return}
+   switch key{
+   case "mode": var v string;if json.Unmarshal(raw,&v)!=nil||(v!="simple"&&v!="advanced"){apiError(w,shared.ErrBadRequest("mode must be simple or advanced"));return}
+   case "locale": var v string;if json.Unmarshal(raw,&v)!=nil||(v!="ru"&&v!="en"){apiError(w,shared.ErrBadRequest("locale must be ru or en"));return}
+   case "theme": var v string;if json.Unmarshal(raw,&v)!=nil||(v!="dark"&&v!="light"&&v!="system"){apiError(w,shared.ErrBadRequest("theme must be dark, light or system"));return}
+   case "workspace_name": var v string;if json.Unmarshal(raw,&v)!=nil||len(strings.TrimSpace(v))<2||len(v)>80{apiError(w,shared.ErrBadRequest("workspace name must contain 2–80 characters"));return}
+   case "timezone": var v string;if json.Unmarshal(raw,&v)!=nil||len(v)>64{apiError(w,shared.ErrBadRequest("invalid timezone"));return};if _,err:=time.LoadLocation(v);err!=nil{apiError(w,shared.ErrBadRequest("timezone must be a valid IANA location"));return}
+   case "date_format": var v string;if json.Unmarshal(raw,&v)!=nil||(v!="locale"&&v!="iso"){apiError(w,shared.ErrBadRequest("date format must be locale or iso"));return}
+   case "notifications": var v map[string]bool;if json.Unmarshal(raw,&v)!=nil||len(v)>16{apiError(w,shared.ErrBadRequest("notifications must be an object of boolean preferences"));return};for k:=range v{if k!="system"&&k!="deployment_errors"&&k!="device_events"&&k!="project_updates"{apiError(w,shared.ErrBadRequest("unsupported notification preference"));return}}
+   }
+   _,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO user_settings(user_id,setting_key,setting_value) VALUES(?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)`,u.ID,key,[]byte(raw));if err!=nil{apiError(w,shared.ErrInternal("could not save settings"));return}
+  }
+  writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
+ }
+ http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 }
 
 func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
