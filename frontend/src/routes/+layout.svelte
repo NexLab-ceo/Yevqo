@@ -8,9 +8,8 @@
  import {locale} from '$lib/i18n.js';
  let loading=true,mobileNavOpen=false,modeSaving=false;
  const globalGroups=[
-  {label:'WORKSPACE',items:[['Overview','/','◫'],['Projects','/projects','▦']]},
-  {label:'OPERATIONS',items:[['Monitoring','/monitoring','⌁'],['Logs','/logs','≡'],['Notifications','/notifications','♧'],['Reports & Export','/reports','▤']]},
-  {label:'MANAGEMENT',items:[['Team & Permissions','/team','♙'],['Integrations','/integrations','⌘'],['Backup & Restore','/backups','⤓'],['Maintenance','/maintenance','⚙']]}
+  {label:'',items:[['Обзор','/','◉'],['Проекты','/projects','▦'],['Развёртывания','/deployments','↗'],['Журналы','/logs','⌘']]},
+  {label:'УПРАВЛЕНИЕ',items:[['Устройства','/devices','▣'],['Настройки','/settings','⚙']]}
  ];
  $: pathParts=$page.url.pathname.split('/');
  $: projectId=(pathParts[1]==='projects'&&Number.isInteger(Number(pathParts[2]))&&Number(pathParts[2])>0?pathParts[2]:'')||$page.url.searchParams.get('project_id')||'';
@@ -36,7 +35,7 @@
 <div class="app-shell" data-mode={$uiMode} data-theme={$theme}>
  {#if mobileNavOpen}<button class="mobile-scrim" aria-label="Закрыть меню" on:click={()=>mobileNavOpen=false}></button>{/if}
  <aside class:mobile-open={mobileNavOpen} class="sidebar">
-  <a class="brand-lockup" href="/"><span class="brand-mark">Y</span><span class="brand-copy"><strong>Yevqo</strong></span><span class="brand-version">BETA</span></a>
+  <a class="brand-lockup" href="/"><span class="brand-mark">Y.</span><span class="brand-copy"><strong>YEVQO</strong></span></a>
   <button class="workspace-switcher" on:click={()=>goto(inProject?'/projects':'/settings')}><span class="workspace-avatar">N</span><span class="workspace-copy"><strong>{inProject?'Project workspace':'Personal workspace'}</strong><small>{inProject?'Project #'+projectId:'Free plan · Local host'}</small></span><span class="switch-chevron">⌄</span></button>
   <nav class="sidebar-nav">
    {#each groups as group}
@@ -46,10 +45,10 @@
      {/each}
     </section>
    {/each}
-   {#if $user?.is_admin===true}<section class="nav-group"><div class="nav-label">ADMINISTRATION</div><a href="/admin" class:active={active('/admin',$page.url.pathname)} class="nav-item"><span class="nav-icon">♜</span><span>Admin panel</span></a></section>{/if}
+   
   </nav>
   <div class="sidebar-bottom">
-   <a href="/settings" class:active={active('/settings',$page.url.pathname)} class="nav-item"><span class="nav-icon">⚙</span><span>Settings</span></a>
+   
    <div class="account-row"><span class="account-avatar">{($user?.username||'U').slice(0,1).toUpperCase()}</span><span class="account-copy"><strong>{$user?.username||'User'}</strong><small>{$user?.email||'Personal account'}</small></span><button class="account-menu" title="Выйти" aria-label="Выйти" on:click={handleLogout}>↗</button></div>
   </div>
  </aside>
