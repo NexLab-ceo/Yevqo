@@ -112,7 +112,21 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 		if err:=decodeJSON(r,&in);err!=nil { apiError(w,shared.ErrBadRequest("invalid JSON"));return }
 		in.Provider=strings.ToLower(strings.TrimSpace(in.Provider))
 		in.Token=strings.TrimSpace(in.Token)
-		if in.Provider!="github" && in.Provider!="gitlab" { apiError(w,shared.ErrBadRequest("supported providers: github, gitlab"));return }
+		if in.Provider == "github_app" {
+			credentials := githubAppCredentials{AppID:strings.TrimSpace(in.AppID),InstallationID:strings.TrimSpace(in.InstallationID),PrivateKey:in.PrivateKey}
+			if err := validateGitHubAppCredentials(credentials); err != nil { apiError(w,shared.ErrBadRequest(err.Error())); return }
+			ctx,cancel := context.WithTimeout(r.Context(),20*time.Second); defer cancel()
+			_, account, err := githubAppInstallationToken(ctx,credentials)
+			if err != nil { apiError(w,shared.ErrBadRequest("GitHub App installation could not be verified; check App ID, installation ID and private key")); return }
+			raw,err := json.Marshal(credentials); if err != nil { apiError(w,shared.ErrInternal("could not encode GitHub App credentials")); return }
+			nonce,ciphertext,err := encryptCredential(s.credentialKey,raw); if err != nil { apiError(w,shared.ErrInternal("could not encrypt GitHub App credentials")); return }
+			_,err = s.db.conn.ExecContext(r.Context(),`INSERT INTO integrations(user_id,provider,account_id,account_name,account_email,token_nonce,token_ciphertext,scopes,last_verified_at) VALUES(?,'github_app',?,?,NULL,?,?,?,?) ON DUPLICATE KEY UPDATE account_name=VALUES(account_name),token_nonce=VALUES(token_nonce),token_ciphertext=VALUES(token_ciphertext),scopes=VALUES(scopes),last_verified_at=VALUES(last_verified_at)`,u.ID,credentials.InstallationID,account,nonce,ciphertext,"contents:read, metadata:read",time.Now())
+			if err != nil { apiError(w,shared.ErrInternal("could not save GitHub App integration")); return }
+			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),Action:"integration_connected",Details:map[string]interface{}{"provider":"github_app","account":account}})
+			writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"provider":"github_app","account":account,"message":"GitHub App installation connected"})
+			return
+		}
+		if in.Provider!="github" && in.Provider!="gitlab" { apiError(w,shared.ErrBadRequest("supported providers: github, github_app, gitlab"));return }
 		if len(in.Token)<10 || len(in.Token)>4096 || strings.ContainsAny(in.Token,"\r\n\x00") { apiError(w,shared.ErrBadRequest("enter a valid access token"));return }
 		ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
 		account,scopes,err:=verifyProviderToken(ctx,in.Provider,in.Token)
@@ -139,9 +153,17 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 	var nonce,ciphertext []byte
 	err=s.db.conn.QueryRowContext(r.Context(),`SELECT provider,token_nonce,token_ciphertext FROM integrations WHERE id=? AND user_id=?`,id,u.ID).Scan(&provider,&nonce,&ciphertext)
 	if err!=nil { apiError(w,shared.ErrNotFound("integration not found"));return }
-	token,err:=decryptCredential(s.credentialKey,nonce,ciphertext)
-	if err!=nil { apiError(w,shared.ErrInternal("could not decrypt provider token"));return }
+	rawCredential,err:=decryptCredential(s.credentialKey,nonce,ciphertext)
+	if err!=nil { apiError(w,shared.ErrInternal("could not decrypt provider credentials"));return }
 	ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
+	token := string(rawCredential)
+	if provider=="github_app" {
+		var credentials githubAppCredentials
+		if err:=json.Unmarshal(rawCredential,&credentials);err!=nil { apiError(w,shared.ErrInternal("stored GitHub App credentials are invalid"));return }
+		token,_,err=githubAppInstallationToken(ctx,credentials)
+		if err!=nil { apiError(w,shared.ErrBadRequest("GitHub App installation token could not be refreshed"));return }
+		provider="github"
+	}
 	var repos []providerRepository
 	if provider=="github" {
 		resp,err:=providerRequest(ctx,provider,string(token),"https://api.github.com/user/repos?per_page=100&sort=updated")
