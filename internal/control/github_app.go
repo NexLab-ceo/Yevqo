@@ -1,0 +1,141 @@
+package control
+
+import (
+	"bytes"
+	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type githubAppCredentials struct {
+	AppID          string `json:"app_id"`
+	InstallationID string `json:"installation_id"`
+	PrivateKey     string `json:"private_key"`
+}
+
+type githubAppInstallation struct {
+	ID      int64 `json:"id"`
+	AppID   int64 `json:"app_id"`
+	Account struct {
+		Login string `json:"login"`
+	} `json:"account"`
+}
+
+type githubAppAccessToken struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+func validateGitHubAppCredentials(in githubAppCredentials) error {
+	appID, appErr := strconv.ParseInt(strings.TrimSpace(in.AppID), 10, 64)
+	installationID, installationErr := strconv.ParseInt(strings.TrimSpace(in.InstallationID), 10, 64)
+	if appErr != nil || appID < 1 || installationErr != nil || installationID < 1 {
+		return fmt.Errorf("GitHub App ID and installation ID must be positive integers")
+	}
+	if len(in.PrivateKey) < 100 || len(in.PrivateKey) > 16384 || !strings.Contains(in.PrivateKey, "-----BEGIN") || strings.ContainsRune(in.PrivateKey, 0) {
+		return fmt.Errorf("a valid PEM private key is required")
+	}
+	return nil
+}
+
+func githubAppJWT(appID, privateKey string, now time.Time) (string, error) {
+	block, _ := pem.Decode([]byte(privateKey))
+	if block == nil {
+		return "", fmt.Errorf("GitHub App private key is not valid PEM")
+	}
+	var key *rsa.PrivateKey
+	if parsed, err := x509.ParsePKCS1PrivateKey(block.Bytes); err == nil {
+		key = parsed
+	} else if parsedKey, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
+		var ok bool
+		key, ok = parsedKey.(*rsa.PrivateKey)
+		if !ok { return "", fmt.Errorf("GitHub App key must be RSA") }
+	} else {
+		return "", fmt.Errorf("could not parse GitHub App RSA private key")
+	}
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
+	claims, err := json.Marshal(map[string]interface{}{"iss": appID, "iat": now.Add(-60*time.Second).Unix(), "exp": now.Add(8*time.Minute).Unix()})
+	if err != nil { return "", err }
+	payload := base64.RawURLEncoding.EncodeToString(claims)
+	unsigned := header + "." + payload
+	sum := sha256.Sum256([]byte(unsigned))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, sum[:])
+	if err != nil { return "", err }
+	return unsigned + "." + base64.RawURLEncoding.EncodeToString(signature), nil
+}
+
+func githubAppRequest(ctx context.Context, method, endpoint, jwt string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, body)
+	if err != nil { return nil, err }
+	req.Header.Set("Authorization", "Bearer "+jwt)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	req.Header.Set("User-Agent", "Yevqo")
+	if method == http.MethodPost { req.Header.Set("Content-Type", "application/json") }
+	return integrationHTTPClient.Do(req)
+}
+
+func githubAppInstallationToken(ctx context.Context, credentials githubAppCredentials) (string, string, error) {
+	if err := validateGitHubAppCredentials(credentials); err != nil { return "", "", err }
+	appID, _ := strconv.ParseInt(credentials.AppID, 10, 64)
+	installationID, _ := strconv.ParseInt(credentials.InstallationID, 10, 64)
+	jwt, err := githubAppJWT(credentials.AppID, credentials.PrivateKey, time.Now())
+	if err != nil { return "", "", err }
+
+	installationURL := fmt.Sprintf("https://api.github.com/app/installations/%d", installationID)
+	resp, err := githubAppRequest(ctx, http.MethodGet, installationURL, jwt, nil)
+	if err != nil { return "", "", err }
+	var installation githubAppInstallation
+	if err := readProviderJSON(resp, &installation); err != nil { return "", "", fmt.Errorf("GitHub rejected App installation credentials: %w", err) }
+	if installation.ID != installationID || installation.AppID != appID || strings.TrimSpace(installation.Account.Login) == "" {
+		return "", "", fmt.Errorf("installation does not belong to this GitHub App")
+	}
+
+	tokenURL := fmt.Sprintf("https://api.github.com/app/installations/%d/access_tokens", installationID)
+	resp, err = githubAppRequest(ctx, http.MethodPost, tokenURL, jwt, bytes.NewReader([]byte("{}")))
+	if err != nil { return "", "", err }
+	var access githubAppAccessToken
+	if err := readProviderJSON(resp, &access); err != nil { return "", "", fmt.Errorf("could not create GitHub installation token: %w", err) }
+	if access.Token == "" { return "", "", fmt.Errorf("GitHub returned an empty installation token") }
+	return access.Token, installation.Account.Login, nil
+}
+
+func (s *Server) githubAppTokenForRepository(ctx context.Context, userID int64, repositoryURL string) (string, error) {
+	parsed, err := url.Parse(repositoryURL)
+	if err != nil || !strings.EqualFold(parsed.Hostname(), "github.com") || parsed.Scheme != "https" { return "", nil }
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if len(parts) < 2 { return "", nil }
+	owner := strings.ToLower(parts[0])
+
+	rows, err := s.db.conn.QueryContext(ctx, `SELECT account_name,token_nonce,token_ciphertext FROM integrations WHERE user_id=? AND provider='github_app'`, userID)
+	if err != nil { return "", err }
+	defer rows.Close()
+	for rows.Next() {
+		var account string
+		var nonce, ciphertext []byte
+		if err := rows.Scan(&account, &nonce, &ciphertext); err != nil { return "", err }
+		if strings.ToLower(account) != owner { continue }
+		raw, err := decryptCredential(s.credentialKey, nonce, ciphertext)
+		if err != nil { return "", err }
+		var credentials githubAppCredentials
+		if err := json.Unmarshal(raw, &credentials); err != nil { return "", fmt.Errorf("stored GitHub App credentials are invalid") }
+		token, _, err := githubAppInstallationToken(ctx, credentials)
+		if err != nil { return "", err }
+		return token, nil
+	}
+	if err := rows.Err(); err != nil { return "", err }
+	return "", nil
+}
