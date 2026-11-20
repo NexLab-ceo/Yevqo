@@ -147,7 +147,7 @@ func (s *Server) queueScheduledBackup(item dueBackupSchedule) {
 		res,err := s.db.conn.ExecContext(ctx,`INSERT INTO backups(user_id,device_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?, 'site', ?, ?,0,'queued')`,item.UserID,item.DeviceID,resourceID,"scheduled-"+item.SiteID+".tar.gz")
 		if err != nil { s.failBackupSchedule(item,"could not queue site backup"); return }
 		id,_ := res.LastInsertId()
-		go func(){ s.runSiteBackup(id,item.UserID,item.DeviceID,conn,&shared.CreateSiteBackup{SiteId:item.SiteID}); if err:=s.applyScheduledBackupRetention(item,id); err!=nil { s.failBackupSchedule(item,"backup created but retention failed: "+err.Error()); return }; s.finishScheduledBackup(item,id) }()
+		go func(){ s.runSiteBackup(id,item.UserID,item.UserID,item.DeviceID,conn,&shared.CreateSiteBackup{SiteId:item.SiteID}); if err:=s.applyScheduledBackupRetention(item,id); err!=nil { s.failBackupSchedule(item,"backup created but retention failed: "+err.Error()); return }; s.finishScheduledBackup(item,id) }()
 		return
 	}
 	var serverID int64; var database string; var port int; var engine,status,serverStatus string
@@ -156,7 +156,7 @@ func (s *Server) queueScheduledBackup(item dueBackupSchedule) {
 	res,err := s.db.conn.ExecContext(ctx,`INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,'database',?,?,0,'queued')`,item.UserID,item.DeviceID,serverID,fmt.Sprint(item.DatabaseID),fmt.Sprintf("scheduled-%d.dump",item.DatabaseID))
 	if err != nil { s.failBackupSchedule(item,"could not queue database backup"); return }
 	id,_ := res.LastInsertId()
-	go func(){ s.runDatabaseBackup(id,item.UserID,item.DeviceID,conn,&shared.CreateDatabaseBackup{DatabaseID:item.DatabaseID,ServerID:serverID,Database:database,Port:uint32(port)}); if err:=s.applyScheduledBackupRetention(item,id); err!=nil { s.failBackupSchedule(item,"backup created but retention failed: "+err.Error()); return }; s.finishScheduledBackup(item,id) }()
+	go func(){ s.runDatabaseBackup(id,item.UserID,item.UserID,item.DeviceID,conn,&shared.CreateDatabaseBackup{DatabaseID:item.DatabaseID,ServerID:serverID,Database:database,Port:uint32(port)}); if err:=s.applyScheduledBackupRetention(item,id); err!=nil { s.failBackupSchedule(item,"backup created but retention failed: "+err.Error()); return }; s.finishScheduledBackup(item,id) }()
 }
 
 func (s *Server) applyScheduledBackupRetention(item dueBackupSchedule, backupID int64) error {
