@@ -178,3 +178,9 @@ func (s *Server) finishWebhookDeploymentRun(runID int64,status,message string){
 	progress:=0;if status=="succeeded"{progress=100}
 	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE project_deployment_runs SET status=IF(status='cancelled','cancelled',?),progress=IF(status='cancelled',0,?),message=?,finished_at=UTC_TIMESTAMP() WHERE id=?`,status,progress,message,runID)
 }
+
+func (s *Server) persistDeploymentLog(ctx context.Context, deviceID int64, siteID, line string) {
+	if !validLogSiteID(siteID) || strings.TrimSpace(line)=="" { return }
+	if len(line)>4096 { line=line[:4096] }
+	_,_ = s.db.conn.ExecContext(ctx,`UPDATE project_deployment_runs SET output=LEFT(CONCAT(COALESCE(output,''),?,CHAR(10)),65535) WHERE device_id=? AND site_id=? AND status IN ('queued','running','preparing','cloning','installing','building','starting') ORDER BY id DESC LIMIT 1`,line,deviceID,siteID)
+}
