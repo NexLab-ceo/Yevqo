@@ -82,7 +82,10 @@ func (s *Server) handleWorkspaceMembers(w http.ResponseWriter, r *http.Request) 
 		if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("user must create an account before being invited"));return}
 		if err!=nil{apiError(w,shared.ErrInternal("could not find invited user"));return}
 		if memberID==user.ID{apiError(w,shared.ErrBadRequest("workspace owner cannot invite themselves"));return}
-		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO workspace_members(owner_user_id,member_user_id,role,status,invited_email) VALUES(?,?,?,'invited',?) ON DUPLICATE KEY UPDATE role=VALUES(role),status='invited',invited_email=VALUES(invited_email)`,ownerID,memberID,in.Role,in.Email)
+		var existing int
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM workspace_members WHERE owner_user_id=? AND member_user_id=?`,ownerID,memberID).Scan(&existing);err!=nil{apiError(w,shared.ErrInternal("could not check workspace membership"));return}
+		if existing>0{apiError(w,shared.ErrBadRequest("user is already a workspace member or has a pending invitation"));return}
+		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO workspace_members(owner_user_id,member_user_id,role,status,invited_email) VALUES(?,?,?,'invited',?)`,ownerID,memberID,in.Role,in.Email)
 		if err!=nil{apiError(w,shared.ErrInternal("could not create workspace invitation"));return}
 		_,_=s.db.conn.ExecContext(r.Context(),`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,memberID,"info","Workspace invitation","You have been invited to a NexLab workspace as "+strings.Title(in.Role)+". Accept it in Team & Permissions.")
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),Action:"workspace_member_invited",Details:map[string]interface{}{"workspace_owner_id":ownerID,"member_user_id":memberID,"role":in.Role},IP:clientIP(r)})
@@ -95,11 +98,22 @@ func (s *Server) handleWorkspaceMembers(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleWorkspaceMemberByID(w http.ResponseWriter,r *http.Request) {
 	user:=UserFromContext(r.Context())
 	if user==nil{apiError(w,shared.ErrUnauthorized("not logged in"));return}
-	if r.Method!=http.MethodDelete{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
+	if r.Method!=http.MethodDelete&&r.Method!=http.MethodPatch{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
 	ownerID, ownerErr := workspaceOwnerIDFromRequest(r,user.ID);if ownerErr!=nil{apiError(w,ownerErr);return};if err:=s.authorizeWorkspace(r.Context(),ownerID,user.ID,"workspace.manage");err!=nil{apiError(w,err);return}
 	raw:=strings.TrimPrefix(r.URL.Path,"/api/workspace/members/")
 	id,err:=strconv.ParseInt(raw,10,64)
 	if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid member id"));return}
+	if r.Method==http.MethodPatch {
+		var in struct{Role string `json:"role"`}
+		if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid member role"));return}
+		in.Role=strings.ToLower(strings.TrimSpace(in.Role))
+		if in.Role!="admin"&&in.Role!="developer"{apiError(w,shared.ErrBadRequest("role must be Admin or Developer"));return}
+		result,err:=s.db.conn.ExecContext(r.Context(),`UPDATE workspace_members SET role=? WHERE id=? AND owner_user_id=? AND status='active'`,in.Role,id,ownerID)
+		if err!=nil{apiError(w,shared.ErrInternal("could not update workspace member role"));return}
+		affected,_:=result.RowsAffected();if affected==0{apiError(w,shared.ErrNotFound("active workspace member not found"));return}
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),Action:"workspace_member_role_updated",Details:map[string]interface{}{"workspace_owner_id":ownerID,"membership_id":id,"role":in.Role},IP:clientIP(r)})
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"role":in.Role});return
+	}
 	result,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM workspace_members WHERE id=? AND owner_user_id=?`,id,ownerID)
 	if err!=nil{apiError(w,shared.ErrInternal("could not remove workspace member"));return}
 	affected,_:=result.RowsAffected()
