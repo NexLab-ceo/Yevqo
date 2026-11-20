@@ -434,6 +434,7 @@ type DeploymentJobEvent struct {
  Progress int `json:"progress"`
  Message string `json:"message,omitempty"`
  Timestamp time.Time `json:"timestamp"`
+ CommitSHA string `json:"commit_sha,omitempty"`
 }
 
 type DeploymentJobAction struct { SiteId string `json:"site_id"`; JobId string `json:"job_id"` }
