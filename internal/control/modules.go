@@ -392,15 +392,48 @@ func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Reques
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"status":target,"message":"PostgreSQL server "+action+" completed"})
 }
 
-func (s *Server) handleDatabases(w http.ResponseWriter,r *http.Request) {
-	u:=UserFromContext(r.Context())
-	if r.Method!=http.MethodGet{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
-	projectID:=int64(0);if raw:=r.URL.Query().Get("project_id");raw!=""{parsed,parseErr:=strconv.ParseInt(raw,10,64);if parseErr!=nil||parsed<1{apiError(w,shared.ErrBadRequest("invalid project id"));return};var owned int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id IN (SELECT owner_user_id FROM workspace_members WHERE member_user_id=? AND status='active' UNION SELECT ?)`,parsed,u.ID,u.ID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("project not found"));return};if err:=s.authorizeProjectAction(r.Context(),parsed,u.ID,"database.read");err!=nil{apiError(w,err);return};projectID=parsed}
-	instanceOwnerID:=u.ID;if projectID>0{if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT user_id FROM projects WHERE id=?`,projectID).Scan(&instanceOwnerID);err!=nil{apiError(w,shared.ErrNotFound("project not found"));return}}
-	query:=`SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.name,ds.engine,ds.device_id FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id WHERE d.user_id=?`;args:=[]interface{}{instanceOwnerID};if projectID>0{query+=` AND EXISTS (SELECT 1 FROM project_database_servers pds WHERE pds.project_id=? AND pds.database_server_id=ds.id)`;args=append(args,projectID)};query+=` ORDER BY d.created_at DESC`;rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
-	if err!=nil{apiError(w,shared.ErrInternal("could not load databases"));return};defer rows.Close()
-	out:=make([]map[string]interface{},0);for rows.Next(){var id,sid,did int64;var name,status,serverName,engine string;var created time.Time;if err:=rows.Scan(&id,&sid,&name,&status,&created,&serverName,&engine,&did);err!=nil{apiError(w,shared.ErrInternal("could not read databases"));return};out=append(out,map[string]interface{}{"id":id,"server_id":sid,"name":name,"status":status,"created_at":created,"server_name":serverName,"engine":engine,"device_id":did})}
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"databases":out})
+func (s *Server) handleDatabases(w http.ResponseWriter, r *http.Request) {
+	u := UserFromContext(r.Context())
+	if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+	projectID := int64(0)
+	var owners []int64
+	if raw := r.URL.Query().Get("project_id"); raw != "" {
+		parsed, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
+		ownerID, accessErr := s.authorizeProjectOwner(r.Context(), parsed, u.ID, "database.read")
+		if accessErr != nil { apiError(w, accessErr); return }
+		projectID = parsed
+		owners = []int64{ownerID}
+	} else {
+		allOwners, ownerErr := s.db.WorkspaceOwnerIDs(r.Context(), u.ID)
+		if ownerErr != nil { apiError(w, ownerErr); return }
+		for _, ownerID := range allOwners {
+			role, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
+			if roleErr != nil { apiError(w, roleErr); return }
+			if allowed && CanWorkspaceAction(role, "database.read") { owners = append(owners, ownerID) }
+		}
+	}
+	out := make([]map[string]interface{}, 0)
+	for _, ownerID := range owners {
+		query := `SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.name,ds.engine,ds.device_id
+			FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id
+			WHERE d.user_id=? AND ds.user_id=?`
+		args := []interface{}{ownerID, ownerID}
+		if projectID > 0 { query += ` AND EXISTS (SELECT 1 FROM project_database_servers pds WHERE pds.project_id=? AND pds.database_server_id=ds.id)`; args = append(args, projectID) }
+		query += " ORDER BY d.created_at DESC"
+		rows, err := s.db.conn.QueryContext(r.Context(), query, args...)
+		if err != nil { apiError(w, shared.ErrInternal("could not load databases")); return }
+		for rows.Next() {
+			var id, serverID, deviceID int64
+			var name, status, serverName, engine string
+			var created time.Time
+			if err := rows.Scan(&id,&serverID,&name,&status,&created,&serverName,&engine,&deviceID); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read databases")); return }
+			out = append(out, map[string]interface{}{"id":id,"server_id":serverID,"name":name,"status":status,"created_at":created,"server_name":serverName,"engine":engine,"device_id":deviceID})
+		}
+		if err := rows.Err(); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read databases")); return }
+		rows.Close()
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"databases":out})
 }
 
 func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
