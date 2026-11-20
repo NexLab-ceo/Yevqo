@@ -89,6 +89,22 @@ Do not mark a step PASS based only on a UI status if the corresponding service o
 
 These are manual acceptance steps, not a claim that a physical Agent restore test has already passed.
 
+## MariaDB/MySQL managed server verification (disposable test data only)
+
+- [ ] Create a new MariaDB server configuration with the default dedicated Yevqo data directory, localhost-only bind and TLS enabled.
+- [ ] Install it from the Database Server page. Wait for Agent confirmation and verify the server reaches `ready`.
+- [ ] Confirm the generated data directory ends in `server-<server-id>` and is inside Termux `$PREFIX`.
+- [ ] Create a disposable database and application user with a password of at least 12 characters.
+- [ ] Test the connection and verify the result is successful; confirm the user has privileges only on its own database.
+- [ ] Create a database backup. Confirm it is a non-empty `.sql` file and status becomes `verified`.
+- [ ] Restore the backup into a different database name. Verify the restored rows and confirm the original database remains unchanged.
+- [ ] Stop and start the MariaDB server; repeat the connection test.
+- [ ] Confirm an existing non-empty directory is refused and never initialized over. Do not point the installer at a production MariaDB directory.
+- [ ] Record Agent logs and server version with credentials redacted.
+
+These checks must use disposable databases. CI tests do not substitute for this physical Termux validation.
+
+
 
 ## Capture test evidence
 
