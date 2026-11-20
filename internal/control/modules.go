@@ -95,7 +95,15 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 			_,err=s.db.conn.ExecContext(r.Context(),`INSERT IGNORE INTO project_devices(project_id,device_id) VALUES(?,?)`,id,in.DeviceID)
 		} else {
 			if len(in.SiteID)<1 || len(in.SiteID)>64 { apiError(w,shared.ErrBadRequest("invalid site id"));return }
-			_,err=s.db.conn.ExecContext(r.Context(),`INSERT IGNORE INTO project_sites(project_id,device_id,site_id) SELECT ?,device_id,site_id FROM sites WHERE device_id=? AND site_id=?`,id,in.DeviceID,in.SiteID)
+			var siteCount int
+			if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites WHERE device_id=? AND site_id=?`,in.DeviceID,in.SiteID).Scan(&siteCount);err!=nil||siteCount!=1 { apiError(w,shared.ErrNotFound("site not found on selected device"));return }
+			tx,txErr:=s.db.conn.BeginTx(r.Context(),nil)
+			if txErr!=nil { apiError(w,shared.ErrInternal("could not start project resource transaction"));return }
+			if _,err=tx.ExecContext(r.Context(),`INSERT IGNORE INTO project_devices(project_id,device_id) VALUES(?,?)`,id,in.DeviceID);err==nil {
+				_,err=tx.ExecContext(r.Context(),`INSERT IGNORE INTO project_sites(project_id,device_id,site_id) VALUES(?,?,?)`,id,in.DeviceID,in.SiteID)
+			}
+			if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not attach resource"));return }
+			if err=tx.Commit();err!=nil { apiError(w,shared.ErrInternal("could not commit project resource attachment"));return }
 		}
 		if err!=nil { apiError(w,shared.ErrInternal("could not attach resource"));return }
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
