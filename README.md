@@ -1,6 +1,6 @@
 # Yevqo
 
-The `main` branch is the active Yevqo implementation. The all-in-one package keeps explicit `yevqo-control` and `yevqo-agent` names. The standalone Agent package exposes the simple `yevqo`, `yevqo-setup` and `yevqo-update` commands. The deploy helper CLI is `yevqo-cli`.
+The `main` branch is the active Yevqo implementation. The all-in-one package keeps explicit `yevqo-control` and `yevqo-agent` names. The standalone Agent package exposes the simple `yevqo`, `yevqo-setup` and `yevqo-update` commands. The deploy helper CLI is `yevqo-cli`; its inventory, deployment and backup commands are documented in [CLI usage](docs/cli.md).
 
 ## Что скачать
 
