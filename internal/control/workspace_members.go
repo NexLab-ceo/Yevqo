@@ -87,7 +87,7 @@ func (s *Server) handleWorkspaceMembers(w http.ResponseWriter, r *http.Request) 
 		if existing>0{apiError(w,shared.ErrBadRequest("user is already a workspace member or has a pending invitation"));return}
 		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO workspace_members(owner_user_id,member_user_id,role,status,invited_email) VALUES(?,?,?,'invited',?)`,ownerID,memberID,in.Role,in.Email)
 		if err!=nil{apiError(w,shared.ErrInternal("could not create workspace invitation"));return}
-		_,_=s.db.conn.ExecContext(r.Context(),`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,memberID,"info","Workspace invitation","You have been invited to a NexLab workspace as "+strings.Title(in.Role)+". Accept it in Team & Permissions.")
+		if s.notificationPreferenceEnabled(r.Context(),memberID,"project_updates") { _,_=s.db.conn.ExecContext(r.Context(),`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,memberID,"info","Workspace invitation","You have been invited to a NexLab workspace as "+strings.Title(in.Role)+". Accept it in Team & Permissions.") }
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"workspace_member_invited",Details:map[string]interface{}{"workspace_owner_id":ownerID,"member_user_id":memberID,"role":in.Role},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"message":"invitation sent"})
 	default:
