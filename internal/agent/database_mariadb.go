@@ -64,7 +64,7 @@ func installMariaDBServer(req shared.InstallDatabaseServer) (*shared.DatabaseSer
 	if req.Port < 1024 || req.Port > 65535 || req.MaxConnections < 1 || req.MaxConnections > 1000 { return nil, fmt.Errorf("invalid MariaDB port or connection limit") }; if req.SSLMode != "" && req.SSLMode != "disable" && req.SSLMode != "prefer" && req.SSLMode != "require" { return nil, fmt.Errorf("unsupported MariaDB SSL mode") }
 	prefix := os.Getenv("PREFIX"); if prefix == "" { return nil, fmt.Errorf("Termux PREFIX is not set; run the Agent inside Termux") }
 	dataDir, err := resolveTermuxPath(prefix, req.DataDirectory); if err != nil { return nil, err }
-	if l, err := netListenLocal(req.Port); err != nil { return nil, err } else { _ = l }
+	if l, err := netListenLocal(req.Port); err != nil { return nil, err } else { _ = l.Close() }
 	var fs syscallStatfs
 	if getTermuxFreeSpace(prefix, &fs) && fs.available < 200*1024*1024 { return nil, fmt.Errorf("at least 200 MB of free storage is required") }
 	if info, err := os.Lstat(dataDir); err == nil {
