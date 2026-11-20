@@ -20,10 +20,11 @@ func (s *Server) handleBackupTransfer(w http.ResponseWriter,r *http.Request){
 	parts:=strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/backups/"),"/"),"/")
 	if len(parts)!=2||parts[1]!="transfer"{apiError(w,shared.ErrBadRequest("expected backup id/transfer"));return}
 	backupID,err:=strconv.ParseInt(parts[0],10,64);if err!=nil||backupID<1{apiError(w,shared.ErrBadRequest("invalid backup id"));return}
+	ownerID,_,accessErr:=s.authorizeBackup(r.Context(),backupID,u.ID,"backup.manage");if accessErr!=nil{apiError(w,accessErr);return}
 	var in struct{TargetDeviceID int64 `json:"target_device_id"`;TargetSiteID string `json:"target_site_id"`;TargetServerID int64 `json:"target_server_id"`}
 	if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid backup transfer request"));return}
 	var sourceDeviceID int64;var sourceServerID sql.NullInt64;var fileName,status,resourceType,resourceID string;var size int64
-	err=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,database_server_id,file_name,status,resource_type,resource_id,size_bytes FROM backups WHERE id=? AND user_id=?`,backupID,u.ID).Scan(&sourceDeviceID,&sourceServerID,&fileName,&status,&resourceType,&resourceID,&size)
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,database_server_id,file_name,status,resource_type,resource_id,size_bytes FROM backups WHERE id=? AND user_id=?`,backupID,ownerID).Scan(&sourceDeviceID,&sourceServerID,&fileName,&status,&resourceType,&resourceID,&size)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("backup not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load source backup"));return}
 	if size<1||size>2<<30||((resourceType=="site"&&status!="completed")||(resourceType=="database"&&status!="verified")){apiError(w,shared.ErrBadRequest("only completed or verified backups can be transferred"));return}
 	sourceSiteID:=""
@@ -37,13 +38,13 @@ func (s *Server) handleBackupTransfer(w http.ResponseWriter,r *http.Request){
 		if targetDeviceID<1||!validBackupSiteID(targetSiteID)||in.TargetServerID!=0{apiError(w,shared.ErrBadRequest("choose a target website"));return}
 		if targetDeviceID==sourceDeviceID&&targetSiteID==sourceSiteID{apiError(w,shared.ErrBadRequest("source and target website are the same"));return}
 		var owned int
-		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,targetDeviceID,targetSiteID,u.ID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("target website not found"));return}
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,targetDeviceID,targetSiteID,ownerID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("target website not found"));return}
 		suffix:=strings.TrimPrefix(fileName,sourceSiteID+"-");if suffix==fileName{apiError(w,shared.ErrBadRequest("invalid source archive name"));return}
 		targetFileName=targetSiteID+"-"+suffix
 	}else{
 		if in.TargetServerID<1||in.TargetDeviceID!=0||in.TargetSiteID!=""{apiError(w,shared.ErrBadRequest("choose a target PostgreSQL server"));return}
 		var engine,serverStatus string
-		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status FROM database_servers WHERE id=? AND user_id=?`,in.TargetServerID,u.ID).Scan(&targetDeviceID,&engine,&serverStatus);err!=nil||engine!="postgresql"||serverStatus!="ready"{apiError(w,shared.ErrNotFound("ready target PostgreSQL server not found"));return}
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status FROM database_servers WHERE id=? AND user_id=?`,in.TargetServerID,ownerID).Scan(&targetDeviceID,&engine,&serverStatus);err!=nil||engine!="postgresql"||serverStatus!="ready"{apiError(w,shared.ErrNotFound("ready target PostgreSQL server not found"));return}
 		targetServerID=in.TargetServerID
 		targetFileName=fmt.Sprintf("transfer-%d.dump",backupID)
 	}
@@ -51,13 +52,13 @@ func (s *Server) handleBackupTransfer(w http.ResponseWriter,r *http.Request){
 	var newBackupID int64
 	if resourceType=="site"{
 		targetResourceID:=fmt.Sprintf("%d:%s",targetDeviceID,targetSiteID)
-		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO backups(user_id,device_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?, 'site', ?, ?,?,'queued')`,u.ID,targetDeviceID,targetResourceID,targetFileName,size)
+		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO backups(user_id,device_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?, 'site', ?, ?,?,'queued')`,ownerID,targetDeviceID,targetResourceID,targetFileName,size)
 		if err!=nil{apiError(w,shared.ErrInternal("could not create target backup record"));return};newBackupID,_=res.LastInsertId()
 	}else{
-		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,'database',?,?,?,'queued')`,u.ID,targetDeviceID,targetServerID,fmt.Sprintf("transfer:%d",backupID),targetFileName,size)
+		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,'database',?,?,?,'queued')`,ownerID,targetDeviceID,targetServerID,fmt.Sprintf("transfer:%d",backupID),targetFileName,size)
 		if err!=nil{apiError(w,shared.ErrInternal("could not create target backup record"));return};newBackupID,_=res.LastInsertId()
 	}
-	go s.runBackupTransfer(backupID,newBackupID,u.ID,sourceConn,targetConn,sourceDeviceID,targetDeviceID,resourceType,sourceSiteID,targetSiteID,sourceServerID.Int64,targetServerID,fileName,targetFileName,size)
+	go s.runBackupTransfer(backupID,newBackupID,ownerID,sourceConn,targetConn,sourceDeviceID,targetDeviceID,resourceType,sourceSiteID,targetSiteID,sourceServerID.Int64,targetServerID,fileName,targetFileName,size)
 	writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"backup_id":newBackupID,"status":"queued","target_device_id":targetDeviceID,"file_name":targetFileName})
 }
 
