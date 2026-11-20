@@ -273,7 +273,8 @@ export async function testDatabaseConnection(id) { return request('POST', `/api/
 // === External Git provider integrations ===
 export async function listIntegrations() { return request('GET', '/api/integrations'); }
 export async function connectIntegration(provider, token) { return request('POST', '/api/integrations', { provider, token }); }
-export async function connectGitHubApp(appId, installationId, privateKey) { return request('POST', '/api/integrations', { provider: 'github_app', app_id: appId, installation_id: installationId, private_key: privateKey }); }
+export async function getGitHubAppConfig() { return request('GET', '/api/integrations/github-app/config'); }
+export async function connectGitHubApp(installationId) { return request('POST', '/api/integrations', { provider: 'github_app', installation_id: String(installationId) }); }
 export async function disconnectIntegration(id) { return request('DELETE', `/api/integrations/${id}`); }
 export async function listIntegrationRepositories(id) { return request('GET', `/api/integrations/${id}/repositories`); }
 
