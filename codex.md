@@ -159,7 +159,7 @@ Before finishing every task:
 
 - 2026-11-20 — Verified device metric alerts and added deduplicated offline/reconnect notifications using the same persisted alert-state table; all included in successful main CI at `755e16f`.
 
-- 2026-11-20 — Added persisted device alert state with CPU/memory/storage/temperature thresholds, recovery hysteresis and transition-only notifications. Metric ingestion from the Agent WebSocket now evaluates alerts without failing telemetry ingestion. CI pending.
+- 2026-11-20 — Added persisted device alert state with CPU/memory/storage/temperature thresholds, recovery hysteresis and transition-only notifications. Metric ingestion from the Agent WebSocket now evaluates alerts without failing telemetry ingestion; included in successful main CI at `755e16f`.
 
 - 2026-11-20 — Added environment-scoped database-instance assignments and runtime credential injection across site start/deploy/rollback and GitHub webhooks; added environment-aware PostgreSQL restore and safe membership cleanup on server detach. CI passed (build run 44738111638; checks run 44738111616; commit `83e0654`).
 
