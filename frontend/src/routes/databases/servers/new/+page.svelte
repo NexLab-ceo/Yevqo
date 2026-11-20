@@ -87,6 +87,7 @@
         }
         const result = await createDatabaseServer({
             ...( $page.url.searchParams.get('project_id') ? { project_id: Number($page.url.searchParams.get('project_id')) } : {}),
+            ...( $page.url.searchParams.get('environment_id') ? { environment_id: Number($page.url.searchParams.get('environment_id')) } : {}),
             device_id: Number(deviceId),
             name: serverName,
             engine,
