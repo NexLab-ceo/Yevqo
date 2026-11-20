@@ -124,6 +124,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 
 type databaseServerInput struct {
 	DeviceID int64 `json:"device_id"`
+	ProjectID int64 `json:"project_id"`
 	Name string `json:"name"`
 	Engine string `json:"engine"`
 	Version string `json:"version"`
@@ -146,7 +147,7 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	switch r.Method {
 	case http.MethodGet:
-		projectID:=int64(0); if raw:=r.URL.Query().Get("project_id"); raw!="" { parsed,parseErr:=strconv.ParseInt(raw,10,64); if parseErr!=nil||parsed<1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }; var owned int; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id IN (SELECT owner_user_id FROM workspace_members WHERE member_user_id=? AND status='active' UNION SELECT ?)`,parsed,u.ID,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }; projectID=parsed }; serverOwnerID:=u.ID; if projectID>0 { if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT user_id FROM projects WHERE id=?`,projectID).Scan(&serverOwnerID);err!=nil { apiError(w,shared.ErrNotFound("project not found"));return } }; query:=`SELECT id,device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE user_id=?`; args:=[]interface{}{serverOwnerID}; if projectID>0 { query+=` AND id IN (SELECT pds.database_server_id FROM project_database_servers pds WHERE pds.project_id=?)`;args=append(args,projectID) }; query+=` ORDER BY created_at DESC`; rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
+		projectID:=int64(0); if raw:=r.URL.Query().Get("project_id"); raw!="" { parsed,parseErr:=strconv.ParseInt(raw,10,64); if parseErr!=nil||parsed<1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }; var owned int; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id IN (SELECT owner_user_id FROM workspace_members WHERE member_user_id=? AND status='active' UNION SELECT ?)`,parsed,u.ID,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }; projectID=parsed; if err:=s.authorizeProjectAction(r.Context(),projectID,u.ID,"database.read");err!=nil{apiError(w,err);return} }; serverOwnerID:=u.ID; if projectID>0 { if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT user_id FROM projects WHERE id=?`,projectID).Scan(&serverOwnerID);err!=nil { apiError(w,shared.ErrNotFound("project not found"));return } }; query:=`SELECT id,device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE user_id=?`; args:=[]interface{}{serverOwnerID}; if projectID>0 { query+=` AND id IN (SELECT pds.database_server_id FROM project_database_servers pds WHERE pds.project_id=?)`;args=append(args,projectID) }; query+=` ORDER BY created_at DESC`; rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
 		if err!=nil{apiError(w,shared.ErrInternal("could not load database servers"));return}
 		defer rows.Close();out:=make([]map[string]interface{},0)
 		for rows.Next(){var id,did int64;var name,engine,version,dir,network,status string;var port int;var created time.Time
@@ -156,11 +157,14 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 	case http.MethodPost:
 		var in databaseServerInput;if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 		in.Name=strings.TrimSpace(in.Name);if in.DeviceID<1||len(in.Name)<2||len(in.Name)>64{apiError(w,shared.ErrBadRequest("device and server name are required"));return}
+		ownerID:=u.ID
+		if in.ProjectID<0 { apiError(w,shared.ErrBadRequest("invalid project id"));return }
+		if in.ProjectID>0 { if err:=s.authorizeProjectAction(r.Context(),in.ProjectID,u.ID,"database.manage");err!=nil{apiError(w,err);return}; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT user_id FROM projects WHERE id=?`,in.ProjectID).Scan(&ownerID);err!=nil{apiError(w,shared.ErrNotFound("project not found"));return} }
 		if in.Engine!="postgresql"&&in.Engine!="mariadb"&&in.Engine!="mysql"{apiError(w,shared.ErrBadRequest("unsupported database engine"));return}
 		if in.Port<1024||in.Port>65535{apiError(w,shared.ErrBadRequest("invalid port"));return}
 		if in.NetworkAccess==""{in.NetworkAccess="private"}
 		if in.NetworkAccess!="private"&&in.NetworkAccess!="localhost"{apiError(w,shared.ErrBadRequest("network access must be private or localhost"));return}
-		var owned int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM devices WHERE id=? AND user_id=?`,in.DeviceID,u.ID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("device not found"));return}
+		var owned int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM devices WHERE id=? AND user_id=?`,in.DeviceID,ownerID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("device not found"));return}
 		if in.DataDirectory==""{if in.Engine=="postgresql"{in.DataDirectory="$PREFIX/var/lib/postgresql"}else{in.DataDirectory="$PREFIX/var/lib/mysql"}}
 		if !strings.HasPrefix(in.DataDirectory,"$PREFIX/")||strings.Contains(in.DataDirectory,".."){apiError(w,shared.ErrBadRequest("data directory must be inside Termux PREFIX"));return}
 		if in.StorageLimitGB==""{in.StorageLimitGB="unlimited"}
@@ -171,9 +175,10 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 		if in.BindAddress==""{in.BindAddress="127.0.0.1"};if in.BindAddress!="127.0.0.1"||in.RemoteAccess{apiError(w,shared.ErrBadRequest("database servers must remain bound to localhost; remote access is disabled"));return}
 		if in.SSLMode==""{in.SSLMode="require"};if in.SSLMode!="require"&&in.SSLMode!="prefer"&&in.SSLMode!="disable"{apiError(w,shared.ErrBadRequest("invalid SSL mode"));return}
 		if in.AuthMethod==""{in.AuthMethod="password"};if in.AuthMethod!="password"&&in.AuthMethod!="scram-sha-256"{apiError(w,shared.ErrBadRequest("invalid authentication method"));return}
-		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO database_servers(user_id,device_id,name,engine,version,port,data_directory,network_access,status,storage_limit_gb,ram_budget_mb,max_connections,monitor_storage,auto_start,process_policy,bind_address,ssl_mode,auth_method,remote_access) VALUES(?,?,?,?,?,?,?,?,'planned',?,?,?,?,?,?,?,?,?,?)`,u.ID,in.DeviceID,in.Name,in.Engine,in.Version,in.Port,in.DataDirectory,in.NetworkAccess,in.StorageLimitGB,in.RAMBudgetMB,in.MaxConnections,in.MonitorStorage,in.AutoStart,in.ProcessPolicy,in.BindAddress,in.SSLMode,in.AuthMethod,in.RemoteAccess)
+		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO database_servers(user_id,device_id,name,engine,version,port,data_directory,network_access,status,storage_limit_gb,ram_budget_mb,max_connections,monitor_storage,auto_start,process_policy,bind_address,ssl_mode,auth_method,remote_access) VALUES(?,?,?,?,?,?,?,?,'planned',?,?,?,?,?,?,?,?,?,?)`,ownerID,in.DeviceID,in.Name,in.Engine,in.Version,in.Port,in.DataDirectory,in.NetworkAccess,in.StorageLimitGB,in.RAMBudgetMB,in.MaxConnections,in.MonitorStorage,in.AutoStart,in.ProcessPolicy,in.BindAddress,in.SSLMode,in.AuthMethod,in.RemoteAccess)
 		if err!=nil{apiError(w,shared.ErrBadRequest("server name or port already in use on this device"));return}
 		id,_:=res.LastInsertId()
+		if in.ProjectID>0 { if _,err:=s.db.conn.ExecContext(r.Context(),`INSERT IGNORE INTO project_database_servers(project_id,database_server_id) VALUES(?,?)`,in.ProjectID,id);err!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM database_servers WHERE id=? AND user_id=?`,id,ownerID);apiError(w,shared.ErrInternal("could not attach database server to project"));return } }
 		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"server":map[string]interface{}{"id":id,"device_id":in.DeviceID,"name":in.Name,"engine":in.Engine,"version":in.Version,"port":in.Port,"status":"planned","ssl_mode":in.SSLMode,"max_connections":in.MaxConnections},"message":"Configuration saved. Install the PostgreSQL server when the selected device is online."})
 	default:http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
@@ -181,19 +186,20 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 
 func (s *Server) handleInstallDatabaseServer(w http.ResponseWriter,r *http.Request,id int64) {
 	u:=UserFromContext(r.Context())
+	ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,ownerID,"database.manage");if accessErr!=nil{apiError(w,accessErr);return}
 	var deviceID int64;var engine,dataDir,status,bind,sslMode string;var port,maxConnections int;var remote bool
-	err:=s.db.conn.QueryRowContext(r.Context(),"SELECT device_id,engine,data_directory,status,port,max_connections,bind_address,remote_access,ssl_mode FROM database_servers WHERE id=? AND user_id=?",id,u.ID).Scan(&deviceID,&engine,&dataDir,&status,&port,&maxConnections,&bind,&remote,&sslMode)
+	err:=s.db.conn.QueryRowContext(r.Context(),"SELECT device_id,engine,data_directory,status,port,max_connections,bind_address,remote_access,ssl_mode FROM database_servers WHERE id=? AND user_id=?",id,ownerID).Scan(&deviceID,&engine,&dataDir,&status,&port,&maxConnections,&bind,&remote,&sslMode)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}
 	if engine!="postgresql"{apiError(w,shared.ErrBadRequest("Agent installation currently supports PostgreSQL only"));return}
 	if status=="ready"{apiError(w,shared.ErrBadRequest("database server is already ready"));return}
 	if status!="planned"&&status!="error"{apiError(w,shared.ErrBadRequest("database server cannot be installed from its current state"));return}
 	if bind!="127.0.0.1"||remote{apiError(w,shared.ErrBadRequest("remote database access must remain disabled"));return}
 	conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
-	res,err:=s.db.conn.ExecContext(r.Context(),"UPDATE database_servers SET status='installing' WHERE id=? AND user_id=? AND status IN ('planned','error')",id,u.ID)
+	res,err:=s.db.conn.ExecContext(r.Context(),"UPDATE database_servers SET status='installing' WHERE id=? AND user_id=? AND status IN ('planned','error')",id,ownerID)
 	if err!=nil{apiError(w,shared.ErrInternal("could not queue PostgreSQL installation"));return}
 	if n,_:=res.RowsAffected();n!=1{apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return}
 	req:=&shared.InstallDatabaseServer{ServerID:id,Engine:engine,Port:uint32(port),DataDirectory:dataDir,MaxConnections:uint32(maxConnections),SSLMode:sslMode}
-	go s.runDatabaseServerInstall(id,u.ID,deviceID,conn,req)
+	go s.runDatabaseServerInstall(id,ownerID,deviceID,conn,req)
 	writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"server_id":id,"status":"installing","message":"PostgreSQL installation queued on the Android device"})
 }
 
@@ -221,9 +227,10 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 	u:=UserFromContext(r.Context());raw:=strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/databases/servers/"),"/")
 	parts:=strings.Split(raw,"/")
 	id,err:=strconv.ParseInt(parts[0],10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid server id"));return}
+	action:="database.manage";if r.Method==http.MethodGet{action="database.read"};ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,ownerID,action);if accessErr!=nil{apiError(w,accessErr);return}
 	if len(parts)==2&&parts[1]=="roles"&&r.Method==http.MethodGet {
 		var deviceID int64;var engine,status string;var port int
-		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`,id,u.ID).Scan(&deviceID,&engine,&status,&port)
+		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&port)
 		if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
 		if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
 		if engine!="postgresql"||status!="ready" { apiError(w,shared.ErrBadRequest("a ready PostgreSQL server is required to inspect roles"));return }
@@ -243,21 +250,22 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 	if len(parts)==2&&parts[1]=="install"&&r.Method==http.MethodPost{s.handleInstallDatabaseServer(w,r,id);return}
 	if len(parts)!=1{http.NotFound(w,r);return}
 	var did int64;var name,engine,version,dir,network,status,storage,policy,bind,ssl,auth string;var port,ram,maxConnections int;var monitor,autoStart,remote bool;var created time.Time
-	err=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,name,engine,version,port,data_directory,network_access,status,created_at,storage_limit_gb,ram_budget_mb,max_connections,monitor_storage,auto_start,process_policy,bind_address,ssl_mode,auth_method,remote_access FROM database_servers WHERE id=? AND user_id=?`,id,u.ID).Scan(&did,&name,&engine,&version,&port,&dir,&network,&status,&created,&storage,&ram,&maxConnections,&monitor,&autoStart,&policy,&bind,&ssl,&auth,&remote)
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,name,engine,version,port,data_directory,network_access,status,created_at,storage_limit_gb,ram_budget_mb,max_connections,monitor_storage,auto_start,process_policy,bind_address,ssl_mode,auth_method,remote_access FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&did,&name,&engine,&version,&port,&dir,&network,&status,&created,&storage,&ram,&maxConnections,&monitor,&autoStart,&policy,&bind,&ssl,&auth,&remote)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}
 	switch r.Method{
 	case http.MethodGet:writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"server":map[string]interface{}{"id":id,"device_id":did,"name":name,"engine":engine,"version":version,"port":port,"data_directory":dir,"network_access":network,"status":status,"created_at":created,"storage_limit_gb":storage,"ram_budget_mb":ram,"max_connections":maxConnections,"monitor_storage":monitor,"auto_start":autoStart,"process_policy":policy,"bind_address":bind,"ssl_mode":ssl,"auth_method":auth,"remote_access":remote}})
 	case http.MethodDelete:
 		var count int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM db_instances WHERE server_id=?`,id).Scan(&count);err!=nil{apiError(w,shared.ErrInternal("could not inspect databases"));return};if count>0{apiError(w,shared.ErrBadRequest("remove or migrate databases before removing this server"));return}
-		_,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM database_servers WHERE id=? AND user_id=? AND status IN ('planned','error','stopped')`,id,u.ID);if err!=nil{apiError(w,shared.ErrInternal("could not remove server metadata"));return};writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
+		_,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM database_servers WHERE id=? AND user_id=? AND status IN ('planned','error','stopped')`,id,ownerID);if err!=nil{apiError(w,shared.ErrInternal("could not remove server metadata"));return};writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	default:http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
 }
 
 func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Request,id int64,action string) {
 	u:=UserFromContext(r.Context())
+	ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,ownerID,"database.manage");if accessErr!=nil{apiError(w,accessErr);return}
 	var deviceID int64;var engine,status,dataDir string;var port int
-	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,data_directory,port FROM database_servers WHERE id=? AND user_id=?`,id,u.ID).Scan(&deviceID,&engine,&status,&dataDir,&port)
+	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,data_directory,port FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&dataDir,&port)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
 	if engine!="postgresql" { apiError(w,shared.ErrBadRequest("Agent lifecycle actions currently support PostgreSQL only"));return }
@@ -267,23 +275,23 @@ func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Reques
 	conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
 	previous:=status
 	if action=="stop" {
-		res,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status='stopping' WHERE id=? AND user_id=? AND status='ready'`,id,u.ID)
+		res,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status='stopping' WHERE id=? AND user_id=? AND status='ready'`,id,ownerID)
 		if err!=nil { apiError(w,shared.ErrInternal("could not lock database server state"));return }
 		if n,_:=res.RowsAffected();n!=1 { apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return }
 	} else {
-		res,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status='starting' WHERE id=? AND user_id=? AND status=?`,id,u.ID,status)
+		res,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status='starting' WHERE id=? AND user_id=? AND status=?`,id,ownerID,status)
 		if err!=nil { apiError(w,shared.ErrInternal("could not lock database server state"));return }
 		if n,_:=res.RowsAffected();n!=1 { apiError(w,shared.ErrBadRequest("database server state changed; refresh and retry"));return }
 	}
 	ctx,cancel:=context.WithTimeout(r.Context(),110*time.Second);defer cancel()
 	result,err:=conn.SendCommand(ctx,action+"_database_server",&shared.DatabaseServerAction{ServerID:id,Port:uint32(port),DataDirectory:dataDir})
 	if err!=nil||!result.Ok {
-		if previous=="ready"||previous=="stopped" { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=? AND status IN ('starting','stopping')`,previous,id,u.ID) }
+		if previous=="ready"||previous=="stopped" { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=? AND status IN ('starting','stopping')`,previous,id,ownerID) }
 		if err!=nil { apiError(w,shared.ErrInternal("Agent PostgreSQL lifecycle command failed"));return }
 		apiError(w,shared.ErrBadRequest(result.Message));return
 	}
 	target:="ready";if action=="stop" { target="stopped" }
-	if _,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=?`,target,id,u.ID);err!=nil { apiError(w,shared.ErrInternal("PostgreSQL action succeeded but server status could not be saved"));return }
+	if _,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=?`,target,id,ownerID);err!=nil { apiError(w,shared.ErrInternal("PostgreSQL action succeeded but server status could not be saved"));return }
 	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_"+action,Details:map[string]interface{}{"server_id":id}})
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"status":target,"message":"PostgreSQL server "+action+" completed"})
 }
