@@ -173,8 +173,13 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 		if isGitHubApp { endpoint = "https://api.github.com/installation/repositories?per_page=100" }
 		resp,err:=providerRequest(ctx,"github",string(token),endpoint)
 		if err!=nil { apiError(w,shared.ErrInternal("GitHub API is unavailable"));return }
-		var values []struct { ID int64 `json:"id"`; Name string `json:"name"`; FullName string `json:"full_name"`; CloneURL string `json:"clone_url"`; DefaultBranch string `json:"default_branch"`; Private bool `json:"private"`; HTMLURL string `json:"html_url"` }
-		if err:=readProviderJSON(resp,&values);err!=nil { apiError(w,shared.ErrBadRequest("GitHub rejected repository access"));return }
+		type githubRepository struct { ID int64 `json:"id"`; Name string `json:"name"`; FullName string `json:"full_name"`; CloneURL string `json:"clone_url"`; DefaultBranch string `json:"default_branch"`; Private bool `json:"private"`; HTMLURL string `json:"html_url"` }
+		var values []githubRepository
+		if isGitHubApp {
+			var page struct { Repositories []githubRepository `json:"repositories"` }
+			if err:=readProviderJSON(resp,&page);err!=nil { apiError(w,shared.ErrBadRequest("GitHub App repository access was rejected"));return }
+			values=page.Repositories
+		} else if err:=readProviderJSON(resp,&values);err!=nil { apiError(w,shared.ErrBadRequest("GitHub rejected repository access"));return }
 		for _,v:=range values { repos=append(repos,providerRepository{ID:strconv.FormatInt(v.ID,10),Name:v.Name,FullName:v.FullName,CloneURL:v.CloneURL,DefaultBranch:v.DefaultBranch,Private:v.Private,WebURL:v.HTMLURL}) }
 	} else if provider=="gitlab" {
 		resp,err:=providerRequest(ctx,provider,string(token),"https://gitlab.com/api/v4/projects?membership=true&per_page=100&order_by=last_activity_at")
@@ -201,6 +206,6 @@ func (s *Server) handleIntegrationByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func integrationProviderLabel(provider string) string {
-	switch provider { case "github":return "GitHub";case "gitlab":return "GitLab";default:return provider }
+	switch provider { case "github":return "GitHub";case "github_app":return "GitHub App";case "gitlab":return "GitLab";default:return provider }
 }
 
