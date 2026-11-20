@@ -529,10 +529,7 @@ func (db *DB) Log(ctx context.Context, entry *shared.LogEntry) error {
 			}
 			ownerID = deviceOwnerID
 		}
-		outcome := "success"
-		if ok, exists := entry.Details["ok"].(bool); exists && !ok { outcome = "failure" }
-		action := strings.ToLower(entry.Action)
-		if strings.Contains(action, "failed") || strings.Contains(action, "error") || strings.Contains(action, "denied") { outcome = "failure" }
+		outcome := auditOutcome(entry.Action, entry.Details)
 		_, auditErr := db.conn.ExecContext(ctx, `
 			INSERT INTO audit_logs (workspace_owner_id, actor_user_id, target_type, target_id, action, outcome, ip, details)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -541,6 +538,13 @@ func (db *DB) Log(ctx context.Context, entry *shared.LogEntry) error {
 		if auditErr != nil { return fmt.Errorf("insert audit log: %w", auditErr) }
 	}
 	return nil
+}
+
+func auditOutcome(action string, details map[string]interface{}) string {
+	if ok, exists := details["ok"].(bool); exists && !ok { return "failure" }
+	action = strings.ToLower(action)
+	if strings.Contains(action,"failed") || strings.Contains(action,"error") || strings.Contains(action,"denied") { return "failure" }
+	return "success"
 }
 
 // ============================================================
