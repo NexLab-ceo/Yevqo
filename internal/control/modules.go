@@ -92,6 +92,49 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 		if err=tx.Commit();err!=nil { apiError(w,shared.ErrInternal("could not commit database server attachment"));return }
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
 	}
+	if len(parts)==2 && r.Method==http.MethodDelete && (parts[1]=="devices" || parts[1]=="sites" || parts[1]=="databases") {
+		var in struct {
+			DeviceID int64 `json:"device_id"`
+			SiteID string `json:"site_id"`
+			ServerID int64 `json:"server_id"`
+		}
+		if err:=decodeJSON(r,&in);err!=nil { apiError(w,shared.ErrBadRequest("invalid detach request"));return }
+		tx,txErr:=s.db.conn.BeginTx(r.Context(),nil)
+		if txErr!=nil { apiError(w,shared.ErrInternal("could not start resource detach transaction"));return }
+		switch parts[1] {
+		case "sites":
+			if in.DeviceID<1||len(in.SiteID)<1||len(in.SiteID)>64 { _=tx.Rollback();apiError(w,shared.ErrBadRequest("device_id and site_id are required"));return }
+			res,err:=tx.ExecContext(r.Context(),`DELETE FROM project_sites WHERE project_id=? AND device_id=? AND site_id=?`,id,in.DeviceID,in.SiteID)
+			if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not detach site"));return }
+			n,_:=res.RowsAffected();if n==0 { _=tx.Rollback();apiError(w,shared.ErrNotFound("project site attachment not found"));return }
+			var remaining int
+			if err:=tx.QueryRowContext(r.Context(),`SELECT (SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=?)+(SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.device_id=?)`,id,in.DeviceID,id,in.DeviceID).Scan(&remaining);err==nil&&remaining==0 {
+				_,err=tx.ExecContext(r.Context(),`DELETE FROM project_devices WHERE project_id=? AND device_id=?`,id,in.DeviceID)
+			}
+			if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not update project device attachment"));return }
+		case "databases":
+			if in.ServerID<1 { _=tx.Rollback();apiError(w,shared.ErrBadRequest("server_id is required"));return }
+			var deviceID int64
+			if err:=tx.QueryRowContext(r.Context(),`SELECT device_id FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,ownerID).Scan(&deviceID);err!=nil { _=tx.Rollback();apiError(w,shared.ErrNotFound("database server not found"));return }
+			res,err:=tx.ExecContext(r.Context(),`DELETE FROM project_database_servers WHERE project_id=? AND database_server_id=?`,id,in.ServerID)
+			if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not detach database server"));return }
+			n,_:=res.RowsAffected();if n==0 { _=tx.Rollback();apiError(w,shared.ErrNotFound("project database attachment not found"));return }
+			var remaining int
+			if err:=tx.QueryRowContext(r.Context(),`SELECT (SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=?)+(SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.device_id=?)`,id,deviceID,id,deviceID).Scan(&remaining);err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not inspect project device references"));return }
+			if remaining==0 { _,err=tx.ExecContext(r.Context(),`DELETE FROM project_devices WHERE project_id=? AND device_id=?`,id,deviceID) }
+			if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not update project device attachment"));return }
+		case "devices":
+			if in.DeviceID<1 { _=tx.Rollback();apiError(w,shared.ErrBadRequest("device_id is required"));return }
+			var count int
+			if err:=tx.QueryRowContext(r.Context(),`SELECT (SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=?)+(SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.device_id=?)`,id,in.DeviceID,id,in.DeviceID).Scan(&count);err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not inspect project device references"));return }
+			if count>0 { _=tx.Rollback();apiError(w,shared.ErrBadRequest("detach the device's applications and database servers first"));return }
+			res,err:=tx.ExecContext(r.Context(),`DELETE FROM project_devices WHERE project_id=? AND device_id=?`,id,in.DeviceID)
+			if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not detach device"));return }
+			n,_:=res.RowsAffected();if n==0 { _=tx.Rollback();apiError(w,shared.ErrNotFound("project device attachment not found"));return }
+		}
+		if err:=tx.Commit();err!=nil { apiError(w,shared.ErrInternal("could not commit resource detach"));return }
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
+	}
 	if len(parts)==2 && r.Method==http.MethodPost && (parts[1]=="devices" || parts[1]=="sites") {
 		var in struct { DeviceID int64 `json:"device_id"`; SiteID string `json:"site_id"` }
 		if err:=decodeJSON(r,&in);err!=nil { apiError(w,shared.ErrBadRequest("invalid JSON"));return }
