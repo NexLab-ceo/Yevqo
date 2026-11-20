@@ -97,6 +97,8 @@ type AgentConn struct {
 	send      chan []byte
 	pending   map[string]chan *shared.Result
 	pendingMu sync.Mutex
+	done      chan struct{}
+	doneOnce  sync.Once
 	hub       *Hub
 	db        *DB
 }
@@ -112,6 +114,7 @@ func (srv *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		ws:      ws,
 		send:    make(chan []byte, 32),
 		pending: make(map[string]chan *shared.Result),
+		done:    make(chan struct{}),
 		hub:     srv.hub,
 		db:      srv.db,
 	}
@@ -122,6 +125,7 @@ func (srv *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 func (c *AgentConn) readPump(srv *Server) {
 	defer func() {
+		c.shutdown()
 		if c.Device != nil {
 			if c.hub.RemoveConn(c) {
 				_ = c.db.MarkDeviceOffline(context.Background(), c.Device.ID)
@@ -169,6 +173,7 @@ func (c *AgentConn) writePump() {
 	ticker := time.NewTicker(wsPingPeriod)
 	defer func() {
 		ticker.Stop()
+		c.shutdown()
 		c.ws.Close()
 	}()
 
@@ -249,6 +254,19 @@ func (c *AgentConn) sendAuthError(msg string) {
 	}
 	b, _ := shared.Marshal(resp)
 	c.send <- b
+}
+
+func (c *AgentConn) shutdown() {
+	c.doneOnce.Do(func() {
+		if c.done != nil { close(c.done) }
+		c.pendingMu.Lock()
+		pending := c.pending
+		c.pending = make(map[string]chan *shared.Result)
+		c.pendingMu.Unlock()
+		for _, ch := range pending {
+			select { case ch <- &shared.Result{Ok:false,Message:"Agent disconnected"}: default: }
+		}
+	})
 }
 
 func (c *AgentConn) handleResult(res *shared.Result) {
@@ -342,15 +360,22 @@ func (c *AgentConn) SendCommand(ctx context.Context, action string, payload inte
 
 	select {
 	case c.send <- msg:
+	case <-c.done:
+		c.pendingMu.Lock(); delete(c.pending,cmdID); c.pendingMu.Unlock()
+		return nil, fmt.Errorf("agent disconnected")
 	case <-ctx.Done():
+		c.pendingMu.Lock(); delete(c.pending,cmdID); c.pendingMu.Unlock()
 		return nil, ctx.Err()
 	case <-time.After(wsWriteWait):
+		c.pendingMu.Lock(); delete(c.pending,cmdID); c.pendingMu.Unlock()
 		return nil, fmt.Errorf("write timeout")
 	}
 
 	select {
 	case res := <-ch:
 		return res, nil
+	case <-c.done:
+		return nil, fmt.Errorf("agent disconnected")
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-time.After(commandTimeout):
