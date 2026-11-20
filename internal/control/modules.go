@@ -112,6 +112,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 		switch parts[1] {
 		case "sites":
 			if in.DeviceID<1||len(in.SiteID)<1||len(in.SiteID)>64 { _=tx.Rollback();apiError(w,shared.ErrBadRequest("device_id and site_id are required"));return }
+			s.deleteProjectRepositorySiteHook(r.Context(),ownerID,id,in.DeviceID,in.SiteID)
 			var previousURL sql.NullString;var previousBranch string;var previousWebhook bool;var previousSecret []byte
 			priorErr:=tx.QueryRowContext(r.Context(),`SELECT previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc FROM project_repository_sites WHERE project_id=? AND device_id=? AND site_id=?`,id,in.DeviceID,in.SiteID).Scan(&previousURL,&previousBranch,&previousWebhook,&previousSecret)
 			if priorErr==nil{if _,err:=tx.ExecContext(r.Context(),`UPDATE sites SET git_url=?,git_branch=?,github_webhook_enabled=?,github_webhook_secret_enc=?,github_webhook_updated_at=NOW() WHERE device_id=? AND site_id=?`,nullableString(previousURL.String),previousBranch,previousWebhook,previousSecret,in.DeviceID,in.SiteID);err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not restore site Git settings"));return}}else if priorErr!=sql.ErrNoRows{_=tx.Rollback();apiError(w,shared.ErrInternal("could not load original site Git settings"));return}
@@ -195,6 +196,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 		if err!=nil{apiError(w,shared.ErrBadRequest("project name is already in use"));return};_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_updated",Details:map[string]interface{}{"project_id":id,"name":in.Name},IP:clientIP(r)});writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	case http.MethodDelete:
 		// Restore each site's pre-project Git/webhook configuration before cascading project bindings.
+		s.deleteProjectRepositoryHooks(r.Context(),ownerID,id)
 		tx,txErr:=s.db.conn.BeginTx(r.Context(),nil);if txErr!=nil{apiError(w,shared.ErrInternal("could not start project deletion"));return}
 		rows,queryErr:=tx.QueryContext(r.Context(),`SELECT device_id,site_id,previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc FROM project_repository_sites WHERE project_id=?`,id)
 		if queryErr!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not load project deployment targets"));return}
