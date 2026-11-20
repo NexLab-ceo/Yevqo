@@ -77,6 +77,19 @@ Record PASS/FAIL and the exact error for each step:
 
 Do not mark a step PASS based only on a UI status if the corresponding service or site was not actually reachable.
 
+## Backup and restore verification (test data only)
+
+- [ ] Create a disposable test site with a known file such as `restore-check.txt`.
+- [ ] Create a site backup and wait until its status is `completed`; confirm the backup has a non-zero size.
+- [ ] Change the file contents, restore the backup, and verify the restored file matches the original.
+- [ ] Confirm the site is left stopped after restore; inspect the files before starting it again.
+- [ ] For PostgreSQL, create a disposable database with a known row, create a backup, restore it to a **new** database, and compare the row count and values.
+- [ ] Verify a failed/corrupt restore does not replace an existing site or database.
+- [ ] Never use production data for this test. Record the device logs and backup IDs with secrets redacted.
+
+These are manual acceptance steps, not a claim that a physical Agent restore test has already passed.
+
+
 ## Capture test evidence
 
 For each failed or successful step, record:
