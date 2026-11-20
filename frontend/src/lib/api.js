@@ -308,3 +308,8 @@ export async function deleteSitePreview(deviceId, siteId, key) { return request(
 export async function getCloudflareTunnelRoute(deviceId, siteId) { return request('GET', '/api/cloudflare/tunnel-routes?device_id=' + encodeURIComponent(deviceId) + '&site_id=' + encodeURIComponent(siteId)); }
 export async function configureCloudflareTunnelRoute(deviceId, siteId, tunnelId) { return request('POST', '/api/cloudflare/tunnel-routes', { device_id: Number(deviceId), site_id: siteId, tunnel_id: tunnelId }); }
 export async function removeCloudflareTunnelRoute(deviceId, siteId) { return request('DELETE', '/api/cloudflare/tunnel-routes', { device_id: Number(deviceId), site_id: siteId }); }
+
+// === Project source repositories ===
+export async function getProjectRepository(projectId) { return request('GET', `/api/projects/${projectId}/repository`); }
+export async function connectProjectRepository(projectId, integrationId, fullName, branch = '') { return request('POST', `/api/projects/${projectId}/repository`, { integration_id: Number(integrationId), full_name: fullName, branch }); }
+export async function disconnectProjectRepository(projectId) { return request('DELETE', `/api/projects/${projectId}/repository`); }
