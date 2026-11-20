@@ -19,6 +19,16 @@ Attaching a site or database server also attaches its host device to the project
 
 Deleting a project removes the grouping and its associations only. It does not delete the underlying resources or their data.
 
+## Project source repository
+
+A project can store one verified GitHub App repository binding. The authenticated project owner/admin selects an installed GitHub App and a repository; the Control Plane verifies that the installation belongs to the repository owner, reads repository metadata, and checks the selected deployment branch before persisting the binding. The project Source Repository tab can display and disconnect the binding.
+
+The binding stores repository metadata and the selected branch, not a long-lived GitHub token. Installation credentials remain encrypted in the existing integration record; short-lived installation tokens are requested when needed. Disconnecting the GitHub App cascades removal of project bindings associated with that installation.
+
+Migration `024_project_repositories.sql` is additive and must be applied through the normal migration/upgrade process. It has not been applied to a live or production database as part of this work.
+
+**Remaining:** branch discovery/browser, project-to-site deployment target mapping, automatic deployment-on-push, and PR/checks integration are separate follow-up work. Connecting a repository does not trigger a build or deploy by itself.
+
 ## Environments
 
 Every project receives Production, Development, and Staging environments. Custom environments can be created, renamed, updated, and deleted.
@@ -41,5 +51,6 @@ Managed PostgreSQL and MariaDB/MySQL server installation and local database oper
 
 - `021_project_environments.sql` adds project environments, application assignments, and project database-server associations.
 - `022_project_environment_databases.sql` adds environment-level database-server assignments.
+- `024_project_repositories.sql` adds the optional project-level GitHub App repository binding.
 
 Both are additive migrations. They have not been applied to production or to the user's existing database as part of this work. Apply them only through the normal migration/upgrade process after taking a verified backup and checking the target installation.
