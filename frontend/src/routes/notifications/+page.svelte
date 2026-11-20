@@ -4,7 +4,7 @@
  import {onMount} from 'svelte';import {listNotifications,markNotificationRead} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';
  let items=[],loading=true;
  $: ru=$locale!=='en';
- async function load(){const r=await listNotifications();if(r.ok)items=r.data.notifications||[];else notify(r.error||'{ru?'Не удалось загрузить уведомления':'Could not load notifications'}','error');loading=false}
+ async function load(){const r=await listNotifications();if(r.ok)items=r.data.notifications||[];else notify(r.error||(ru?'Не удалось загрузить уведомления':'Could not load notifications'),'error');loading=false}
  onMount(load);
  async function mark(item){const r=await markNotificationRead(item.id);if(r.ok){item.read_at=new Date().toISOString();items=[...items]}else notify(r.error||'{ru?'Ошибка':'Error'},'error')}
 </script>
