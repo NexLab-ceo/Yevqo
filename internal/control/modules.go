@@ -878,28 +878,28 @@ func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Reque
 	if err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`DELETE FROM db_instances WHERE id=? AND user_id=?`,targetID,ownerID);apiError(w,shared.ErrInternal("could not queue restore job"));return }
 	jobID,_:=jobRes.LastInsertId()
 	req:=&shared.RestoreDatabaseBackup{BackupServerID:backupServerID.Int64,BackupFileName:fileName,Database:shared.CreateDatabase{DatabaseID:targetID,ServerID:backupServerID.Int64,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)}}
-	go s.runDatabaseRestore(jobID,in.BackupID,targetID,ownerID,deviceID,conn,req,in.SiteID,nonce,ciphertext)
+	go s.runDatabaseRestore(jobID,in.BackupID,targetID,ownerID,u.ID,deviceID,conn,req,in.SiteID,nonce,ciphertext)
 	writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"job_id":jobID,"database":map[string]interface{}{"id":targetID,"name":in.Name,"status":"planned"},"status":"queued","message":"Backup will be restored into a new database; the source database and backup remain untouched."})
 }
 
-func (s *Server) runDatabaseRestore(jobID,backupID,targetID,userID,deviceID int64,conn *AgentConn,req *shared.RestoreDatabaseBackup,siteID string,nonce,ciphertext []byte) {
-	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='running' WHERE id=? AND user_id=?`,jobID,userID)
+func (s *Server) runDatabaseRestore(jobID,backupID,targetID,ownerID,actorID,deviceID int64,conn *AgentConn,req *shared.RestoreDatabaseBackup,siteID string,nonce,ciphertext []byte) {
+	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='running' WHERE id=? AND user_id=?`,jobID,ownerID)
 	ctx,cancel:=context.WithTimeout(context.Background(),13*time.Minute);defer cancel()
 	result,err:=conn.SendCommand(ctx,"restore_database_backup",req)
 	if err!=nil||!result.Ok {
-		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Agent restore failed' WHERE id=? AND user_id=?`,jobID,userID)
-		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,targetID,userID)
+		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Agent restore failed' WHERE id=? AND user_id=?`,jobID,ownerID)
+		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,targetID,ownerID)
 		message:="Agent database restore failed";if err!=nil{message=err.Error()}else if result!=nil&&result.Message!=""{message=result.Message}
-		s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Database restore failed",message)
+		s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Database restore failed",message)
 		return
 	}
-	tx,err:=s.db.conn.BeginTx(context.Background(),nil);if err!=nil{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_restore_jobs SET status='failed',error_message='metadata transaction failed' WHERE id=?",jobID);_,_=s.db.conn.ExecContext(context.Background(),"UPDATE db_instances SET status='error' WHERE id=?",targetID);s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Database restore failed","Control Plane could not start the metadata transaction.");return}
+	tx,err:=s.db.conn.BeginTx(context.Background(),nil);if err!=nil{_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_restore_jobs SET status='failed',error_message='metadata transaction failed' WHERE id=?",jobID);_,_=s.db.conn.ExecContext(context.Background(),"UPDATE db_instances SET status='error' WHERE id=?",targetID);s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Database restore failed","Control Plane could not start the metadata transaction.");return}
 	_,err=tx.Exec(`INSERT INTO database_credentials(database_id,username,ciphertext,nonce,key_version) VALUES(?,?,?,?,1)`,targetID,req.Database.Username,ciphertext,nonce)
-	if err==nil { _,err=tx.Exec(`UPDATE db_instances SET status='ready' WHERE id=? AND user_id=?`,targetID,userID) }
-	if err==nil&&siteID!="" { _,err=tx.Exec(`INSERT INTO site_database_connections(user_id,device_id,site_id,database_id) VALUES(?,?,?,?)`,userID,deviceID,siteID,targetID) }
-	if err==nil { _,err=tx.Exec(`UPDATE database_restore_jobs SET status='completed',error_message=NULL WHERE id=? AND user_id=?`,jobID,userID) }
-	if err!=nil { _=tx.Rollback();_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata save failed' WHERE id=? AND user_id=?`,jobID,userID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,targetID,userID);s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Database restore failed","Control Plane could not save restored database metadata.");return }
-	if err:=tx.Commit();err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata commit failed' WHERE id=? AND user_id=?`,jobID,userID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,targetID,userID);s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Database restore failed","Control Plane could not commit restored database metadata.");return }
-	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(deviceID),Action:"database_backup_restored",Details:map[string]interface{}{"job_id":jobID,"backup_id":backupID,"database_id":targetID}})
-	s.notifyWorkspaceEvent(context.Background(),userID,0,"success","Database restore completed",fmt.Sprintf("Database #%d was restored from backup #%d.",targetID,backupID))
+	if err==nil { _,err=tx.Exec(`UPDATE db_instances SET status='ready' WHERE id=? AND user_id=?`,targetID,ownerID) }
+	if err==nil&&siteID!="" { _,err=tx.Exec(`INSERT INTO site_database_connections(user_id,device_id,site_id,database_id) VALUES(?,?,?,?)`,ownerID,deviceID,siteID,targetID) }
+	if err==nil { _,err=tx.Exec(`UPDATE database_restore_jobs SET status='completed',error_message=NULL WHERE id=? AND user_id=?`,jobID,ownerID) }
+	if err!=nil { _=tx.Rollback();_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata save failed' WHERE id=? AND user_id=?`,jobID,ownerID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,targetID,ownerID);s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Database restore failed","Control Plane could not save restored database metadata.");return }
+	if err:=tx.Commit();err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata commit failed' WHERE id=? AND user_id=?`,jobID,ownerID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,targetID,ownerID);s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Database restore failed","Control Plane could not commit restored database metadata.");return }
+	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(actorID),DeviceID:shared.PtrInt64(deviceID),Action:"database_backup_restored",Details:map[string]interface{}{"job_id":jobID,"backup_id":backupID,"database_id":targetID}})
+	s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"success","Database restore completed",fmt.Sprintf("Database #%d was restored from backup #%d.",targetID,backupID))
 }
