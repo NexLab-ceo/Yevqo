@@ -304,6 +304,9 @@ func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 				"INSERT INTO device_metrics(device_id,cpu_percent,load_1m,memory_total_bytes,memory_available_bytes,storage_total_bytes,storage_available_bytes,temperature_celsius,captured_at) VALUES(?,?,?,?,?,?,?,?,?)",
 				c.Device.ID, metrics.CPUPercent, metrics.Load1m, metrics.MemoryTotalBytes, metrics.MemoryAvailableBytes,
 				metrics.StorageTotalBytes, metrics.StorageAvailableBytes, metrics.TemperatureCelsius, metrics.CapturedAt)
+			if dbErr == nil {
+				if alertErr := srv.evaluateDeviceMetricAlerts(ctx, c.Device.UserID, c.Device.ID, metrics); alertErr != nil { log.Printf("evaluate device metric alerts: %v", alertErr) }
+			}
 			cancel()
 			if dbErr != nil { log.Printf("store pushed metrics: %v", dbErr) }
 		}

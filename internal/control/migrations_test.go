@@ -109,3 +109,18 @@ func TestProjectEnvironmentDatabaseInstancesMigrationIsAdditiveAndScoped(t *test
 	}
 	for _, forbidden := range []string{"drop table","truncate table","delete from","drop column"} { if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) } }
 }
+
+func TestDeviceAlertStateMigrationIsAdditive(t *testing.T) {
+	path := filepath.Join("..", "..", "migrations", "025_device_alert_state.sql")
+	content, err := os.ReadFile(path)
+	if err != nil { t.Fatalf("read device alert migration: %v", err) }
+	statements := splitSQL(string(content))
+	if len(statements) != 1 { t.Fatalf("migration has %d statements, want 1", len(statements)) }
+	normalized := strings.ToLower(strings.Join(statements, "\n"))
+	for _, required := range []string{"create table if not exists device_alert_state","primary key (device_id, alert_key)","foreign key (device_id)","foreign key (user_id)","last_value","updated_at"} {
+		if !strings.Contains(normalized, required) { t.Errorf("migration is missing %q", required) }
+	}
+	for _, forbidden := range []string{"drop table","truncate table","delete from","drop column"} {
+		if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) }
+	}
+}
