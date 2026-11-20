@@ -17,6 +17,7 @@ var postgresIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
 
 type createDatabaseInput struct {
 	ProjectID int64 `json:"project_id"`
+	EnvironmentID int64 `json:"environment_id"`
 	ServerID int64 `json:"server_id"`
 	Name string `json:"name"`
 	Username string `json:"username"`
@@ -50,6 +51,11 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT user_id FROM projects WHERE id=?`,in.ProjectID).Scan(&projectOwner);err!=nil||projectOwner!=ownerID { apiError(w,shared.ErrNotFound("project not found"));return }
 		var linked int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM project_database_servers WHERE project_id=? AND database_server_id=?`,in.ProjectID,in.ServerID).Scan(&linked);err!=nil||linked!=1 { apiError(w,shared.ErrNotFound("database server is not assigned to this project"));return }
+	}
+	if in.EnvironmentID < 0 || (in.EnvironmentID > 0 && in.ProjectID < 1) { apiError(w,shared.ErrBadRequest("environment_id requires a project_id"));return }
+	if in.EnvironmentID > 0 {
+		var assigned int
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM project_environment_database_servers WHERE project_id=? AND environment_id=? AND database_server_id=?`,in.ProjectID,in.EnvironmentID,in.ServerID).Scan(&assigned);err!=nil||assigned!=1 { apiError(w,shared.ErrNotFound("database server is not assigned to this environment"));return }
 	}
 	if engine!="postgresql" { apiError(w,shared.ErrBadRequest("database creation currently supports PostgreSQL only"));return }
 	if status!="ready" { apiError(w,shared.ErrBadRequest("database server must be ready"));return }
