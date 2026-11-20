@@ -14,12 +14,7 @@
  $: pathParts=$page.url.pathname.split('/');
  $: projectId=(pathParts[1]==='projects'&&Number.isInteger(Number(pathParts[2]))&&Number(pathParts[2])>0?pathParts[2]:'')||$page.url.searchParams.get('project_id')||'';
  $: inProject=!!projectId;
- $: projectGroups=inProject?[
-  {label:'PROJECT',items:[['Project overview',`/projects/${projectId}`,'▦']]},
-  {label:'INFRASTRUCTURE',items:[['Devices',`/devices?project_id=${projectId}`,'▣'],['Applications',`/sites?project_id=${projectId}`,'◉'],['Databases',`/databases?project_id=${projectId}`,'◈']]},
-  {label:'DELIVERY',items:[['Build Engine',`/builds?project_id=${projectId}`,'⚒'],['Deployments',`/deployments?project_id=${projectId}`,'⇧']]},
- ]:[];
- $: groups=inProject?projectGroups:globalGroups;
+ $: groups=globalGroups;
  onMount(async()=>{const [a,b]=await Promise.all([me(),getSettings()]);if(a.ok&&a.data?.user)user.set(a.data.user);if(b.ok){uiMode.set(b.data.settings?.mode||'simple');theme.set(b.data.settings?.theme==='light'?'light':'dark');locale.set(b.data.settings?.locale||'ru')}loading=false});
  $: if(!loading&&!$isAuthenticated&&!$page.url.pathname.startsWith('/login')&&!$page.url.pathname.startsWith('/register'))goto('/login');
  $: currentTitle=groups.flatMap(g=>g.items).find(i=>{const href=i[1].split('?')[0];return $page.url.pathname===href||($page.url.pathname.startsWith(href+'/')&&href!=='/')})?.[0]||'Overview';
