@@ -266,11 +266,17 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 			if protected { apiError(w, shared.ErrBadRequest("Production database assignments are protected")); return }
 			var in struct { ServerID int64 `json:"server_id"` }
 			if err := decodeJSON(r, &in); err != nil || in.ServerID < 1 { apiError(w, shared.ErrBadRequest("invalid database server reference")); return }
-			res, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM project_environment_database_servers WHERE project_id=? AND environment_id=? AND database_server_id=?`, projectID, environmentID, in.ServerID)
-			if err != nil { apiError(w, shared.ErrInternal("could not remove database server from environment")); return }
+			tx, err := s.db.conn.BeginTx(r.Context(), nil)
+			if err != nil { apiError(w, shared.ErrInternal("could not start database environment detach")); return }
+			if _, err = tx.ExecContext(r.Context(), `DELETE FROM project_environment_databases WHERE project_id=? AND environment_id=? AND database_id IN (SELECT id FROM db_instances WHERE server_id=?)`, projectID, environmentID, in.ServerID); err != nil {
+				_ = tx.Rollback(); apiError(w, shared.ErrInternal("could not remove environment database instances")); return
+			}
+			res, err := tx.ExecContext(r.Context(), `DELETE FROM project_environment_database_servers WHERE project_id=? AND environment_id=? AND database_server_id=?`, projectID, environmentID, in.ServerID)
+			if err != nil { _ = tx.Rollback(); apiError(w, shared.ErrInternal("could not remove database server from environment")); return }
 			deleted, err := res.RowsAffected()
-			if err != nil { apiError(w, shared.ErrInternal("could not verify database assignment removal")); return }
-			if deleted == 0 { apiError(w, shared.ErrNotFound("database server assignment not found")); return }
+			if err != nil { _ = tx.Rollback(); apiError(w, shared.ErrInternal("could not verify database assignment removal")); return }
+			if deleted == 0 { _ = tx.Rollback(); apiError(w, shared.ErrNotFound("database server assignment not found")); return }
+			if err := tx.Commit(); err != nil { apiError(w, shared.ErrInternal("could not commit database environment detach")); return }
 			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_environment_database_detached",Details:map[string]interface{}{"project_id":projectID,"environment_id":environmentID,"database_server_id":in.ServerID},IP:clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true})
 		default:

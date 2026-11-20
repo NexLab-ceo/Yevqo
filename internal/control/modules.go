@@ -124,6 +124,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 			if in.ServerID<1 { _=tx.Rollback();apiError(w,shared.ErrBadRequest("server_id is required"));return }
 			var deviceID int64
 			if err:=tx.QueryRowContext(r.Context(),`SELECT device_id FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,ownerID).Scan(&deviceID);err!=nil { _=tx.Rollback();apiError(w,shared.ErrNotFound("database server not found"));return }
+			if _,err:=tx.ExecContext(r.Context(),`DELETE FROM project_environment_databases WHERE project_id=? AND database_id IN (SELECT id FROM db_instances WHERE server_id=?)`,id,in.ServerID);err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not remove environment database instances"));return}
 			if _,err:=tx.ExecContext(r.Context(),`DELETE FROM project_environment_database_servers WHERE project_id=? AND database_server_id=?`,id,in.ServerID);err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not remove environment database assignments"));return}
 			res,err:=tx.ExecContext(r.Context(),`DELETE FROM project_database_servers WHERE project_id=? AND database_server_id=?`,id,in.ServerID)
 			if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not detach database server"));return }
