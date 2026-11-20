@@ -203,11 +203,11 @@ export async function detachProjectSite(projectId, deviceId, siteId) { return re
 export async function detachProjectDatabaseServer(projectId, serverId) { return request('DELETE', `/api/projects/${projectId}/databases`, { server_id: serverId }); }
 
 // === Database inventory ===
-export async function listDatabaseServers(projectId = '') { return request('GET', '/api/databases/servers' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
+export async function listDatabaseServers(projectId = '', environmentId = '') { const q = new URLSearchParams(); if (projectId) q.set('project_id', projectId); if (environmentId) q.set('environment_id', environmentId); return request('GET', '/api/databases/servers' + (q.size ? `?${q}` : '')); }
 export async function createDatabaseServer(input) { return request('POST', '/api/databases/servers', input); }
 export async function getDatabaseServer(id) { return request('GET', `/api/databases/servers/${id}`); }
 export async function deleteDatabaseServer(id) { return request('DELETE', `/api/databases/servers/${id}`); }
-export async function listDatabases(projectId = '') { return request('GET', '/api/databases' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
+export async function listDatabases(projectId = '', environmentId = '') { const q = new URLSearchParams(); if (projectId) q.set('project_id', projectId); if (environmentId) q.set('environment_id', environmentId); return request('GET', '/api/databases' + (q.size ? `?${q}` : '')); }
 
 // === Operations ===
 export async function listLogs(limit = 100, projectId = '') { return request('GET', `/api/logs?limit=${limit}` + (projectId ? `&project_id=${encodeURIComponent(projectId)}` : '')); }
