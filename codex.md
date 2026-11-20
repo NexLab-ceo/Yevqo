@@ -123,6 +123,9 @@ Before finishing every task:
 
 ### Progress history
 
+- 2026-11-20 — Completed CLI project/environment lifecycle and preview commands with explicit consent/confirmation; Android ARM64, frontend, Go tests and both packages passed (build run 44740854997; checks run 44740854986; commit `41699cf`).
+- 2026-11-20 — Added Cloudflare remotely-managed Tunnel ingress and DNS route API, including preserved existing ingress rules and safe route removal. Cloudflare account and real Android validation pending.
+
 - 2026-11-20 — Added CLI preview listing, creation and deletion. Preview creation requires explicit code consent; deletion requires `--confirm`; creation output includes the preview key/URL/port. Tests cover all three API workflows. CI pending.
 
 - 2026-11-20 — Added project and environment create/update/delete commands to `yevqo-cli`; destructive commands require `--confirm`, and server-side Production protections remain authoritative. Added command/API tests and documented lifecycle commands (implementation commit `e319e39`).

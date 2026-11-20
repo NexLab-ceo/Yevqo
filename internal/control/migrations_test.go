@@ -124,3 +124,16 @@ func TestDeviceAlertStateMigrationIsAdditive(t *testing.T) {
 		if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) }
 	}
 }
+
+func TestCloudflareTunnelRouteMigrationIsAdditive(t *testing.T) {
+	path := filepath.Join("..", "..", "migrations", "026_cloudflare_tunnel_routes.sql")
+	content, err := os.ReadFile(path)
+	if err != nil { t.Fatalf("read Cloudflare tunnel route migration: %v", err) }
+	statements := splitSQL(string(content))
+	if len(statements) != 3 { t.Fatalf("migration has %d statements, want 3", len(statements)) }
+	normalized := strings.ToLower(strings.Join(statements, "\n"))
+	for _, required := range []string{"alter table cloudflare_accounts","add column account_id","create table if not exists site_cloudflare_routes","primary key (device_id, site_id)","unique key uq_site_cloudflare_routes_user_hostname"} {
+		if !strings.Contains(normalized, required) { t.Errorf("migration is missing %q", required) }
+	}
+	for _, forbidden := range []string{"drop table","truncate table","delete from","drop column"} { if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) } }
+}

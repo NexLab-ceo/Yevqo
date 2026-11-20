@@ -166,6 +166,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/integrations/", s.RequireAuth(func(w http.ResponseWriter, r *http.Request) { if strings.HasSuffix(r.URL.Path, "/repositories") { s.handleIntegrationRepositories(w, r); return }; s.handleIntegrationByID(w, r) }))
 	s.mux.HandleFunc("/api/cloudflare", s.RequireAuth(s.handleCloudflareConfig))
 	s.mux.HandleFunc("/api/cloudflare/dns", s.RequireAuth(s.handleCloudflareDNS))
+	s.mux.HandleFunc("/api/cloudflare/tunnel-routes", s.RequireAuth(s.handleCloudflareTunnelRoutes))
 
 	// --- API для админа ---
 	s.mux.HandleFunc("/admin/api/users/export.csv", s.RequireAdmin(s.handleAdminUsersCSV))
