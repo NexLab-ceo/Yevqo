@@ -62,3 +62,19 @@ func TestUpdateCloudflareIngressRulesPreservesPathRulesAndCatchallOrder(t *testi
 	if path!="/api/*"||host!="app.example.com"{t.Fatalf("path rule/host order = %q, %q",path,host)}
 	if _,ok:=updated[2]["hostname"];ok{t.Fatal("catch-all rule must remain last")}
 }
+
+func TestCloudflareTunnelConfigPreservesGlobalOriginRequest(t *testing.T) {
+	var current cloudflareTunnelConfig
+	if err:=json.Unmarshal([]byte(`{"source":"cloudflare","config":{"ingress":[{"service":"http_status:404"}],"originRequest":{"connectTimeout":30,"noTLSVerify":true}}}`),&current);err!=nil{t.Fatal(err)}
+	config:=map[string]interface{}{"ingress":current.Config.Ingress}
+	if len(current.Config.OriginRequest)>0{config["originRequest"]=current.Config.OriginRequest}
+	body:=map[string]interface{}{"config":config}
+	encoded,err:=json.Marshal(body);if err!=nil{t.Fatal(err)}
+	var decoded map[string]json.RawMessage
+	if err:=json.Unmarshal(encoded,&decoded);err!=nil{t.Fatal(err)}
+	var got struct{OriginRequest map[string]interface{} `json:"originRequest"`} 
+	var configDecoded map[string]json.RawMessage
+	if err:=json.Unmarshal(decoded["config"],&configDecoded);err!=nil{t.Fatal(err)}
+	if err:=json.Unmarshal(configDecoded["originRequest"],&got.OriginRequest);err!=nil{t.Fatal(err)}
+	if got.OriginRequest["connectTimeout"]!=float64(30)||got.OriginRequest["noTLSVerify"]!=true{t.Fatalf("global originRequest was not preserved: %#v",got.OriginRequest)}
+}

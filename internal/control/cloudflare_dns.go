@@ -116,7 +116,7 @@ type cloudflareDNSRecord struct {
 
 type cloudflareTunnelConfig struct {
 	Source string `json:"source"`
-	Config struct { Ingress []map[string]json.RawMessage `json:"ingress"` } `json:"config"`
+	Config struct { Ingress []map[string]json.RawMessage `json:"ingress"`; OriginRequest json.RawMessage `json:"originRequest"` } `json:"config"`
 }
 
 func updateCloudflareIngressRules(rules []map[string]json.RawMessage, hostname, service string, remove bool) ([]map[string]json.RawMessage, bool, error) {
@@ -164,7 +164,9 @@ func updateCloudflareTunnelIngress(ctx context.Context, token, accountID, tunnel
 	if current.Source!="cloudflare"{return fmt.Errorf("tunnel configuration is not remotely managed")}
 	rules,changed,err:=updateCloudflareIngressRules(current.Config.Ingress,hostname,service,remove)
 	if err!=nil{return err};if !changed{return nil}
-	body:=map[string]interface{}{"config":map[string]interface{}{"ingress":rules}}
+	config:=map[string]interface{}{"ingress":rules}
+	if len(current.Config.OriginRequest)>0 { config["originRequest"]=current.Config.OriginRequest }
+	body:=map[string]interface{}{"config":config}
 	return cloudflareAPIRequest(ctx,token,http.MethodPut,"/accounts/"+accountID+"/cfd_tunnel/"+tunnelID+"/configurations",body,nil)
 }
 

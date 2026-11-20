@@ -123,7 +123,7 @@ Before finishing every task:
 
 ### Progress history
 
-- 2026-11-20 — Cloudflare route API and Domains UI now configure remotely managed ingress to a site's local port and create/remove the matching CNAME; unrelated ingress rules are preserved. Domain changes, site deletion and Cloudflare disconnect are guarded against dangling managed routes. CI pending.
+- 2026-11-20 — Cloudflare route API and Domains UI configure remotely managed ingress to a site's local port and create/remove the matching CNAME; unrelated ingress rules and global origin-request settings are preserved. Domain changes, site deletion and Cloudflare disconnect are guarded against dangling managed routes. Go tests, Android ARM64 build, frontend build and package checks passed (build run 44742519258; checks run 44742519253; commit `59437a8`).
 
 - 2026-11-20 — Completed CLI project/environment lifecycle and preview commands with explicit consent/confirmation; Android ARM64, frontend, Go tests and both packages passed (build run 44740854997; checks run 44740854986; commit `41699cf`).
 - 2026-11-20 — Added Cloudflare remotely-managed Tunnel ingress and DNS route API, including preserved existing ingress rules and safe route removal. Cloudflare account and real Android validation pending.

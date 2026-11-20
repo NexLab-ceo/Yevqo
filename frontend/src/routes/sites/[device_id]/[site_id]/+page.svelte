@@ -941,7 +941,7 @@
                 <label class="field-label" for="cloudflare-zone-id">Cloudflare Zone ID</label>
                 <input id="cloudflare-zone-id" class="input" bind:value={cloudflareZoneDraft} placeholder="Zone ID" autocomplete="off"/>
                 <Button variant="primary" loading={cloudflareConfigBusy} disabled={cloudflareConfigBusy||!cloudflareTokenDraft.trim()||!cloudflareZoneDraft.trim()} on:click={connectCloudflare}>Connect Cloudflare</Button>
-                <p class="muted">Токен должен иметь Zone Read, DNS Edit и Cloudflare Tunnel Write. API token хранится зашифрованным. Настройку выполняет владелец workspace.</p>
+                <p class="muted">Токену нужны Account: Cloudflare Tunnel — Edit (API permission: Cloudflare Tunnel Write), Zone: DNS — Edit и Zone — Read. API token хранится зашифрованным. Настройку выполняет владелец workspace.</p>
             {/if}
         </Card>
     {:else if activeTab === 'environment'}
