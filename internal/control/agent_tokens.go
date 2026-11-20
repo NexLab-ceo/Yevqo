@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"veltrix/internal/shared"
@@ -77,4 +76,3 @@ func (s *Server) handleAgentToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func normalizeAgentToken(token string) string { return strings.TrimSpace(token) }
