@@ -115,7 +115,7 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(userID), DeviceID: shared.PtrInt64(deviceID), Action: "github_webhook_accepted", Details: map[string]interface{}{"site_id": parts[1], "commit": event.After, "delivery": delivery}, IP: clientIP(r)})
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "accepted": true, "commit": event.After})
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute); defer cancel()
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Hour); defer cancel()
 		result, deployErr := conn.SendCommand(ctx, "deploy", action)
 		status, title, message := "completed", "Deployment completed: "+parts[1], "GitHub push deployment completed."
 		if deployErr != nil || result == nil || !result.Ok {
