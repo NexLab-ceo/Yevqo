@@ -57,7 +57,7 @@
         testingConnection = true; connectionTestResult = '';
         const result = await testDatabaseConnection(database.id);
         testingConnection = false;
-        connectionTestResult = result.ok ? 'Connection successful · PostgreSQL returned SELECT 1' : (result.error || 'Connection test failed');
+        connectionTestResult = result.ok ? 'Connection successful · '+(database.engine==='postgresql'?'PostgreSQL':'MariaDB')+' returned SELECT 1' : (result.error || 'Connection test failed');
     }
 
     async function createBackup() {
@@ -133,8 +133,8 @@
     {:else if database}
         <div class="heading">
             <div class="identity">
-                <div class="engine">PG</div>
-                <div><div class="eyebrow">POSTGRESQL DATABASE</div><h1>{database.name}</h1><p>{database.server_name} · Android Host #{database.device_id}</p></div>
+                <div class="engine">{database.engine==='postgresql'?'PG':'MY'}</div>
+                <div><div class="eyebrow">{database.engine.toUpperCase()} DATABASE</div><h1>{database.name}</h1><p>{database.server_name} · Android Host #{database.device_id}</p></div>
             </div>
             <div class="status"><StatusDot status={database.status === 'ready' ? 'online' : 'offline'} />{database.status === 'planned' && database.restore_status ? 'restore: ' + database.restore_status : database.status}</div>
         </div>
@@ -146,7 +146,7 @@
 
         {#if active === 'Overview'}
             <div class="stats">
-                <article><small>ENGINE</small><strong>PostgreSQL</strong><span>Server #{database.server_id}</span></article>
+                <article><small>ENGINE</small><strong>{database.engine==='postgresql'?'PostgreSQL':'MariaDB'}</strong><span>Server #{database.server_id}</span></article>
                 <article><small>CONNECTIONS</small><strong>{database.linked_sites}</strong><span>Linked websites</span></article>
                 <article><small>STATUS</small><strong>{database.status === 'planned' && database.restore_status ? database.restore_status : database.status}</strong><span>Database health</span></article>
                 <article><small>CREATED</small><strong>{new Date(database.created_at).toLocaleDateString()}</strong><span>Creation date</span></article>
@@ -173,7 +173,7 @@
                     <div><span>Network access</span><strong>Private / localhost</strong></div>
                     <div><span>TLS mode</span><strong>{database.ssl_mode}</strong></div>
                 </div>
-                <div class="connection">postgresql://{database.username}@127.0.0.1:{database.port}/{database.name}?sslmode={database.ssl_mode}</div>
+                <div class="connection">{database.engine==='postgresql'?'postgresql':'mysql'}://{database.username}@127.0.0.1:{database.port}/{database.name}</div>
                 <div class="test-row"><button class="attach" disabled={testingConnection || database.status !== 'ready'} on:click={runConnectionTest}>{testingConnection ? 'Testing…' : 'Test connection'}</button>{#if connectionTestResult}<span class:good={connectionTestResult.startsWith('Connection successful')}>{connectionTestResult}</span>{/if}</div>
                 <div class="notice">The connection is provisioned to linked websites as process environment variables. Existing .env files are not modified. Restart a website after changing its database link.</div>
                 {#if actionError}<div class="error">{actionError}</div>{/if}
@@ -190,7 +190,7 @@
                 <div class="permissions">{#each database.permissions || [] as permission}<span>{permission}</span>{/each}</div>
             </section>
         {:else if active === 'Backups'}
-            <section class="panel"><div class="backup-heading"><div><h2>Database backups</h2><p class="muted">Local PostgreSQL custom-format dumps. Each archive is checked with pg_restore before it is marked verified.</p></div><div class="backup-actions"><button on:click={refreshBackups}>Refresh</button><button class="attach" disabled={backupBusy || database.status !== 'ready'} on:click={createBackup}>{backupBusy ? 'Queuing…' : 'Create backup'}</button></div></div>
+            <section class="panel"><div class="backup-heading"><div><h2>Database backups</h2><p class="muted">Local database backups. PostgreSQL archives are checked with pg_restore; MariaDB SQL dumps are checked before being marked verified.</p></div><div class="backup-actions"><button on:click={refreshBackups}>Refresh</button><button class="attach" disabled={backupBusy || database.status !== 'ready'} on:click={createBackup}>{backupBusy ? 'Queuing…' : 'Create backup'}</button></div></div>
                 {#if databaseBackups.length === 0}<div class="empty compact">No database backups yet.</div>{:else}{#each databaseBackups as backup}<div class="site-link"><span><strong>{backup.file_name}</strong><small>{new Date(backup.created_at).toLocaleString()} · {(backup.size_bytes / 1048576).toFixed(2)} MB</small></span><span class="role-tag">{backup.status}</span><button class="site-link-action" disabled={backup.status!=='verified'||downloadingBackupID!==''} on:click={()=>downloadBackup(backup)}>{downloadingBackupID===String(backup.id)?'Downloading…':'Download'}</button></div>{/each}{/if}
                 <div class="notice">Backups stay in private Termux storage on the database device. Restore always creates a new database; it never overwrites the source.</div>
                 {#if databaseBackups.some((item) => item.status === 'verified')}
