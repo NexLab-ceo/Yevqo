@@ -2,10 +2,11 @@
  import {onMount} from 'svelte';
  import {locale} from '$lib/i18n.js';
  import {notify} from '$lib/stores.js';
- import {listIntegrations,connectIntegration,disconnectIntegration,listIntegrationRepositories} from '$lib/api.js';
- let provider='github', integrations=[], token='', loading=true, connecting=false, reposLoading=false, repos=[], selected=null, search='';
+ import {listIntegrations,connectIntegration,connectGitHubApp,disconnectIntegration,listIntegrationRepositories} from '$lib/api.js';
+ let provider='github', integrations=[], token='', appID='', installationID='', privateKey='', loading=true, connecting=false, reposLoading=false, repos=[], selected=null, search='';
  const providers=[
   {id:'github',name:'GitHub',mark:'GH',enabled:true,scopes:'repo, read:user'},
+  {id:'github_app',name:'GitHub App',mark:'APP',enabled:true,scopes:'contents:read, metadata:read'},
   {id:'gitlab',name:'GitLab',mark:'GL',enabled:true,scopes:'read_api, read_repository'},
   {id:'bitbucket',name:'Bitbucket',mark:'BB',enabled:false},
   {id:'gitea',name:'Gitea',mark:'GT',enabled:false},
@@ -19,7 +20,7 @@
  $: visibleRepos=repos.filter(r=>(r.full_name||r.name).toLowerCase().includes(search.toLowerCase()));
  onMount(load);
  async function load(){loading=true;const r=await listIntegrations();if(r.ok)integrations=r.data.integrations||[];else notify(r.error||'Не удалось загрузить интеграции','error');loading=false}
- async function connect(){if(!token.trim()||connecting)return;connecting=true;const r=await connectIntegration(provider,token.trim());connecting=false;if(r.ok){token='';notify(ru?'Аккаунт подключён':'Account connected','success');await load()}else notify(r.error||(ru?'Не удалось подключить аккаунт':'Could not connect account'),'error')}
+ async function connect(){if(connecting)return;if(provider==='github_app'&&(!appID.trim()||!installationID.trim()||!privateKey.trim()))return;if(provider!=='github_app'&&!token.trim())return;connecting=true;const r=provider==='github_app'?await connectGitHubApp(appID.trim(),installationID.trim(),privateKey):await connectIntegration(provider,token.trim());connecting=false;if(r.ok){token='';appID='';installationID='';privateKey='';notify(ru?'Аккаунт подключён':'Account connected','success');await load()}else notify(r.error||(ru?'Не удалось подключить аккаунт':'Could not connect account'),'error')}
  async function disconnect(id){if(!confirm(ru?'Отключить этот аккаунт?':'Disconnect this account?'))return;const r=await disconnectIntegration(id);if(r.ok){if(selected?.id===id){selected=null;repos=[]}notify(ru?'Доступ отозван':'Access revoked','success');await load()}else notify(r.error||'Error','error')}
  async function openRepos(item){selected=item;repos=[];search='';reposLoading=true;const r=await listIntegrationRepositories(item.id);reposLoading=false;if(r.ok)repos=r.data.repositories||[];else notify(r.error||(ru?'Не удалось загрузить репозитории':'Could not load repositories'),'error')}
  async function copyRepo(url){try{await navigator.clipboard.writeText(url);notify(ru?'URL скопирован':'URL copied','success')}catch{notify(ru?'Не удалось скопировать URL':'Could not copy URL','error')}}
@@ -35,13 +36,22 @@
  </div>
  {#if activeProvider?.enabled}
   <div class="provider-content">
-   <div class="provider-title"><span class="provider-mark big">{activeProvider.mark}</span><div><h3>{activeProvider.name}</h3><p>{ru?'Подключите аккаунт с помощью токена доступа':'Connect your account using an access token'}</p></div></div>
+   <div class="provider-title"><span class="provider-mark big">{activeProvider.mark}</span><div><h3>{activeProvider.name}</h3><p>{provider==='github_app'?(ru?'Подключите установленное GitHub App для доступа к приватным репозиториям и автоматического Deploy.':'Connect an installed GitHub App for private repository access and automatic Deploy.'):(ru?'Подключите аккаунт с помощью токена доступа':'Connect your account using an access token')}</p></div></div>
    <div class="connect-form">
-    <label for="integration-token">{ru?'Personal Access Token':'Personal Access Token'}</label>
-    <input id="integration-token" type="password" autocomplete="off" bind:value={token} placeholder={provider==='github'?'ghp_••••••••••••••••••••': 'glpat-••••••••••••••••••••'} />
-    <div class="form-hint">{ru?'Токен проверяется через API провайдера и сохраняется только в зашифрованном виде. Повторно он не показывается.':'The token is verified against the provider API and stored encrypted. It is never displayed again.'}</div>
-    <div class="scope-note"><strong>{ru?'Рекомендуемые права':'Recommended scopes'}:</strong> {provider==='github'?'repo, read:user':'read_api, read_repository'}</div>
-    <div class="form-actions"><a href={provider==='github'?'https://github.com/settings/tokens/new':'https://gitlab.com/-/user_settings/personal_access_tokens'} target="_blank" rel="noreferrer">{ru?'Создать токен':'Create token'} ↗</a><button class="primary" disabled={!token.trim()||connecting} on:click={connect}>{connecting?(ru?'Проверка…':'Verifying…'):(ru?'Подключить аккаунт':'Connect account')}</button></div>
+    {#if provider==='github_app'}
+     <label for="github-app-id">GitHub App ID</label><input id="github-app-id" bind:value={appID} inputmode="numeric" placeholder="123456" />
+     <label for="github-installation-id">Installation ID</label><input id="github-installation-id" bind:value={installationID} inputmode="numeric" placeholder="12345678" />
+     <label for="github-app-key">Private key (PEM)</label><textarea id="github-app-key" rows="7" bind:value={privateKey} placeholder="-----BEGIN RSA PRIVATE KEY-----"></textarea>
+     <div class="form-hint">{ru?'Ключ передаётся только по HTTPS, проверяется через GitHub API и хранится зашифрованным. Вставляйте private key только в собственную панель.':'The key is sent only over HTTPS, verified with GitHub, and stored encrypted. Only paste the private key into your own Control Plane.'}</div>
+     <div class="scope-note"><strong>{ru?'Права GitHub App':'GitHub App permissions'}:</strong> Contents: Read-only; Metadata: Read-only. Install App on the account or organization that owns the repository.</div>
+     <div class="form-actions"><a href="https://github.com/settings/apps" target="_blank" rel="noreferrer">{ru?'Настройки GitHub Apps':'GitHub Apps settings'} ↗</a><button class="primary" disabled={!appID.trim()||!installationID.trim()||!privateKey.trim()||connecting} on:click={connect}>{connecting?(ru?'Проверка…':'Verifying…'):(ru?'Подключить GitHub App':'Connect GitHub App')}</button></div>
+    {:else}
+     <label for="integration-token">{ru?'Personal Access Token':'Personal Access Token'}</label>
+     <input id="integration-token" type="password" autocomplete="off" bind:value={token} placeholder={provider==='github'?'ghp_••••••••••••••••••••': 'glpat-••••••••••••••••••••'} />
+     <div class="form-hint">{ru?'Токен проверяется через API провайдера и сохраняется только в зашифрованном виде. Повторно он не показывается.':'The token is verified against the provider API and stored encrypted. It is never displayed again.'}</div>
+     <div class="scope-note"><strong>{ru?'Рекомендуемые права':'Recommended scopes'}:</strong> {provider==='github'?'repo, read:user':'read_api, read_repository'}</div>
+     <div class="form-actions"><a href={provider==='github'?'https://github.com/settings/tokens/new':'https://gitlab.com/-/user_settings/personal_access_tokens'} target="_blank" rel="noreferrer">{ru?'Создать токен':'Create token'} ↗</a><button class="primary" disabled={!token.trim()||connecting} on:click={connect}>{connecting?(ru?'Проверка…':'Verifying…'):(ru?'Подключить аккаунт':'Connect account')}</button></div>
+    {/if}
    </div>
    <div class="accounts-head"><h3>{ru?'Подключённые аккаунты':'Connected accounts'}</h3><span>{linked.length}</span></div>
    {#if loading}<div class="empty">{ru?'Загрузка…':'Loading…'}</div>
