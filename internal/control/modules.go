@@ -204,13 +204,44 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	switch r.Method {
 	case http.MethodGet:
-		projectID:=int64(0); if raw:=r.URL.Query().Get("project_id"); raw!="" { parsed,parseErr:=strconv.ParseInt(raw,10,64); if parseErr!=nil||parsed<1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }; var owned int; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id IN (SELECT owner_user_id FROM workspace_members WHERE member_user_id=? AND status='active' UNION SELECT ?)`,parsed,u.ID,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }; projectID=parsed; if err:=s.authorizeProjectAction(r.Context(),projectID,u.ID,"database.read");err!=nil{apiError(w,err);return} }; serverOwnerID:=u.ID; if projectID>0 { if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT user_id FROM projects WHERE id=?`,projectID).Scan(&serverOwnerID);err!=nil { apiError(w,shared.ErrNotFound("project not found"));return } }; query:=`SELECT id,device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE user_id=?`; args:=[]interface{}{serverOwnerID}; if projectID>0 { query+=` AND id IN (SELECT pds.database_server_id FROM project_database_servers pds WHERE pds.project_id=?)`;args=append(args,projectID) }; query+=` ORDER BY created_at DESC`; rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
-		if err!=nil{apiError(w,shared.ErrInternal("could not load database servers"));return}
-		defer rows.Close();out:=make([]map[string]interface{},0)
-		for rows.Next(){var id,did int64;var name,engine,version,dir,network,status string;var port int;var created time.Time
-			if err:=rows.Scan(&id,&did,&name,&engine,&version,&port,&dir,&network,&status,&created);err!=nil{apiError(w,shared.ErrInternal("could not read database servers"));return}
-			out=append(out,map[string]interface{}{"id":id,"device_id":did,"name":name,"engine":engine,"version":version,"port":port,"data_directory":dir,"network_access":network,"status":status,"created_at":created})}
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"servers":out})
+		projectID := int64(0)
+		var owners []int64
+		if raw := r.URL.Query().Get("project_id"); raw != "" {
+			parsed, parseErr := strconv.ParseInt(raw, 10, 64)
+			if parseErr != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
+			ownerID, accessErr := s.authorizeProjectOwner(r.Context(), parsed, u.ID, "database.read")
+			if accessErr != nil { apiError(w, accessErr); return }
+			projectID = parsed
+			owners = []int64{ownerID}
+		} else {
+			allOwners, ownerErr := s.db.WorkspaceOwnerIDs(r.Context(), u.ID)
+			if ownerErr != nil { apiError(w, ownerErr); return }
+			for _, ownerID := range allOwners {
+				role, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
+				if roleErr != nil { apiError(w, roleErr); return }
+				if allowed && CanWorkspaceAction(role, "database.read") { owners = append(owners, ownerID) }
+			}
+		}
+		out := make([]map[string]interface{}, 0)
+		for _, ownerID := range owners {
+			query := `SELECT id,device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE user_id=?`
+			args := []interface{}{ownerID}
+			if projectID > 0 { query += ` AND id IN (SELECT pds.database_server_id FROM project_database_servers pds WHERE pds.project_id=?)`; args = append(args, projectID) }
+			query += " ORDER BY created_at DESC"
+			rows, err := s.db.conn.QueryContext(r.Context(), query, args...)
+			if err != nil { apiError(w, shared.ErrInternal("could not load database servers")); return }
+			for rows.Next() {
+				var id, deviceID int64
+				var name, engine, version, dir, network, status string
+				var port int
+				var created time.Time
+				if err := rows.Scan(&id,&deviceID,&name,&engine,&version,&port,&dir,&network,&status,&created); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read database servers")); return }
+				out = append(out, map[string]interface{}{"id":id,"device_id":deviceID,"name":name,"engine":engine,"version":version,"port":port,"data_directory":dir,"network_access":network,"status":status,"created_at":created})
+			}
+			if err := rows.Err(); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read database servers")); return }
+			rows.Close()
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"servers":out})
 	case http.MethodPost:
 		var in databaseServerInput;if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 		in.Name=strings.TrimSpace(in.Name);if in.DeviceID<1||len(in.Name)<2||len(in.Name)>64{apiError(w,shared.ErrBadRequest("device and server name are required"));return}
