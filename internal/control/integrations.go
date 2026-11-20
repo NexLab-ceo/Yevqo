@@ -153,6 +153,8 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 		in.Token=strings.TrimSpace(in.Token)
 		if in.Provider == "github_app" {
 			// A browser installation callback must present a short-lived, single-use state.
+			appConfigured := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_ID")) != "" && strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_PRIVATE_KEY")) != ""
+			if appConfigured && in.State == "" { apiError(w, shared.ErrBadRequest("missing GitHub App installation state; start installation from the Yevqo panel")); return }
 			if in.State != "" {
 				if len(in.State) != 64 { apiError(w, shared.ErrBadRequest("invalid GitHub App installation state")); return }
 				digest := sha256.Sum256([]byte(in.State))
