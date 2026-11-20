@@ -61,6 +61,7 @@ Managed PostgreSQL and MariaDB/MySQL server installation and local database oper
 
 - `021_project_environments.sql` adds project environments, application assignments, and project database-server associations.
 - `022_project_environment_databases.sql` adds environment-level database-server assignments.
-- `024_project_repositories.sql` adds the optional project-level GitHub App repository binding.\n- `025_project_deployment_lifecycle.sql` adds repository-to-site deployment targets, webhook registration IDs, and durable deployment runs.
+- `024_project_repositories.sql` adds the optional project-level GitHub App repository binding.
+- `025_project_deployment_lifecycle.sql` adds repository-to-site deployment targets, webhook registration IDs, and durable deployment runs.
 
-Both are additive migrations. They have not been applied to production or to the user's existing database as part of this work. Apply them only through the normal migration/upgrade process after taking a verified backup and checking the target installation.
+These are additive migrations. They have not been applied to production or to the user's existing database as part of this work. Apply them only through the normal migration/upgrade process after taking a verified backup and checking the target installation.
