@@ -19,6 +19,7 @@ var slugCleaner = regexp.MustCompile(`[^a-z0-9-]+`)
 type projectInput struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	OwnerUserID int64 `json:"owner_user_id"`
 }
 
 func projectSlug(name string) string {
@@ -55,13 +56,16 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		in.Name=strings.TrimSpace(in.Name)
 		if len(in.Name)<2 || len(in.Name)>80 { apiError(w,shared.ErrBadRequest("project name must be 2–80 characters"));return }
 		slug:=projectSlug(in.Name); if slug=="" { apiError(w,shared.ErrBadRequest("project name must contain letters or numbers"));return }
-		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO projects(user_id,name,slug,description) VALUES(?,?,?,?)`,u.ID,in.Name,slug,strings.TrimSpace(in.Description))
+		ownerID:=in.OwnerUserID;if ownerID==0{ownerID=u.ID}
+		if ownerID<1 { apiError(w,shared.ErrBadRequest("invalid workspace owner"));return }
+		if err:=s.authorizeWorkspace(r.Context(),ownerID,u.ID,"project.manage");err!=nil{apiError(w,err);return}
+		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO projects(user_id,name,slug,description) VALUES(?,?,?,?)`,ownerID,in.Name,slug,strings.TrimSpace(in.Description))
 		if err!=nil { apiError(w,shared.ErrBadRequest("project name is already in use"));return }
 		id,_:=res.LastInsertId()
 		for _, env := range []struct{name,slug,description string; protected bool}{{"Production","production","Live production workloads",true},{"Development","development","Development and integration workloads",false},{"Staging","staging","Pre-production validation workloads",false}} {
-			if _,envErr:=s.db.conn.ExecContext(r.Context(),`INSERT INTO project_environments(project_id,name,slug,description,is_protected) VALUES(?,?,?,?,?)`,id,env.name,env.slug,env.description,env.protected);envErr!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM projects WHERE id=? AND user_id=?`,id,u.ID);apiError(w,shared.ErrInternal("could not initialize project environments"));return }
+			if _,envErr:=s.db.conn.ExecContext(r.Context(),`INSERT INTO project_environments(project_id,name,slug,description,is_protected) VALUES(?,?,?,?,?)`,id,env.name,env.slug,env.description,env.protected);envErr!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM projects WHERE id=? AND user_id=?`,id,ownerID);apiError(w,shared.ErrInternal("could not initialize project environments"));return }
 		}
-		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"name":in.Name,"slug":slug,"description":in.Description}})
+		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"owner_user_id":ownerID,"name":in.Name,"slug":slug,"description":in.Description}})
 	default: http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
 }
