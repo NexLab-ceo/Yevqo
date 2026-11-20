@@ -26,7 +26,9 @@ type createDatabaseInput struct {
 	SiteID string `json:"site_id"`
 }
 
-func serverDataDirectory(db *sql.DB, ctx context.Context, serverID, ownerID int64) string { var path string; _ = db.QueryRowContext(ctx, `SELECT data_directory FROM database_servers WHERE id=? AND user_id=?`, serverID, ownerID).Scan(&path); return path }\n\nfunc (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request) {
+func serverDataDirectory(db *sql.DB, ctx context.Context, serverID, ownerID int64) string { var path string; _ = db.QueryRowContext(ctx, `SELECT data_directory FROM database_servers WHERE id=? AND user_id=?`, serverID, ownerID).Scan(&path); return path }
+
+func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet { s.handleDatabases(w,r); return }
 	if r.Method != http.MethodPost { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
 	u:=UserFromContext(r.Context())
