@@ -1,6 +1,9 @@
 package control
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func TestHostnameBelongsToZone(t *testing.T) {
 	for _,host:=range []string{"example.com","app.example.com","a.b.example.com"}{if !hostnameBelongsToZone(host,"example.com"){t.Errorf("%s should belong to zone",host)}}
