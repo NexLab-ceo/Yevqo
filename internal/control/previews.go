@@ -38,6 +38,7 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 		return
 	}
 	if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
+	ownerID := dev.UserID
 
 	sites, err := s.db.ListSitesByDevice(r.Context(), deviceID)
 	if err != nil { apiError(w, shared.ErrInternal("could not load site")); return }
@@ -48,12 +49,12 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 	if previewKey == "" {
 		switch r.Method {
 		case http.MethodGet:
-			rows, err := s.db.conn.QueryContext(r.Context(), `SELECT preview_key,source_branch,source_commit,runtime,port,pid,status,error_message,expires_at,created_at FROM preview_deployments WHERE user_id=? AND device_id=? AND site_id=? ORDER BY created_at DESC`, user.ID, deviceID, siteID)
+			rows, err := s.db.conn.QueryContext(r.Context(), `SELECT preview_key,source_branch,source_commit,runtime,port,pid,status,error_message,expires_at,created_at,created_by_user_id FROM preview_deployments WHERE user_id=? AND device_id=? AND site_id=? ORDER BY created_at DESC`, ownerID, deviceID, siteID)
 			if err != nil { apiError(w, shared.ErrInternal("could not list previews")); return }
 			defer rows.Close()
-			type item struct { Key string `json:"key"`; Branch string `json:"branch"`; Commit string `json:"commit"`; Runtime string `json:"runtime"`; Port uint32 `json:"port"`; PID *uint32 `json:"pid,omitempty"`; Status string `json:"status"`; Error string `json:"error,omitempty"`; ExpiresAt *time.Time `json:"expires_at,omitempty"`; CreatedAt time.Time `json:"created_at"`; URL string `json:"url,omitempty"` }
+			type item struct { Key string `json:"key"`; Branch string `json:"branch"`; Commit string `json:"commit"`; Runtime string `json:"runtime"`; Port uint32 `json:"port"`; PID *uint32 `json:"pid,omitempty"`; Status string `json:"status"`; Error string `json:"error,omitempty"`; ExpiresAt *time.Time `json:"expires_at,omitempty"`; CreatedAt time.Time `json:"created_at"`; CreatedByUserID *int64 `json:"created_by_user_id,omitempty"`; URL string `json:"url,omitempty"` }
 			items := []item{}
-			for rows.Next() { var v item; if err := rows.Scan(&v.Key,&v.Branch,&v.Commit,&v.Runtime,&v.Port,&v.PID,&v.Status,&v.Error,&v.ExpiresAt,&v.CreatedAt); err != nil { apiError(w, shared.ErrInternal("could not read previews")); return }; v.URL = fmt.Sprintf("http://127.0.0.1:%d",v.Port); items=append(items,v) }
+			for rows.Next() { var v item; if err := rows.Scan(&v.Key,&v.Branch,&v.Commit,&v.Runtime,&v.Port,&v.PID,&v.Status,&v.Error,&v.ExpiresAt,&v.CreatedAt,&v.CreatedByUserID); err != nil { apiError(w, shared.ErrInternal("could not read previews")); return }; v.URL = fmt.Sprintf("http://127.0.0.1:%d",v.Port); items=append(items,v) }
 			if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read previews")); return }
 			writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"previews":items})
 			return
@@ -72,7 +73,7 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 			key,err:=newPreviewKey(); if err!=nil { apiError(w,shared.ErrInternal("could not allocate preview ID")); return }
 			port,err:=previewPort(); if err!=nil { apiError(w,shared.ErrInternal("could not allocate preview port")); return }
 			previewID:="preview_"+key
-			_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO preview_deployments(user_id,device_id,site_id,preview_key,source_branch,source_commit,runtime,path,port,status,expires_at) VALUES(?,?,?,?,?,?,?,?,?,'building',DATE_ADD(UTC_TIMESTAMP(),INTERVAL 24 HOUR))`,user.ID,deviceID,siteID,key,branch,in.Commit,site.Runtime,"sites/"+previewID,port)
+			_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO preview_deployments(user_id,created_by_user_id,device_id,site_id,preview_key,source_branch,source_commit,runtime,path,port,status,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,'building',DATE_ADD(UTC_TIMESTAMP(),INTERVAL 24 HOUR))`,ownerID,user.ID,deviceID,siteID,key,branch,in.Commit,site.Runtime,"sites/"+previewID,port)
 			if err!=nil { apiError(w,shared.ErrInternal("could not reserve preview")); return }
 			action:=shared.PreviewDeploy{PreviewID:previewID,SiteAction:shared.SiteAction{SiteId:previewID,Path:"sites/"+previewID,Port:port,Runtime:site.Runtime,GitURL:cfg.GitURL,GitBranch:branch,GitCommit:in.Commit,BuildCommand:cfg.BuildCommand,RootDir:cfg.RootDir,GitToken:cfg.GitToken,HealthCheckPath:cfg.HealthCheckPath,CloneTimeoutSeconds:cfg.CloneTimeoutSeconds,BuildTimeoutSeconds:cfg.BuildTimeoutSeconds,HealthCheckTimeoutSeconds:cfg.HealthCheckTimeoutSeconds,StartCommand:cfg.StartCommand,AllowProjectCode:true}}
 			ctx,cancel:=context.WithTimeout(r.Context(),25*time.Minute); defer cancel()
@@ -85,12 +86,12 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 				cleanupCtx,cleanupCancel:=context.WithTimeout(context.Background(),30*time.Second)
 				_,_=conn.SendCommand(cleanupCtx,"preview_remove",&shared.PreviewRemove{PreviewID:previewID})
 				cleanupCancel()
-				_,_=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='failed',error_message=? WHERE device_id=? AND site_id=? AND preview_key=?`,truncatePreviewError(msg),deviceID,siteID,key)
+				_,_=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='failed',error_message=? WHERE user_id=? AND device_id=? AND site_id=? AND preview_key=?`,truncatePreviewError(msg),ownerID,deviceID,siteID,key)
 				writeJSON(w,http.StatusOK,map[string]interface{}{"ok":false,"key":key,"status":"failed","message":msg})
 				return
 			}
-			var started shared.StartSiteResult; if err:=shared.Unmarshal(result.Payload,&started); err!=nil { _,_=conn.SendCommand(r.Context(),"preview_remove",&shared.PreviewRemove{PreviewID:previewID}); _,_=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='failed',error_message='invalid Agent response' WHERE device_id=? AND site_id=? AND preview_key=?`,deviceID,siteID,key); apiError(w,shared.ErrInternal("invalid preview response")); return }
-			_,err=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='ready',pid=? WHERE device_id=? AND site_id=? AND preview_key=?`,started.Pid,deviceID,siteID,key)
+			var started shared.StartSiteResult; if err:=shared.Unmarshal(result.Payload,&started); err!=nil { _,_=conn.SendCommand(r.Context(),"preview_remove",&shared.PreviewRemove{PreviewID:previewID}); _,_=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='failed',error_message='invalid Agent response' WHERE user_id=? AND device_id=? AND site_id=? AND preview_key=?`,ownerID,deviceID,siteID,key); apiError(w,shared.ErrInternal("invalid preview response")); return }
+			_,err=s.db.conn.ExecContext(r.Context(),`UPDATE preview_deployments SET status='ready',pid=? WHERE user_id=? AND device_id=? AND site_id=? AND preview_key=?`,started.Pid,ownerID,deviceID,siteID,key)
 			if err!=nil { _,_=conn.SendCommand(r.Context(),"preview_remove",&shared.PreviewRemove{PreviewID:previewID}); apiError(w,shared.ErrInternal("could not save preview status")); return }
 			url:=fmt.Sprintf("http://127.0.0.1:%d",port)
 			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),DeviceID:shared.PtrInt64(deviceID),Action:"preview_create",Details:map[string]interface{}{"site_id":siteID,"preview_key":key,"branch":branch},IP:clientIP(r)})
@@ -104,13 +105,13 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 	if err := s.authorizeWorkspace(r.Context(),dev.UserID,user.ID,"preview.delete"); err != nil { apiError(w,err); return }
 	if len(previewKey)!=32 { apiError(w,shared.ErrBadRequest("invalid preview key")); return }
 	var status string
-	err=s.db.conn.QueryRowContext(r.Context(),`SELECT status FROM preview_deployments WHERE user_id=? AND device_id=? AND site_id=? AND preview_key=?`,user.ID,deviceID,siteID,previewKey).Scan(&status)
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT status FROM preview_deployments WHERE user_id=? AND device_id=? AND site_id=? AND preview_key=?`,ownerID,deviceID,siteID,previewKey).Scan(&status)
 	if err!=nil { apiError(w,shared.ErrNotFound("preview not found")); return }
 	conn,online:=s.hub.Get(deviceID); if !online { apiError(w,shared.ErrBadRequest("reconnect the Android device before deleting this preview")); return }
 	ctx,cancel:=context.WithTimeout(r.Context(),30*time.Second); defer cancel()
 	result,err:=conn.SendCommand(ctx,"preview_remove",&shared.PreviewRemove{PreviewID:"preview_"+previewKey})
 	if err!=nil || result==nil || !result.Ok { msg:="could not remove preview from Android device"; if result!=nil&&result.Message!="" { msg=result.Message }; apiError(w,shared.ErrBadRequest(msg)); return }
-	if _,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM preview_deployments WHERE user_id=? AND device_id=? AND site_id=? AND preview_key=?`,user.ID,deviceID,siteID,previewKey); err!=nil { apiError(w,shared.ErrInternal("could not delete preview record")); return }
+	if _,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM preview_deployments WHERE user_id=? AND device_id=? AND site_id=? AND preview_key=?`,ownerID,deviceID,siteID,previewKey); err!=nil { apiError(w,shared.ErrInternal("could not delete preview record")); return }
 	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),DeviceID:shared.PtrInt64(deviceID),Action:"preview_delete",Details:map[string]interface{}{"site_id":siteID,"preview_key":previewKey},IP:clientIP(r)})
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"message":"preview removed"})
 }
