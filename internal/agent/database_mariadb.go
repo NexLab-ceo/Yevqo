@@ -195,7 +195,7 @@ func testMariaDBConnection(req shared.TestDatabaseConnection) error {
 	cli, err := mariaCLI(); if err != nil { return err }
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second); defer cancel()
 	args := []string{"--protocol=TCP", "-h", "127.0.0.1", "-P", fmt.Sprint(req.Port), "-u", req.Username}
-	if req.SSLMode == "require" { cert, _, certErr := ensureMariaDBSSL(dataDir); if certErr != nil { return certErr }; args = append(args, "--ssl", "--ssl-ca="+cert, "--ssl-verify-server-cert") } else if req.SSLMode == "disable" { args = append(args, "--skip-ssl") } else if req.SSLMode != "" && req.SSLMode != "prefer" { return fmt.Errorf("invalid MariaDB SSL mode") }
+	if req.SSLMode == "require" { prefix := os.Getenv("PREFIX"); dataDir, pathErr := mariaDataDirectory(prefix, 0, req.DataDirectory); if pathErr != nil { return pathErr }; cert, _, certErr := ensureMariaDBSSL(dataDir); if certErr != nil { return certErr }; args = append(args, "--ssl", "--ssl-ca="+cert, "--ssl-verify-server-cert") } else if req.SSLMode == "disable" { args = append(args, "--skip-ssl") } else if req.SSLMode != "" && req.SSLMode != "prefer" { return fmt.Errorf("invalid MariaDB SSL mode") }
 	args = append(args, req.Database, "-Nse", "SELECT 1")
 	cmd := exec.CommandContext(ctx, cli, args...)
 	cmd.Env = append(os.Environ(), "MYSQL_PWD="+req.Password)
