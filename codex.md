@@ -129,7 +129,7 @@ Before finishing every task:
 
 - 2026-11-20 — Added audit events for Cloudflare account connect/disconnect and device unpairing after managed routes are removed; included in successful main CI at `755e16f`.
 
-- 2026-11-20 — Fixed Control Plane MySQL backup option-file formatting (real newlines instead of literal `\\n`) and added a regression test. Hardened site/database restore and backup download against empty Agent responses. The first CI run caught a malformed Go string in the new regression test; simplified the fixture to focus on newline formatting, with fresh CI pending.
+- 2026-11-20 — Fixed Control Plane MySQL backup option-file formatting (real newlines instead of literal `\\n`) and added a regression test. Hardened site/database restore and backup download against empty Agent responses; all included in successful main CI at `755e16f`.
 
 - 2026-11-20 — Added Cloudflare route cleanup to device unpairing: all managed ingress/DNS routes are removed before the Agent is disconnected or device record deleted; included in successful main CI at `755e16f`.
 
