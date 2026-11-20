@@ -144,13 +144,18 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	if command!="deploy"&&command!="start"&&command!="stop"&&command!="restart"&&command!="logs" {
 		fmt.Fprintf(stderr,"unknown command %q\n",command);return 2
 	}
-	if len(rest)!=3 { fmt.Fprintln(stderr,"expected command, device-id and site-id");return 2 }
+	expectedArgs:=3
+	if command=="deploy" {
+		expectedArgs=4
+		if len(rest)!=4 || rest[3]!="--allow-project-code" { fmt.Fprintln(stderr,"deploy requires explicit --allow-project-code consent"); return 2 }
+	}
+	if len(rest)!=expectedArgs { fmt.Fprintln(stderr,"expected command, device-id and site-id");return 2 }
 	deviceID,siteID:=rest[1],rest[2]
 	if _,err:=strconv.ParseInt(deviceID,10,64);err!=nil||deviceID==""||siteID==""||strings.ContainsAny(deviceID+siteID,"/?#"){fmt.Fprintln(stderr,"invalid device-id or site-id");return 2}
 	var result apiResponse
 	switch command {
 	case "deploy":
-		result,err=client.post("/api/sites/"+url.PathEscape(deviceID)+"/"+url.PathEscape(siteID)+"/cmd",map[string]any{"action":"deploy","allow_project_code":true})
+		result,err=client.post("/api/sites/"+url.PathEscape(deviceID)+"/"+url.PathEscape(siteID)+"/cmd",map[string]any{"action":"deploy","allow_project_code":rest[3]=="--allow-project-code"})
 	case "start","stop","restart":
 		result,err=client.post("/api/sites/"+url.PathEscape(deviceID)+"/"+url.PathEscape(siteID)+"/cmd",map[string]any{"action":command})
 	case "logs":
