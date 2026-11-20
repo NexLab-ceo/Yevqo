@@ -120,6 +120,11 @@ type cloudflareTunnelConfig struct {
 }
 
 func updateCloudflareIngressRules(rules []map[string]json.RawMessage, hostname, service string, remove bool) ([]map[string]json.RawMessage, bool, error) {
+	isCatchall := func(rule map[string]json.RawMessage) bool {
+		_, hasHostname := rule["hostname"]
+		_, hasPath := rule["path"]
+		return !hasHostname && !hasPath
+	}
 	matches := make([]int,0,1)
 	for i, rule := range rules {
 		if raw,ok:=rule["hostname"];ok { var current string; if err:=json.Unmarshal(raw,&current);err!=nil{return nil,false,fmt.Errorf("invalid existing ingress hostname")};if strings.EqualFold(current,hostname){matches=append(matches,i)} }
@@ -136,15 +141,16 @@ func updateCloudflareIngressRules(rules []map[string]json.RawMessage, hostname, 
 			hostJSON,_:=json.Marshal(hostname)
 			rule:=map[string]json.RawMessage{"hostname":hostJSON,"service":serviceJSON}
 			insertAt:=len(rules)
-			for i,existing:=range rules { if _,hasHostname:=existing["hostname"];!hasHostname { insertAt=i;break } }
+			for i,existing:=range rules { if isCatchall(existing) { insertAt=i;break } }
 			rules=append(rules,nil);copy(rules[insertAt+1:],rules[insertAt:]);rules[insertAt]=rule;changed=true
 		}
 	}
 	regular:=make([]map[string]json.RawMessage,0,len(rules))
 	catchalls:=make([]map[string]json.RawMessage,0,1)
-	for _,rule:=range rules { if _,ok:=rule["hostname"];ok { regular=append(regular,rule) } else { catchalls=append(catchalls,rule) } }
+	for _,rule:=range rules { if isCatchall(rule) { catchalls=append(catchalls,rule) } else { regular=append(regular,rule) } }
 	if len(catchalls)>1 { return nil,false,fmt.Errorf("tunnel has multiple catch-all ingress rules; resolve them manually") }
 	if len(catchalls)==0 { raw,_:=json.Marshal("http_status:404");catchalls=append(catchalls,map[string]json.RawMessage{"service":raw});changed=true }
+	if len(rules)>0 && !isCatchall(rules[len(rules)-1]) && len(catchalls)==1 { changed=true }
 	return append(regular,catchalls[0]),changed,nil
 }
 
@@ -171,7 +177,8 @@ func ensureCloudflareTunnelDNS(ctx context.Context, token, zoneID, hostname, tun
 	payload:=map[string]interface{}{"type":"CNAME","name":hostname,"content":content,"proxied":true,"ttl":1}
 	method,endpoint:=http.MethodPost,"/zones/"+zoneID+"/dns_records"
 	if len(existing)==1 {
-		if existing[0].Type!="CNAME"||!strings.HasSuffix(strings.ToLower(existing[0].Content),".cfargotunnel.com")||!validCloudflareDNSRecordID(existing[0].ID){return cloudflareDNSRecord{},fmt.Errorf("an unmanaged DNS record already uses this hostname")}
+		if existing[0].Type!="CNAME"||!validCloudflareDNSRecordID(existing[0].ID){return cloudflareDNSRecord{},fmt.Errorf("an unmanaged DNS record already uses this hostname")}
+		if !strings.EqualFold(existing[0].Content,content){return cloudflareDNSRecord{},fmt.Errorf("DNS record already points to a different tunnel; change it manually before continuing")}
 		method=http.MethodPut;endpoint+="/"+existing[0].ID
 	}
 	var record cloudflareDNSRecord
@@ -242,9 +249,20 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 		service:=fmt.Sprintf("http://127.0.0.1:%d",port)
 		if err:=updateCloudflareTunnelIngress(ctx,token,accountID,in.TunnelID,hostname,service,false);err!=nil{apiError(w,shared.ErrBadRequest("could not configure Cloudflare Tunnel ingress: "+err.Error()));return}
 		record,err:=ensureCloudflareTunnelDNS(ctx,token,zoneID,hostname,in.TunnelID)
-		if err!=nil{_ = updateCloudflareTunnelIngress(ctx,token,accountID,in.TunnelID,hostname,"",true);apiError(w,shared.ErrBadRequest("could not create Cloudflare DNS record: "+err.Error()));return}
+		if err!=nil{
+			rollbackCtx,rollbackCancel:=context.WithTimeout(context.Background(),20*time.Second)
+			_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,"",true)
+			rollbackCancel()
+			apiError(w,shared.ErrBadRequest("could not create Cloudflare DNS record: "+err.Error()));return
+		}
 		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO site_cloudflare_routes(user_id,device_id,site_id,tunnel_id,hostname,origin_port) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE tunnel_id=VALUES(tunnel_id),hostname=VALUES(hostname),origin_port=VALUES(origin_port),updated_at=CURRENT_TIMESTAMP`,dev.UserID,in.DeviceID,in.SiteID,in.TunnelID,hostname,port)
-		if err!=nil{_ = deleteCloudflareTunnelDNS(ctx,token,zoneID,hostname,in.TunnelID);_ = updateCloudflareTunnelIngress(ctx,token,accountID,in.TunnelID,hostname,"",true);apiError(w,shared.ErrInternal("Cloudflare route was configured but could not be saved"));return}
+		if err!=nil{
+			rollbackCtx,rollbackCancel:=context.WithTimeout(context.Background(),20*time.Second)
+			_ = deleteCloudflareTunnelDNS(rollbackCtx,token,zoneID,hostname,in.TunnelID)
+			_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,"",true)
+			rollbackCancel()
+			apiError(w,shared.ErrInternal("Cloudflare route was configured but could not be saved"));return
+		}
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"cloudflare_tunnel_route_configured",Details:map[string]interface{}{"site_id":in.SiteID,"hostname":hostname,"tunnel_id":in.TunnelID,"origin_port":port},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"configured":true,"hostname":hostname,"tunnel_id":in.TunnelID,"origin":service,"dns_record":record});return
 	}

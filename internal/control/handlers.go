@@ -919,7 +919,6 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"domain":domain,"tunnel_status":"active","message":"Cloudflare Tunnel connected"});return
 		}
 		if r.Method == http.MethodDelete {
-			if _, _, routeErr := s.removeCloudflareRouteForSite(r.Context(), dev.UserID, deviceID, siteID); routeErr != nil { apiError(w, shared.ErrBadRequest("remove the managed Cloudflare route before deleting this site: "+routeErr.Error())); return }
 			if st.Domain != "" {
 				conn, online := s.hub.Get(deviceID)
 				if !online { apiError(w, shared.ErrBadRequest("device is offline; reconnect the Agent before deleting a site with an active domain")); return }
@@ -936,6 +935,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				result, err := conn.SendCommand(ctx, "stop_site", &shared.StopSite{SiteId: siteID})
 				if err != nil || !result.Ok { apiError(w, shared.ErrBadRequest("could not stop site; metadata was not removed")); return }
 			}
+			if _, _, routeErr := s.removeCloudflareRouteForSite(r.Context(), dev.UserID, deviceID, siteID); routeErr != nil { apiError(w, shared.ErrBadRequest("remove the managed Cloudflare route before deleting this site: "+routeErr.Error())); return }
 			_, _ = s.db.conn.ExecContext(r.Context(), "DELETE FROM project_sites WHERE device_id=? AND site_id=?", deviceID, siteID)
 			// Remove only the link; the independent database and its data remain intact.
 			_, _ = s.db.conn.ExecContext(r.Context(), "DELETE FROM site_database_connections WHERE device_id=? AND site_id=?", deviceID, siteID)

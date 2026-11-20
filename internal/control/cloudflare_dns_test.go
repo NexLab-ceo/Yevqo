@@ -47,3 +47,18 @@ func TestUpdateCloudflareIngressRulesRejectsDuplicateHostname(t *testing.T) {
 	rules:=[]map[string]json.RawMessage{{"hostname":marshal("app.example.com"),"service":marshal("http://127.0.0.1:1")},{"hostname":marshal("app.example.com"),"service":marshal("http://127.0.0.1:2")},{"service":marshal("http_status:404")}}
 	if _,_,err:=updateCloudflareIngressRules(rules,"app.example.com","http://127.0.0.1:3",false);err==nil{t.Fatal("expected duplicate hostname to be rejected")}
 }
+
+func TestUpdateCloudflareIngressRulesPreservesPathRulesAndCatchallOrder(t *testing.T) {
+	marshal:=func(v string) json.RawMessage { b,_:=json.Marshal(v);return b }
+	rules:=[]map[string]json.RawMessage{
+		{"path":marshal("/api/*"),"service":marshal("http://127.0.0.1:9000")},
+		{"service":marshal("http_status:404")},
+	}
+	updated,changed,err:=updateCloudflareIngressRules(rules,"app.example.com","http://127.0.0.1:3000",false)
+	if err!=nil||!changed{t.Fatalf("add route changed=%v err=%v",changed,err)}
+	if len(updated)!=3{t.Fatalf("rules=%d, want 3",len(updated))}
+	var path,host string
+	_ = json.Unmarshal(updated[0]["path"],&path);_ = json.Unmarshal(updated[1]["hostname"],&host)
+	if path!="/api/*"||host!="app.example.com"{t.Fatalf("path rule/host order = %q, %q",path,host)}
+	if _,ok:=updated[2]["hostname"];ok{t.Fatal("catch-all rule must remain last")}
+}
