@@ -43,9 +43,9 @@ func (s *Server) handleDatabaseServerRoleMutation(w http.ResponseWriter, r *http
 		return
 	}
 	var deviceID int64
-	var engine, status, dataDir string
+	var engine, status, dataDir, sslMode string
 	var port int
-	err := s.db.conn.QueryRowContext(r.Context(), `SELECT device_id,engine,status,port,data_directory FROM database_servers WHERE id=? AND user_id=?`, serverID, ownerID).Scan(&deviceID, &engine, &status, &port, &dataDir)
+	err := s.db.conn.QueryRowContext(r.Context(), `SELECT device_id,engine,status,port,data_directory,ssl_mode FROM database_servers WHERE id=? AND user_id=?`, serverID, ownerID).Scan(&deviceID, &engine, &status, &port, &dataDir, &sslMode)
 	if err == sql.ErrNoRows {
 		apiError(w, shared.ErrNotFound("database server not found"))
 		return
@@ -65,7 +65,7 @@ func (s *Server) handleDatabaseServerRoleMutation(w http.ResponseWriter, r *http
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 	defer cancel()
-	req := &shared.ManageDatabaseRole{Engine:engine,DataDirectory:dataDir,ServerID: serverID, Port: uint32(port), Name: in.Name, Password: in.Password}
+	req := &shared.ManageDatabaseRole{Engine:engine,SSLMode:sslMode,DataDirectory:dataDir,ServerID: serverID, Port: uint32(port), Name: in.Name, Password: in.Password}
 	result, err := conn.SendCommand(ctx, in.Action+"_database_role", req)
 	if err != nil {
 		apiError(w, shared.ErrInternal("Agent database user command failed"))
