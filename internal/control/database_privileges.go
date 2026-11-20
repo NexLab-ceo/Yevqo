@@ -27,14 +27,14 @@ func (s *Server) handleDatabaseServerPrivileges(w http.ResponseWriter,r *http.Re
  if len(in.Database)<1||len(in.Database)>63||len(in.Role)<1||len(in.Role)>63{apiError(w,shared.ErrBadRequest("database and role names must be 1–63 characters"));return}
  if in.Scope==""{in.Scope="database"}
  if in.Scope=="database" {if in.Privilege!="CONNECT"&&in.Privilege!="CREATE"&&in.Privilege!="TEMPORARY"{apiError(w,shared.ErrBadRequest("database privilege must be CONNECT, CREATE or TEMPORARY"));return};if in.Schema!=""{apiError(w,shared.ErrBadRequest("schema must be empty for database scope"));return}} else if in.Scope=="schema" {if len(in.Schema)<1||len(in.Schema)>63||!postgresIdentifier.MatchString(in.Schema){apiError(w,shared.ErrBadRequest("invalid schema name"));return};if in.Privilege!="USAGE"&&in.Privilege!="CREATE"{apiError(w,shared.ErrBadRequest("schema privilege must be USAGE or CREATE"));return}} else{apiError(w,shared.ErrBadRequest("scope must be database or schema"));return}
- var deviceID int64;var engine,status string;var port int
- err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`,serverID,ownerID).Scan(&deviceID,&engine,&status,&port)
+ var deviceID int64;var engine,status,dataDir string;var port int
+ err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port,data_directory FROM database_servers WHERE id=? AND user_id=?`,serverID,ownerID).Scan(&deviceID,&engine,&status,&port,&dataDir)
  if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}
- if engine!="postgresql"||status!="ready"{apiError(w,shared.ErrBadRequest("a ready PostgreSQL server is required"));return}
+ if (engine!="postgresql"&&engine!="mariadb"&&engine!="mysql")||status!="ready"{apiError(w,shared.ErrBadRequest("a supported ready database server is required"));return}
  // PostgreSQL validates database, schema and role existence during the typed operation.
  conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
  ctx,cancel:=context.WithTimeout(r.Context(),25*time.Second);defer cancel()
- req:=&shared.ManageDatabasePrivilege{ServerID:serverID,Port:uint32(port),Database:in.Database,Role:in.Role,Privilege:in.Privilege,Scope:in.Scope,Schema:in.Schema,Action:in.Action}
+ req:=&shared.ManageDatabasePrivilege{Engine:engine,DataDirectory:dataDir,ServerID:serverID,Port:uint32(port),Database:in.Database,Role:in.Role,Privilege:in.Privilege,Scope:in.Scope,Schema:in.Schema,Action:in.Action}
  result,err:=conn.SendCommand(ctx,"manage_database_privilege",req);if err!=nil{apiError(w,shared.ErrInternal("Agent database privilege command failed"));return};if !result.Ok{apiError(w,shared.ErrBadRequest(result.Message));return}
  _=s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_privilege_"+in.Action,Details:map[string]interface{}{"server_id":serverID,"database":in.Database,"role":in.Role,"privilege":in.Privilege,"scope":in.Scope,"schema":in.Schema}})
  writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"message":"Database privilege "+in.Action+" completed"})
