@@ -226,7 +226,14 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 		var credentials githubAppCredentials
 		if err:=json.Unmarshal(rawCredential,&credentials);err!=nil { apiError(w,shared.ErrInternal("stored GitHub App credentials are invalid"));return }
 		token,_,err=githubAppInstallationToken(ctx,credentials)
-		if err!=nil { apiError(w,shared.ErrBadRequest("GitHub App installation token could not be refreshed"));return }
+		if err!=nil {
+			message := "GitHub App installation token could not be refreshed"
+			status := http.StatusBadRequest
+			if strings.Contains(err.Error(), "HTTP 404") { message = "GitHub App installation was removed"; status = http.StatusGone
+			} else if strings.Contains(err.Error(), "HTTP 403") { message = "GitHub App permission denied"; status = http.StatusForbidden
+			} else if strings.Contains(err.Error(), "HTTP 429") { message = "GitHub API rate limit reached"; status = http.StatusTooManyRequests }
+			writeJSON(w,status,map[string]interface{}{"ok":false,"error":message});return
+		}
 	}
 	var repos []providerRepository
 	if provider=="github" || isGitHubApp {
@@ -249,6 +256,7 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 		if err:=readProviderJSON(resp,&values);err!=nil { apiError(w,shared.ErrBadRequest("GitLab rejected project access"));return }
 		for _,v:=range values { repos=append(repos,providerRepository{ID:strconv.FormatInt(v.ID,10),Name:v.Name,FullName:v.PathWithNamespace,CloneURL:v.HTTPURL,DefaultBranch:v.DefaultBranch,Private:v.Visibility!="public",WebURL:v.WebURL}) }
 	} else { apiError(w,shared.ErrBadRequest("unsupported provider"));return }
+	if isGitHubApp { _, _ = s.db.conn.ExecContext(r.Context(), `UPDATE integrations SET last_verified_at=UTC_TIMESTAMP() WHERE id=? AND user_id=?`, id, u.ID) }
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"repositories":repos})
 }
 
