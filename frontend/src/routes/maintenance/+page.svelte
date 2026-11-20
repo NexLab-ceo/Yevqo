@@ -1,7 +1,7 @@
 <script>
- import {onMount} from 'svelte';import {getMonitoring} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
+ import {onMount} from 'svelte';import {page} from '$app/stores';import {getMonitoring} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
  let devices=[],loading=true;
- async function load(){const r=await getMonitoring();if(r.ok)devices=r.data.devices||[];else notify(r.error||'Не удалось проверить устройства','error');loading=false}
+ async function load(){const r=await getMonitoring($page.url.searchParams.get('project_id')||'');if(r.ok)devices=r.data.devices||[];else notify(r.error||'Не удалось проверить устройства','error');loading=false}
  onMount(load);
 </script>
 <div class="page-header"><div><div class="eyebrow">SYSTEM</div><h1 class="page-title">Maintenance</h1><p class="page-desc">Совместимость Agent и состояние подключённых Android-хостов.</p></div><Button on:click={load}>↻ Проверить</Button></div>
