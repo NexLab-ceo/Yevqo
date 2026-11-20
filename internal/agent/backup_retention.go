@@ -23,7 +23,7 @@ func pruneBackups(req shared.PruneBackups) (*shared.PruneBackupsResult, error) {
 	case req.SiteId == "" && req.ServerID > 0 && req.DatabaseID > 0:
 		dir = filepath.Join(prefix,"var","lib","veltrix-agent","backups","databases",fmt.Sprint(req.ServerID))
 		databaseMarker := fmt.Sprintf("-%d-", req.DatabaseID)
-		match = func(name string) bool { return strings.Contains(name,databaseMarker) && strings.HasSuffix(name,".dump") }
+		match = func(name string) bool { return strings.Contains(name,databaseMarker) && (strings.HasSuffix(name,".dump") || strings.HasSuffix(name,".sql")) }
 	default:
 		return nil, fmt.Errorf("specify exactly one valid site or database server")
 	}
