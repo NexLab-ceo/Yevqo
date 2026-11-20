@@ -71,6 +71,7 @@ type DatabaseServerInstallResult struct {
 
 type CreateDatabase struct {
 	Engine string `json:"engine,omitempty"`
+	DataDirectory string `json:"data_directory,omitempty"`
 	DatabaseID int64 `json:"database_id"`
 	ServerID int64 `json:"server_id"`
 	Database string `json:"database"`
@@ -81,6 +82,7 @@ type CreateDatabase struct {
 
 type ListDatabaseRoles struct {
 	Engine string `json:"engine,omitempty"`
+	DataDirectory string `json:"data_directory,omitempty"`
 	ServerID int64 `json:"server_id"`
 	Port uint32 `json:"port"`
 }
@@ -99,11 +101,13 @@ type DatabaseRolesResult struct {
 	Roles []DatabaseRole `json:"roles"`
 }
 
-type GetDatabaseStats struct { Engine string `json:"engine,omitempty"`; ServerID int64 `json:"server_id"`; Port uint32 `json:"port"`; Database string `json:"database"` }
+type GetDatabaseStats struct { Engine string `json:"engine,omitempty"`
+	DataDirectory string `json:"data_directory,omitempty"`; ServerID int64 `json:"server_id"`; Port uint32 `json:"port"`; Database string `json:"database"` }
 type DatabaseStats struct { SizeBytes int64 `json:"size_bytes"`; ActiveConnections int `json:"active_connections"`; MaxConnections int `json:"max_connections"`; TransactionsCommitted int64 `json:"transactions_committed"`; TransactionsRolledBack int64 `json:"transactions_rolled_back"`; Deadlocks int64 `json:"deadlocks"`; CapturedAt time.Time `json:"captured_at"` }
 
 type ManageDatabasePrivilege struct {
  Engine string `json:"engine,omitempty"`
+	DataDirectory string `json:"data_directory,omitempty"`
  ServerID int64 `json:"server_id"`
  Port uint32 `json:"port"`
  Database string `json:"database"`
@@ -116,6 +120,7 @@ type ManageDatabasePrivilege struct {
 
 type ManageDatabaseRole struct {
 	Engine string `json:"engine,omitempty"`
+	DataDirectory string `json:"data_directory,omitempty"`
 	ServerID int64 `json:"server_id"`
 	Port uint32 `json:"port"`
 	Name string `json:"name"`
@@ -160,6 +165,7 @@ type CreateSiteBackup struct { SiteId string }
 
 type CreateDatabaseBackup struct {
 	Engine string `json:"engine,omitempty"`
+	DataDirectory string `json:"data_directory,omitempty"`
 	DatabaseID int64 `json:"database_id"`
 	ServerID int64 `json:"server_id"`
 	Database string `json:"database"`
@@ -168,6 +174,7 @@ type CreateDatabaseBackup struct {
 
 type TestDatabaseConnection struct {
 	Engine string `json:"engine,omitempty"`
+	DataDirectory string `json:"data_directory,omitempty"`
 	DatabaseID int64 `json:"database_id"`
 	Database string `json:"database"`
 	Username string `json:"username"`
