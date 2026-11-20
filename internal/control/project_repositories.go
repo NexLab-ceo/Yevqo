@@ -145,7 +145,10 @@ func (s *Server) handleProjectRepository(w http.ResponseWriter, r *http.Request)
 		owner, name, fullName, err := parseGitHubRepositoryName(in.FullName)
 		if err != nil { apiError(w,shared.ErrBadRequest(err.Error())); return }
 		ctx,cancel := context.WithTimeout(r.Context(),20*time.Second); defer cancel()
-		token, err := s.githubAppTokenForIntegration(ctx,u.ID,in.IntegrationID,owner)
+		var integrationOwnerID int64
+		if err:=s.db.conn.QueryRowContext(ctx,`SELECT user_id FROM integrations WHERE id=? AND provider='github_app'`,in.IntegrationID).Scan(&integrationOwnerID);err!=nil{apiError(w,shared.ErrNotFound("GitHub App installation not found"));return}
+		if integrationOwnerID!=u.ID{var linkedIntegrationID int64;if err:=s.db.conn.QueryRowContext(ctx,`SELECT integration_id FROM project_repositories WHERE project_id=?`,projectID).Scan(&linkedIntegrationID);err!=nil||linkedIntegrationID!=in.IntegrationID{apiError(w,shared.ErrForbidden("you can only reuse the GitHub App installation already linked to this project"));return}}
+		token, err := s.githubAppTokenForIntegration(ctx,integrationOwnerID,in.IntegrationID,owner)
 		if err != nil { apiError(w,shared.ErrForbidden("GitHub App installation cannot access this repository")); return }
 		repository, err := s.fetchGitHubRepository(ctx,token,owner,name)
 		if err != nil { apiError(w,shared.ErrBadRequest("GitHub repository could not be verified with this installation")); return }
