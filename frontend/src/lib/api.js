@@ -325,3 +325,5 @@ export async function getProjectDeploymentRun(projectId, runId) { return request
 export async function deployProjectSite(projectId, deviceId, siteId, branch, commitSha = '', allowProjectCode = false) { return request('POST', `/api/projects/${projectId}/deployments`, { device_id: Number(deviceId), site_id: siteId, branch, commit_sha: commitSha, allow_project_code: allowProjectCode }); }
 export async function cancelProjectDeployment(projectId, runId) { return request('POST', `/api/projects/${projectId}/deployments/${runId}/cancel`, {}); }
 export async function redeployProjectDeployment(projectId, runId) { return request('POST', `/api/projects/${projectId}/deployments/${runId}/redeploy`, {}); }
+
+export async function rollbackProjectDeployment(projectId, runId) { return request('POST', `/api/projects/${projectId}/deployments/${runId}/rollback`, {}); }
