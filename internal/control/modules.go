@@ -414,12 +414,15 @@ func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Reques
 	result,err:=conn.SendCommand(ctx,action+"_database_server",&shared.DatabaseServerAction{ServerID:id,Port:uint32(port),DataDirectory:dataDir})
 	if err!=nil||!result.Ok {
 		if previous=="ready"||previous=="stopped" { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=? AND status IN ('starting','stopping')`,previous,id,ownerID) }
+		message:="Agent PostgreSQL lifecycle command failed";if err!=nil{message=err.Error()}else if result!=nil&&result.Message!=""{message=result.Message}
+		s.notifyWorkspaceEvent(r.Context(),ownerID,u.ID,"error","Database server "+action+" failed",message)
 		if err!=nil { apiError(w,shared.ErrInternal("Agent PostgreSQL lifecycle command failed"));return }
 		apiError(w,shared.ErrBadRequest(result.Message));return
 	}
 	target:="ready";if action=="stop" { target="stopped" }
 	if _,err:=s.db.conn.ExecContext(r.Context(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=?`,target,id,ownerID);err!=nil { apiError(w,shared.ErrInternal("PostgreSQL action succeeded but server status could not be saved"));return }
 	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_"+action,Details:map[string]interface{}{"server_id":id}})
+	s.notifyWorkspaceEvent(r.Context(),ownerID,u.ID,"success","Database server "+action+" completed","PostgreSQL server "+action+" completed successfully.")
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"status":target,"message":"PostgreSQL server "+action+" completed"})
 }
 
