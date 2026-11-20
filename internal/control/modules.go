@@ -108,10 +108,10 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 			if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not detach site"));return }
 			n,_:=res.RowsAffected();if n==0 { _=tx.Rollback();apiError(w,shared.ErrNotFound("project site attachment not found"));return }
 			var remaining int
-			if err:=tx.QueryRowContext(r.Context(),`SELECT (SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=?)+(SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.device_id=?)`,id,in.DeviceID,id,in.DeviceID).Scan(&remaining);err==nil&&remaining==0 {
-				_,err=tx.ExecContext(r.Context(),`DELETE FROM project_devices WHERE project_id=? AND device_id=?`,id,in.DeviceID)
+			if refErr:=tx.QueryRowContext(r.Context(),`SELECT (SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=?)+(SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.device_id=?)`,id,in.DeviceID,id,in.DeviceID).Scan(&remaining);refErr!=nil {
+				_=tx.Rollback();apiError(w,shared.ErrInternal("could not inspect project device references"));return
 			}
-			if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not update project device attachment"));return }
+			if remaining==0 { if _,err=tx.ExecContext(r.Context(),`DELETE FROM project_devices WHERE project_id=? AND device_id=?`,id,in.DeviceID);err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not update project device attachment"));return } }
 		case "databases":
 			if in.ServerID<1 { _=tx.Rollback();apiError(w,shared.ErrBadRequest("server_id is required"));return }
 			var deviceID int64
