@@ -73,6 +73,7 @@ type DatabaseServerInstallResult struct {
 
 type CreateDatabase struct {
 	Engine string `json:"engine,omitempty"`
+	SSLMode string `json:"ssl_mode,omitempty"`
 	DataDirectory string `json:"data_directory,omitempty"`
 	DatabaseID int64 `json:"database_id"`
 	ServerID int64 `json:"server_id"`
@@ -122,6 +123,7 @@ type ManageDatabasePrivilege struct {
 
 type ManageDatabaseRole struct {
 	Engine string `json:"engine,omitempty"`
+	SSLMode string `json:"ssl_mode,omitempty"`
 	DataDirectory string `json:"data_directory,omitempty"`
 	ServerID int64 `json:"server_id"`
 	Port uint32 `json:"port"`
