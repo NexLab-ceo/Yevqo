@@ -1,7 +1,7 @@
 <script>
  import { onMount } from 'svelte';
  import { page } from '$app/stores';
- import { getReports, listLogs } from '$lib/api.js';
+ import { getReports, listAuditLogs } from '$lib/api.js';
  import { notify } from '$lib/stores.js';
  import Button from '$lib/components/Button.svelte';
 
@@ -17,15 +17,15 @@
    const timestamp = new Date(entry.created_at).getTime();
    return Number.isFinite(timestamp) && timestamp >= cutoff;
  });
- $: failedEvents = periodLogs.filter((entry) => entry.details?.ok === false);
+ $: failedEvents = periodLogs.filter((entry) => entry.outcome === 'failure');
  $: sensitiveEvents = periodLogs.filter((entry) => /login|auth|password|credential|permission|role|delete|block|restore|database|device|tunnel|backup/i.test(entry.action || ''));
 
  async function load() {
    loading = true;
-   const projectId = $page.url.searchParams.get('project_id') || ''; const [summary, audit] = await Promise.all([getReports(projectId), listLogs(200, projectId)]);
+   const projectId = $page.url.searchParams.get('project_id') || ''; const [summary, audit] = await Promise.all([getReports(projectId), listAuditLogs(200, projectId)]);
    if (summary.ok) report = summary.data?.report || null;
    else notify(summary.error || 'Не удалось загрузить сводку', 'error');
-   if (audit.ok) logs = audit.data?.logs || [];
+   if (audit.ok) logs = audit.data?.audit_logs || [];
    else notify(audit.error || 'Не удалось загрузить журнал аудита', 'error');
    loading = false;
  }
@@ -70,7 +70,7 @@
  <div class="empty">Собираем данные отчёта…</div>
 {:else}
  <article class="report-document">
-  <header class="document-header"><div><div class="eyebrow">VELTRIX DOCK · REPORT</div><h2>{reportType === 'security' ? 'Security Report' : 'Infrastructure Summary'}</h2><p>Период: последние {periodDays} дней · Область: {scope === 'all' ? 'All projects' : scope}</p></div><div class="brand-mark">V</div></header>
+  <header class="document-header"><div><div class="eyebrow">VELTRIX DOCK · REPORT</div><h2>{reportType === 'security' ? 'Security Report' : 'Infrastructure Summary'}</h2><p>Период: последние {periodDays} дней · Область: {$page.url.searchParams.get('project_id') ? 'Selected project' : 'All projects'}</p></div><div class="brand-mark">V</div></header>
   <div class="document-meta"><span>Сформировано: {new Date().toLocaleString()}</span><span>Источники: Control Plane · Audit Log</span></div>
   {#if reportType === 'security'}
    <div class="metrics">
@@ -82,7 +82,7 @@
     {#if periodLogs.length}
      <div class="table-wrap"><table><thead><tr><th>Время</th><th>Действие</th><th>Устройство</th><th>Результат</th></tr></thead><tbody>
       {#each periodLogs as entry}
-       <tr><td>{new Date(entry.created_at).toLocaleString()}</td><td>{(entry.action || 'event').replaceAll('_',' ')}</td><td>{entry.device || '—'}</td><td>{entry.details?.ok === false ? 'Failed' : 'Recorded'}</td></tr>
+       <tr><td>{new Date(entry.created_at).toLocaleString()}</td><td>{(entry.action || 'event').replaceAll('_',' ')}</td><td>{entry.device || '—'}</td><td>{entry.outcome === 'failure' ? 'Failed' : 'Recorded'}</td></tr>
       {/each}
      </tbody></table></div>
     {:else}<p class="muted">За выбранный период в доступном журнале нет событий.</p>{/if}
