@@ -217,5 +217,56 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 		}
 		return
 	}
+	if len(parts) == 4 && parts[3] == "databases" {
+		environmentID, parseErr := strconv.ParseInt(parts[2], 10, 64)
+		if parseErr != nil || environmentID < 1 { apiError(w, shared.ErrBadRequest("invalid environment id")); return }
+		var protected bool
+		if err := s.db.conn.QueryRowContext(r.Context(), "SELECT is_protected FROM project_environments WHERE id=? AND project_id=?", environmentID, projectID).Scan(&protected); err != nil {
+			apiError(w, shared.ErrNotFound("environment not found")); return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			rows, err := s.db.conn.QueryContext(r.Context(), `SELECT ds.id,ds.device_id,ds.name,ds.engine,ds.status
+				FROM project_environment_database_servers eds
+				JOIN database_servers ds ON ds.id=eds.database_server_id
+				WHERE eds.project_id=? AND eds.environment_id=? AND ds.user_id=?
+				ORDER BY ds.name`, projectID, environmentID, ownerID)
+			if err != nil { apiError(w, shared.ErrInternal("could not load environment database servers")); return }
+			defer rows.Close()
+			items := make([]map[string]interface{}, 0)
+			for rows.Next() {
+				var serverID, deviceID int64
+				var name, engine, status string
+				if err := rows.Scan(&serverID,&deviceID,&name,&engine,&status); err != nil { apiError(w, shared.ErrInternal("could not read environment database servers")); return }
+				items = append(items, map[string]interface{}{"id":serverID,"device_id":deviceID,"name":name,"engine":engine,"status":status})
+			}
+			if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read environment database servers")); return }
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"database_servers":items})
+		case http.MethodPost:
+			var in struct { ServerID int64 `json:"server_id"` }
+			if err := decodeJSON(r, &in); err != nil || in.ServerID < 1 { apiError(w, shared.ErrBadRequest("invalid database server reference")); return }
+			var linked int
+			if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND pds.database_server_id=? AND ds.user_id=?`, projectID, in.ServerID, ownerID).Scan(&linked); err != nil || linked != 1 {
+				apiError(w, shared.ErrNotFound("database server is not assigned to this project")); return
+			}
+			if _, err := s.db.conn.ExecContext(r.Context(), `INSERT IGNORE INTO project_environment_database_servers(project_id,environment_id,database_server_id) VALUES(?,?,?)`, projectID, environmentID, in.ServerID); err != nil {
+				apiError(w, shared.ErrInternal("could not assign database server to environment")); return
+			}
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true})
+		case http.MethodDelete:
+			if protected { apiError(w, shared.ErrBadRequest("Production database assignments are protected")); return }
+			var in struct { ServerID int64 `json:"server_id"` }
+			if err := decodeJSON(r, &in); err != nil || in.ServerID < 1 { apiError(w, shared.ErrBadRequest("invalid database server reference")); return }
+			res, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM project_environment_database_servers WHERE project_id=? AND environment_id=? AND database_server_id=?`, projectID, environmentID, in.ServerID)
+			if err != nil { apiError(w, shared.ErrInternal("could not remove database server from environment")); return }
+			deleted, err := res.RowsAffected()
+			if err != nil { apiError(w, shared.ErrInternal("could not verify database assignment removal")); return }
+			if deleted == 0 { apiError(w, shared.ErrNotFound("database server assignment not found")); return }
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+		return
+	}
 	http.NotFound(w, r)
 }
