@@ -138,7 +138,7 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 			}
 			credentials := githubAppCredentials{AppID:appID,InstallationID:strings.TrimSpace(in.InstallationID),PrivateKey:privateKey}
 			if appID == "" || strings.TrimSpace(privateKey) == "" {
-				apiError(w, shared.ErrUnavailable("GitHub App is not configured on this Control Plane. Set YEVQO_GITHUB_APP_ID and YEVQO_GITHUB_APP_PRIVATE_KEY on the server."))
+				writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{"ok":false,"error":"GitHub App is not configured on this Control Plane. Set YEVQO_GITHUB_APP_ID and YEVQO_GITHUB_APP_PRIVATE_KEY on the server."})
 				return
 			}
 			if err := validateGitHubAppCredentials(credentials); err != nil { apiError(w,shared.ErrBadRequest(err.Error())); return }
