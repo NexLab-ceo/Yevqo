@@ -551,13 +551,13 @@ func (s *Server) handleSettings(w http.ResponseWriter,r *http.Request) {
   if _,ok:=settings["mode"];!ok{settings["mode"]="simple"};if _,ok:=settings["locale"];!ok{settings["locale"]="ru"};if _,ok:=settings["theme"];!ok{settings["theme"]="dark"}
   if _,ok:=settings["workspace_name"];!ok{settings["workspace_name"]="Personal workspace"}
   if _,ok:=settings["timezone"];!ok{settings["timezone"]="UTC"}
-  if _,ok:=settings["date_format"];!ok{settings["date_format"]="locale"}
+  if _,ok:=settings["date_format"];!ok{settings["date_format"]="locale"}\n\t\tif _,ok:=settings["compact_mode"];!ok{settings["compact_mode"]=false}
   if _,ok:=settings["notifications"];!ok{settings["notifications"]=map[string]bool{"system":true,"deployment_errors":true,"device_events":true,"project_updates":true}}
   writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"settings":settings});return
  }
  if r.Method==http.MethodPut{
   var in map[string]json.RawMessage;if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
-  allowed:=map[string]bool{"mode":true,"locale":true,"theme":true,"notifications":true,"workspace_name":true,"timezone":true,"date_format":true}
+  allowed:=map[string]bool{"mode":true,"locale":true,"theme":true,"notifications":true,"workspace_name":true,"timezone":true,"date_format":true,"compact_mode":true}
   for key,raw:=range in{if !allowed[key]{apiError(w,shared.ErrBadRequest("unsupported setting: "+key));return}
    switch key{
    case "mode": var v string;if json.Unmarshal(raw,&v)!=nil||(v!="simple"&&v!="advanced"){apiError(w,shared.ErrBadRequest("mode must be simple or advanced"));return}
@@ -565,7 +565,7 @@ func (s *Server) handleSettings(w http.ResponseWriter,r *http.Request) {
    case "theme": var v string;if json.Unmarshal(raw,&v)!=nil||(v!="dark"&&v!="light"&&v!="system"){apiError(w,shared.ErrBadRequest("theme must be dark, light or system"));return}
    case "workspace_name": var v string;if json.Unmarshal(raw,&v)!=nil||len(strings.TrimSpace(v))<2||len(v)>80{apiError(w,shared.ErrBadRequest("workspace name must contain 2–80 characters"));return}
    case "timezone": var v string;if json.Unmarshal(raw,&v)!=nil||len(v)>64{apiError(w,shared.ErrBadRequest("invalid timezone"));return};if _,err:=time.LoadLocation(v);err!=nil{apiError(w,shared.ErrBadRequest("timezone must be a valid IANA location"));return}
-   case "date_format": var v string;if json.Unmarshal(raw,&v)!=nil||(v!="locale"&&v!="iso"){apiError(w,shared.ErrBadRequest("date format must be locale or iso"));return}
+   case "date_format": var v string;if json.Unmarshal(raw,&v)!=nil||(v!="locale"&&v!="iso"){apiError(w,shared.ErrBadRequest("date format must be locale or iso"));return}\n\t\t\tcase "compact_mode": var v bool;if json.Unmarshal(raw,&v)!=nil{apiError(w,shared.ErrBadRequest("compact mode must be a boolean"));return}
    case "notifications": var v map[string]bool;if json.Unmarshal(raw,&v)!=nil||len(v)>16{apiError(w,shared.ErrBadRequest("notifications must be an object of boolean preferences"));return};for k:=range v{if k!="system"&&k!="deployment_errors"&&k!="device_events"&&k!="project_updates"{apiError(w,shared.ErrBadRequest("unsupported notification preference"));return}}
    }
    _,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO user_settings(user_id,setting_key,setting_value) VALUES(?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)`,u.ID,key,[]byte(raw));if err!=nil{apiError(w,shared.ErrInternal("could not save settings"));return}
