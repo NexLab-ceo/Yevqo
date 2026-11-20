@@ -212,12 +212,14 @@ func (s *Server) handleProjectRepositoryPulls(w http.ResponseWriter,r *http.Requ
 	owner,name,_,_:=parseGitHubRepositoryName(fullName)
 	state:=r.URL.Query().Get("state");if state!="closed"&&state!="all"{state="open"}
 	type pullItem struct{Number int `json:"number"`;Title string `json:"title"`;State string `json:"state"`;HTMLURL string `json:"html_url"`;Draft bool `json:"draft"`;CreatedAt time.Time `json:"created_at"`;UpdatedAt time.Time `json:"updated_at"`;Head struct{Ref string `json:"ref"`;SHA string `json:"sha"`} `json:"head"`;Base struct{Ref string `json:"ref"`} `json:"base"`;User struct{Login string `json:"login"`} `json:"user"`}
+	requestedPage:=0;if raw:=r.URL.Query().Get("page");raw!=""{if n,e:=strconv.Atoi(raw);e==nil&&n>0&&n<=100{requestedPage=n}}
+	startPage,endPage:=1,10;if requestedPage>0{startPage,endPage=requestedPage,requestedPage}
 	all:=make([]pullItem,0);nextPage:=0
-	for page:=1;page<=10;page++{
+	for page:=startPage;page<=endPage;page++{
 		var items []pullItem
 		endpoint:=fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls?state=%s&per_page=100&page=%d",url.PathEscape(owner),url.PathEscape(name),url.QueryEscape(state),page)
 		if err:=githubAPIGet(ctx,token,endpoint,&items);err!=nil{writeJSON(w,http.StatusBadGateway,map[string]interface{}{"ok":false,"error":"GitHub pull requests are unavailable; enable Pull requests read permission for the App"});return}
-		all=append(all,items...);if len(items)<100{break};if page==10{nextPage=11}
+		all=append(all,items...);if len(items)<100{break};if page==endPage{nextPage=page+1}
 	}
 	out:=make([]map[string]interface{},0,len(all));for _,p:=range all{out=append(out,map[string]interface{}{"number":p.Number,"title":p.Title,"state":p.State,"url":p.HTMLURL,"draft":p.Draft,"created_at":p.CreatedAt,"updated_at":p.UpdatedAt,"head_branch":p.Head.Ref,"head_sha":p.Head.SHA,"base_branch":p.Base.Ref,"author":p.User.Login})}
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"pull_requests":out,"next_page":nextPage,"total_loaded":len(out)})
