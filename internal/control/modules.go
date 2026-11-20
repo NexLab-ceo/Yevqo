@@ -906,8 +906,8 @@ func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Reque
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database backup not found"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load database backup"));return }
 	if resourceType!="database"||backupStatus!="verified"||!backupServerID.Valid { apiError(w,shared.ErrBadRequest("only verified database backups can be restored"));return }
-	var engine,serverStatus,dataDir string;var port int
-	err=s.db.conn.QueryRowContext(r.Context(),`SELECT engine,status,port,data_directory FROM database_servers WHERE id=? AND user_id=? AND device_id=?`,backupServerID.Int64,ownerID,deviceID).Scan(&engine,&serverStatus,&port,&dataDir)
+	var engine,serverStatus,dataDir,sslMode string;var port int
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT engine,status,port,data_directory,ssl_mode FROM database_servers WHERE id=? AND user_id=? AND device_id=?`,backupServerID.Int64,ownerID,deviceID).Scan(&engine,&serverStatus,&port,&dataDir,&sslMode)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("source Database Server is no longer available"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load restore target server"));return }
 	if (engine!="postgresql"&&engine!="mariadb"&&engine!="mysql")||serverStatus!="ready" { apiError(w,shared.ErrBadRequest("restore requires the original database server to be ready"));return }
@@ -938,7 +938,7 @@ func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Reque
 	jobRes,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO database_restore_jobs(user_id,backup_id,target_database_id,status) VALUES(?,?,?,'queued')`,ownerID,in.BackupID,targetID)
 	if err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`DELETE FROM db_instances WHERE id=? AND user_id=?`,targetID,ownerID);apiError(w,shared.ErrInternal("could not queue restore job"));return }
 	jobID,_:=jobRes.LastInsertId()
-	req:=&shared.RestoreDatabaseBackup{BackupServerID:backupServerID.Int64,BackupFileName:fileName,Database:shared.CreateDatabase{Engine:engine,DataDirectory:dataDir,DatabaseID:targetID,ServerID:backupServerID.Int64,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)}}
+	req:=&shared.RestoreDatabaseBackup{BackupServerID:backupServerID.Int64,BackupFileName:fileName,Database:shared.CreateDatabase{Engine:engine,SSLMode:sslMode,DataDirectory:dataDir,DatabaseID:targetID,ServerID:backupServerID.Int64,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)}}
 	go s.runDatabaseRestore(jobID,in.BackupID,targetID,ownerID,u.ID,deviceID,in.ProjectID,in.EnvironmentID,conn,req,in.SiteID,nonce,ciphertext)
 	writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"job_id":jobID,"database":map[string]interface{}{"id":targetID,"name":in.Name,"status":"planned"},"status":"queued","message":"Backup will be restored into a new database; the source database and backup remain untouched."})
 }
