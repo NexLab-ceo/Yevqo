@@ -175,7 +175,7 @@ func manageMariaDBRole(req shared.ManageDatabaseRole, action string) error {
 	if req.ServerID < 1 || req.Port < 1024 || req.Port > 65535 || !mariaIdentifier.MatchString(req.Name) || req.Name == "root" { return fmt.Errorf("invalid MariaDB user request") }
 	if action != "create" && action != "drop" && action != "password" { return fmt.Errorf("unsupported MariaDB user action") }
 	if (action == "create" || action == "password") && (len(req.Password) < 12 || len(req.Password) > 256) { return fmt.Errorf("user password must be 12–256 characters") }
-	prefix := os.Getenv("PREFIX"); dataDir, err := mariaDataDirectory(prefix, req.ServerID, req.DataDirectory); if err != nil { return nil, err }
+	prefix := os.Getenv("PREFIX"); dataDir, err := mariaDataDirectory(prefix, req.ServerID, req.DataDirectory); if err != nil { return err }
 	userHost := mariaQuoteIdentifier(req.Name) + "@'127.0.0.1'"
 	query := ""
 	switch action { case "create": query = "CREATE USER " + userHost + " IDENTIFIED BY " + mariaSQLLiteral(req.Password)
