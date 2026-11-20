@@ -22,25 +22,9 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	action := "environment.read"
-	if r.Method != http.MethodGet {
-		action = "project.manage"
-	}
-	if err := s.authorizeProjectAction(r.Context(), projectID, u.ID, action); err != nil {
-		if err == sql.ErrNoRows {
-			apiError(w, shared.ErrNotFound("project not found"))
-		} else if strings.Contains(err.Error(), "permission denied") {
-			apiError(w, shared.ErrForbidden("workspace permission denied"))
-		} else {
-			apiError(w, shared.ErrInternal("could not verify project permissions"))
-		}
-		return
-	}
-
-	var ownerID int64
-	if err := s.db.conn.QueryRowContext(r.Context(), "SELECT user_id FROM projects WHERE id=?", projectID).Scan(&ownerID); err != nil {
-		apiError(w, shared.ErrNotFound("project not found"))
-		return
-	}
+	if r.Method != http.MethodGet { action = "project.manage" }
+	ownerID, accessErr := s.authorizeProjectOwner(r.Context(), projectID, u.ID, action)
+	if accessErr != nil { apiError(w, accessErr); return }
 
 	if len(parts) == 2 {
 		switch r.Method {
