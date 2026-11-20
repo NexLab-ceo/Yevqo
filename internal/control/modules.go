@@ -109,6 +109,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 		switch parts[1] {
 		case "sites":
 			if in.DeviceID<1||len(in.SiteID)<1||len(in.SiteID)>64 { _=tx.Rollback();apiError(w,shared.ErrBadRequest("device_id and site_id are required"));return }
+			if _,err:=tx.ExecContext(r.Context(),`DELETE FROM project_environment_sites WHERE project_id=? AND device_id=? AND site_id=?`,id,in.DeviceID,in.SiteID);err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not remove environment site assignments"));return}
 			res,err:=tx.ExecContext(r.Context(),`DELETE FROM project_sites WHERE project_id=? AND device_id=? AND site_id=?`,id,in.DeviceID,in.SiteID)
 			if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not detach site"));return }
 			n,_:=res.RowsAffected();if n==0 { _=tx.Rollback();apiError(w,shared.ErrNotFound("project site attachment not found"));return }
@@ -121,6 +122,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 			if in.ServerID<1 { _=tx.Rollback();apiError(w,shared.ErrBadRequest("server_id is required"));return }
 			var deviceID int64
 			if err:=tx.QueryRowContext(r.Context(),`SELECT device_id FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,ownerID).Scan(&deviceID);err!=nil { _=tx.Rollback();apiError(w,shared.ErrNotFound("database server not found"));return }
+			if _,err:=tx.ExecContext(r.Context(),`DELETE FROM project_environment_database_servers WHERE project_id=? AND database_server_id=?`,id,in.ServerID);err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not remove environment database assignments"));return}
 			res,err:=tx.ExecContext(r.Context(),`DELETE FROM project_database_servers WHERE project_id=? AND database_server_id=?`,id,in.ServerID)
 			if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not detach database server"));return }
 			n,_:=res.RowsAffected();if n==0 { _=tx.Rollback();apiError(w,shared.ErrNotFound("project database attachment not found"));return }
