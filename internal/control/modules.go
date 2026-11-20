@@ -186,7 +186,7 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 
 func (s *Server) handleInstallDatabaseServer(w http.ResponseWriter,r *http.Request,id int64) {
 	u:=UserFromContext(r.Context())
-	ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,ownerID,"database.manage");if accessErr!=nil{apiError(w,accessErr);return}
+	ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,u.ID,"database.manage");if accessErr!=nil{apiError(w,accessErr);return}
 	var deviceID int64;var engine,dataDir,status,bind,sslMode string;var port,maxConnections int;var remote bool
 	err:=s.db.conn.QueryRowContext(r.Context(),"SELECT device_id,engine,data_directory,status,port,max_connections,bind_address,remote_access,ssl_mode FROM database_servers WHERE id=? AND user_id=?",id,ownerID).Scan(&deviceID,&engine,&dataDir,&status,&port,&maxConnections,&bind,&remote,&sslMode)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database server not found"));return};if err!=nil{apiError(w,shared.ErrInternal("could not load database server"));return}
@@ -227,7 +227,7 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 	u:=UserFromContext(r.Context());raw:=strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/databases/servers/"),"/")
 	parts:=strings.Split(raw,"/")
 	id,err:=strconv.ParseInt(parts[0],10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid server id"));return}
-	action:="database.manage";if r.Method==http.MethodGet{action="database.read"};ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,ownerID,action);if accessErr!=nil{apiError(w,accessErr);return}
+	action:="database.manage";if r.Method==http.MethodGet{action="database.read"};ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,u.ID,action);if accessErr!=nil{apiError(w,accessErr);return}
 	if len(parts)==2&&parts[1]=="roles"&&r.Method==http.MethodGet {
 		var deviceID int64;var engine,status string;var port int
 		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&port)
@@ -263,7 +263,7 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 
 func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Request,id int64,action string) {
 	u:=UserFromContext(r.Context())
-	ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,ownerID,"database.manage");if accessErr!=nil{apiError(w,accessErr);return}
+	ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,u.ID,"database.manage");if accessErr!=nil{apiError(w,accessErr);return}
 	var deviceID int64;var engine,status,dataDir string;var port int
 	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,data_directory,port FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&dataDir,&port)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
