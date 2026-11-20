@@ -148,6 +148,20 @@ func (c *Client) connect(ctx context.Context) error {
 	c.ws = ws
 	c.mu.Unlock()
 
+	// A failed handshake must not leave a socket behind while Run retries.
+	authenticated := false
+	defer func() {
+		if authenticated {
+			return
+		}
+		_ = ws.Close()
+		c.mu.Lock()
+		if c.ws == ws {
+			c.ws = nil
+		}
+		c.mu.Unlock()
+	}()
+
 	ws.SetReadLimit(MaxMessageSize)
 	_ = ws.SetReadDeadline(time.Now().Add(PongWait))
 	ws.SetPongHandler(func(string) error {
@@ -206,6 +220,7 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("auth rejected: %s", respEnv.AuthResp.Message)
 	}
 
+	authenticated = true
 	log.Printf("authenticated as user %d", respEnv.AuthResp.UserId)
 	return nil
 }
