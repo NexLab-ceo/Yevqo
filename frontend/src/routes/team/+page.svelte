@@ -1,6 +1,5 @@
 <script>
  import { onMount } from 'svelte';
- import { user } from '$lib/stores.js';
  import { listWorkspaces, listWorkspaceMembers, inviteWorkspaceMember, removeWorkspaceMember, listWorkspaceInvitations, acceptWorkspaceInvitation } from '$lib/api.js';
  import { notify } from '$lib/stores.js';
  import Button from '$lib/components/Button.svelte';
