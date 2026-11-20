@@ -25,7 +25,7 @@ func (s *Server) handleWorkspaces(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT username,email FROM users WHERE id=?`, ownerID).Scan(&username,&email); err != nil {
 			apiError(w, shared.ErrInternal("could not load workspace owner")); return
 		}
-		out = append(out, map[string]interface{}{"owner_user_id":ownerID,"owner_username":username,"owner_email":email,"role":role,"can_manage_members":CanWorkspaceAction(role,"workspace.manage")})
+		out = append(out, map[string]interface{}{"owner_user_id":ownerID,"owner_username":username,"owner_email":email,"role":strings.Title(strings.ToLower(role)),"can_manage_members":CanWorkspaceAction(role,"workspace.manage")})
 	}
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"workspaces":out})
 }
