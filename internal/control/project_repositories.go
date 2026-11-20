@@ -179,7 +179,7 @@ func (s *Server) handleProjectRepository(w http.ResponseWriter, r *http.Request)
 func (s *Server) projectRepositoryToken(ctx context.Context,userID,projectID int64)(string,string,string,string,error){
 	var integrationID int64
 	var fullName,cloneURL,branch,account string;var ownerID int64
-	if err:=s.db.conn.QueryRowContext(ctx,`SELECT pr.integration_id,pr.full_name,pr.clone_url,pr.deploy_branch,i.account_name,p.user_id FROM project_repositories pr JOIN projects p ON p.id=pr.project_id JOIN integrations i ON i.id=pr.integration_id WHERE pr.project_id=? AND p.user_id=? AND i.user_id=p.user_id AND i.provider='github_app'`,projectID,userID).Scan(&integrationID,&fullName,&cloneURL,&branch,&account,&ownerID);err!=nil{return "","","","",err}
+	if err:=s.db.conn.QueryRowContext(ctx,`SELECT pr.integration_id,pr.full_name,pr.clone_url,pr.deploy_branch,i.account_name,i.user_id FROM project_repositories pr JOIN integrations i ON i.id=pr.integration_id WHERE pr.project_id=? AND i.provider='github_app'`,projectID).Scan(&integrationID,&fullName,&cloneURL,&branch,&account,&ownerID);err!=nil{return "","","","",err}
 	owner,_,_,err:=parseGitHubRepositoryName(fullName);if err!=nil{return "","","","",err}
 	token,err:=s.githubAppTokenForIntegration(ctx,ownerID,integrationID,owner)
 	return token,fullName,cloneURL,branch,err
