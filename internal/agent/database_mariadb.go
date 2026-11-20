@@ -42,7 +42,7 @@ func mariaDataDirectory(prefix string, serverID int64, configured string) (strin
 }
 func mariaAdminArgs(dataDir string) []string {
 	current, _ := user.Current()
-	name := "root"; if current != nil && current.Username != "" { name = current.Username }
+	name := "root"
 	return []string{"--protocol=SOCKET", "--socket=" + mariaSocket(dataDir), "-u", name}
 }
 func runMariaSQL(ctx context.Context, dataDir, database, sqlText string) error {
@@ -120,7 +120,7 @@ func startMariaDB(dataDir string, port uint32, maxConnections uint32) error {
 	if err := os.MkdirAll(filepath.Join(dataDir, "run"), 0o700); err != nil { return err }
 	logPath := filepath.Join(dataDir, "mariadb.log")
 	args := []string{"--datadir=" + dataDir, "--socket=" + mariaSocket(dataDir), "--pid-file=" + filepath.Join(dataDir, "run", "mariadb.pid"), "--port=" + strconv.Itoa(int(port)), "--bind-address=127.0.0.1", "--max-connections=" + strconv.Itoa(int(maxConnections)), "--log-error=" + logPath, "--skip-name-resolve"}
-	cmd := exec.Command(safe, args...); cmd.Stdout = io.Discard; cmd.Stderr = io.Discard
+	if _, err := os.Stat(mariaSocket(dataDir)); err == nil { if waitMariaDB(dataDir, 3*time.Second) == nil { return nil } }\n\tcmd := exec.Command(safe, args...); cmd.Stdout = io.Discard; cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil { return fmt.Errorf("could not start MariaDB: %w", err) }
 	return waitMariaDB(dataDir, 45*time.Second)
 }
@@ -142,7 +142,7 @@ func manageMariaDBServer(req shared.DatabaseServerAction, action string) error {
 	prefix := os.Getenv("PREFIX"); if prefix == "" { return fmt.Errorf("Termux PREFIX is not set") }
 	dataDir, err := resolveTermuxPath(prefix, req.DataDirectory); if err != nil { return err }
 	info, err := os.Lstat(dataDir); if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() { return fmt.Errorf("MariaDB data directory is unavailable or unsafe") }
-	if action == "start" { return startMariaDB(dataDir, req.Port, 100) }
+	if action == "start" { max := req.MaxConnections; if max < 1 { max = 100 }; return startMariaDB(dataDir, req.Port, max) }
 	admin, err := exec.LookPath("mariadb-admin"); if err != nil { admin, err = exec.LookPath("mysqladmin") }; if err != nil { return fmt.Errorf("mariadb-admin is not installed") }
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second); defer cancel()
 	out, err := exec.CommandContext(ctx, admin, append(mariaAdminArgs(dataDir), "shutdown")...).CombinedOutput()
@@ -165,7 +165,7 @@ func testMariaDBConnection(req shared.TestDatabaseConnection) error {
 	if req.DatabaseID < 1 || !mariaIdentifier.MatchString(req.Database) || !mariaIdentifier.MatchString(req.Username) || req.Port < 1024 || req.Port > 65535 || len(req.Password) < 12 || len(req.Password) > 256 { return fmt.Errorf("invalid MariaDB connection request") }
 	cli, err := mariaCLI(); if err != nil { return err }
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second); defer cancel()
-	cmd := exec.CommandContext(ctx, cli, "--protocol=TCP", "-h", "127.0.0.1", "-P", fmt.Sprint(req.Port), "-u", req.Username, "-p"+req.Password, req.Database, "-Nse", "SELECT 1")
+	cmd := exec.CommandContext(ctx, cli, "--protocol=TCP", "-h", "127.0.0.1", "-P", fmt.Sprint(req.Port), "-u", req.Username, req.Database, "-Nse", "SELECT 1")\n\tcmd.Env = append(os.Environ(), "MYSQL_PWD="+req.Password)
 	out, err := cmd.Output(); if err != nil { if ctx.Err() != nil { return fmt.Errorf("MariaDB connection test timed out") }; return fmt.Errorf("MariaDB connection test failed") }
 	if strings.TrimSpace(string(out)) != "1" { return fmt.Errorf("MariaDB returned an unexpected connection test result") }
 	return nil
