@@ -479,7 +479,9 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 	ctx, cancel := context.WithTimeout(r.Context(), commandTimeout)
 	defer cancel()
 	if start, ok := payload.(*shared.StartSite); ok {
-		env, envErr := s.siteRuntimeEnvironment(ctx, dev.UserID, dev.ID, start.SiteId, 0, 0)
+		projectID, environmentID, scopeErr := s.siteEnvironmentScope(ctx, dev.UserID, dev.ID, start.SiteId)
+		if scopeErr != nil { apiError(w, scopeErr); return }
+		env, envErr := s.siteRuntimeEnvironment(ctx, dev.UserID, dev.ID, start.SiteId, projectID, environmentID)
 		if envErr != nil { apiError(w, envErr); return }
 		start.Env = env
 	}
@@ -793,10 +795,20 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				agentAction = "stop_site"
 				payload = &shared.StopSite{SiteId: st.SiteID}
 			}
-			if siteAction, ok := payload.(*shared.SiteAction); ok {
-				env, envErr := s.siteRuntimeEnvironment(r.Context(), dev.UserID, deviceID, siteID, in.ProjectID, in.EnvironmentID)
+			switch scoped := payload.(type) {
+			case *shared.SiteAction, *shared.RollbackSiteRelease:
+				projectID, environmentID := in.ProjectID, in.EnvironmentID
+				if projectID == 0 {
+					var scopeErr error
+					projectID, environmentID, scopeErr = s.siteEnvironmentScope(r.Context(), dev.UserID, deviceID, siteID)
+					if scopeErr != nil { apiError(w, scopeErr); return }
+				}
+				env, envErr := s.siteRuntimeEnvironment(r.Context(), dev.UserID, deviceID, siteID, projectID, environmentID)
 				if envErr != nil { apiError(w, envErr); return }
-				siteAction.Env = env
+				switch target := scoped.(type) {
+				case *shared.SiteAction: target.Env = env
+				case *shared.RollbackSiteRelease: target.Env = env
+				}
 			}
 			commandTimeout := 2 * time.Minute
 			if in.Action == "deploy" || in.Action == "rebuild" {

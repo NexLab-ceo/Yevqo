@@ -94,6 +94,23 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 	writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"database":map[string]interface{}{"id":databaseID,"server_id":in.ServerID,"name":in.Name,"username":in.Username,"status":"ready"},"message":"Database and least-privilege application role created. Password stored encrypted."})
 }
 
+func (s *Server) siteEnvironmentScope(ctx context.Context, userID, deviceID int64, siteID string) (int64, int64, error) {
+	var connections int
+	if err := s.db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM site_database_connections WHERE user_id=? AND device_id=? AND site_id=?`, userID, deviceID, siteID).Scan(&connections); err != nil { return 0, 0, err }
+	if connections == 0 { return 0, 0, nil }
+	rows, err := s.db.conn.QueryContext(ctx, `SELECT es.project_id,es.environment_id FROM project_environment_sites es
+		JOIN projects p ON p.id=es.project_id WHERE p.user_id=? AND es.device_id=? AND es.site_id=?
+		ORDER BY es.project_id,es.environment_id LIMIT 2`, userID, deviceID, siteID)
+	if err != nil { return 0, 0, err }
+	defer rows.Close()
+	if !rows.Next() { return 0, 0, rows.Err() }
+	var projectID, environmentID int64
+	if err := rows.Scan(&projectID, &environmentID); err != nil { return 0, 0, err }
+	if rows.Next() { return 0, 0, shared.ErrBadRequest("site belongs to multiple project environments; choose an environment before starting it") }
+	if err := rows.Err(); err != nil { return 0, 0, err }
+	return projectID, environmentID, nil
+}
+
 func siteDatabaseEnvironmentFilter(projectID, environmentID int64) (string, []interface{}, error) {
 	if projectID < 0 || environmentID < 0 || (projectID == 0) != (environmentID == 0) {
 		return "", nil, shared.ErrBadRequest("project_id and environment_id must be provided together")

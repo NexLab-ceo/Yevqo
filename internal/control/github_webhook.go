@@ -101,7 +101,9 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	if !online { http.Error(w, "Agent is offline", http.StatusServiceUnavailable); return }
 	gitCfg, err := s.siteGitSettings(r.Context(), deviceID, parts[1])
 	if err != nil { http.Error(w, "Git settings unavailable", http.StatusInternalServerError); return }
-	env, err := s.siteRuntimeEnvironment(r.Context(), userID, deviceID, parts[1])
+	projectID, environmentID, scopeErr := s.siteEnvironmentScope(r.Context(), userID, deviceID, parts[1])
+	if scopeErr != nil { http.Error(w, "site belongs to multiple environments; webhook deployment needs an unambiguous environment", http.StatusConflict); return }
+	env, err := s.siteRuntimeEnvironment(r.Context(), userID, deviceID, parts[1], projectID, environmentID)
 	if err != nil { http.Error(w, "site environment unavailable", http.StatusInternalServerError); return }
 	delivery := strings.TrimSpace(r.Header.Get("X-GitHub-Delivery"))
 	if delivery == "" || len(delivery) > 128 { http.Error(w, "missing delivery id", http.StatusBadRequest); return }
