@@ -115,7 +115,7 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	if err := global.Parse(args); err != nil { return 2 }
 	rest := global.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(stderr, "usage: yevqo-cli [--server URL] [--session COOKIE] <projects|devices|sites|databases|database-servers|backups|backup-schedules|deployments|monitoring|project|environments|deploy|start|stop|restart|logs|backup-site|backup-db> [arguments]")
+		fmt.Fprintln(stderr, "usage: yevqo-cli [--server URL] [--session COOKIE] <projects|devices|sites|databases|database-servers|backups|backup-schedules|deployments|monitoring|project|environments|create-project|update-project|delete-project|create-environment|update-environment|delete-environment|deploy|start|stop|restart|logs|backup-site|backup-db> [arguments]")
 		return 2
 	}
 	command := rest[0]

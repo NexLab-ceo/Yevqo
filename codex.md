@@ -123,6 +123,8 @@ Before finishing every task:
 
 ### Progress history
 
+- 2026-11-20 — Added project and environment create/update/delete commands to `yevqo-cli`; destructive commands require `--confirm`, and server-side Production protections remain authoritative. Added command/API tests and documented lifecycle commands (implementation commit `e319e39`).
+
 - 2026-11-20 — Extended `yevqo-cli` with authenticated project/environment create, update and delete workflows; delete commands require `--confirm` and preserve app/database data. Added API-method and command tests; CI pending.
 
 - 2026-11-20 — CLI deploy now refuses to run without the explicit `--allow-project-code` flag; the flag is passed to the Control Plane and covered by tests. Updated `docs/cli.md`. Go tests passed; full CI run 44740248528 / 44740248717 in progress (commit `36e02b1`).
