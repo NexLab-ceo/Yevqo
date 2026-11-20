@@ -81,9 +81,15 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 	if len(parts)==2 && parts[1]=="databases" && r.Method==http.MethodPost {
 		var in struct { ServerID int64 `json:"server_id"` }
 		if err:=decodeJSON(r,&in);err!=nil||in.ServerID<1 { apiError(w,shared.ErrBadRequest("invalid database server"));return }
-		var owned int
-		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,ownerID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("database server not found"));return }
-		if _,err:=s.db.conn.ExecContext(r.Context(),`INSERT IGNORE INTO project_database_servers(project_id,database_server_id) VALUES(?,?)`,id,in.ServerID);err!=nil { apiError(w,shared.ErrInternal("could not attach database server"));return }
+		var deviceID int64
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,ownerID).Scan(&deviceID);err!=nil { apiError(w,shared.ErrNotFound("database server not found"));return }
+		tx,txErr:=s.db.conn.BeginTx(r.Context(),nil)
+		if txErr!=nil { apiError(w,shared.ErrInternal("could not start database server attachment"));return }
+		if _,err:=tx.ExecContext(r.Context(),`INSERT IGNORE INTO project_devices(project_id,device_id) VALUES(?,?)`,id,deviceID);err==nil {
+			_,err=tx.ExecContext(r.Context(),`INSERT IGNORE INTO project_database_servers(project_id,database_server_id) VALUES(?,?)`,id,in.ServerID)
+		}
+		if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not attach database server"));return }
+		if err=tx.Commit();err!=nil { apiError(w,shared.ErrInternal("could not commit database server attachment"));return }
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
 	}
 	if len(parts)==2 && r.Method==http.MethodPost && (parts[1]=="devices" || parts[1]=="sites") {
@@ -186,7 +192,15 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 		res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO database_servers(user_id,device_id,name,engine,version,port,data_directory,network_access,status,storage_limit_gb,ram_budget_mb,max_connections,monitor_storage,auto_start,process_policy,bind_address,ssl_mode,auth_method,remote_access) VALUES(?,?,?,?,?,?,?,?,'planned',?,?,?,?,?,?,?,?,?,?)`,ownerID,in.DeviceID,in.Name,in.Engine,in.Version,in.Port,in.DataDirectory,in.NetworkAccess,in.StorageLimitGB,in.RAMBudgetMB,in.MaxConnections,in.MonitorStorage,in.AutoStart,in.ProcessPolicy,in.BindAddress,in.SSLMode,in.AuthMethod,in.RemoteAccess)
 		if err!=nil{apiError(w,shared.ErrBadRequest("server name or port already in use on this device"));return}
 		id,_:=res.LastInsertId()
-		if in.ProjectID>0 { if _,err:=s.db.conn.ExecContext(r.Context(),`INSERT IGNORE INTO project_database_servers(project_id,database_server_id) VALUES(?,?)`,in.ProjectID,id);err!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM database_servers WHERE id=? AND user_id=?`,id,ownerID);apiError(w,shared.ErrInternal("could not attach database server to project"));return } }
+		if in.ProjectID>0 {
+			tx,txErr:=s.db.conn.BeginTx(r.Context(),nil)
+			if txErr==nil {
+				_,txErr=tx.ExecContext(r.Context(),`INSERT IGNORE INTO project_devices(project_id,device_id) VALUES(?,?)`,in.ProjectID,in.DeviceID)
+				if txErr==nil { _,txErr=tx.ExecContext(r.Context(),`INSERT IGNORE INTO project_database_servers(project_id,database_server_id) VALUES(?,?)`,in.ProjectID,id) }
+				if txErr==nil { txErr=tx.Commit() } else { _=tx.Rollback() }
+			}
+			if txErr!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM database_servers WHERE id=? AND user_id=?`,id,ownerID);apiError(w,shared.ErrInternal("could not attach database server to project"));return }
+		}
 		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"server":map[string]interface{}{"id":id,"device_id":in.DeviceID,"name":in.Name,"engine":in.Engine,"version":in.Version,"port":in.Port,"status":"planned","ssl_mode":in.SSLMode,"max_connections":in.MaxConnections},"message":"Configuration saved. Install the PostgreSQL server when the selected device is online."})
 	default:http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
