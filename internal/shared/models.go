@@ -160,6 +160,7 @@ type LogEntry struct {
 	ID        int64                  `json:"id"`
 	UserID    *int64                 `json:"user_id,omitempty"`
 	DeviceID  *int64                 `json:"device_id,omitempty"`
+	WorkspaceOwnerID *int64 `json:"workspace_owner_id,omitempty"`
 	Action    string                 `json:"action"`
 	Details   map[string]interface{} `json:"details,omitempty"`
 	IP        string                 `json:"ip,omitempty"`
