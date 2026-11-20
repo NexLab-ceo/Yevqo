@@ -851,6 +851,8 @@ type restoreDatabaseBackupInput struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 	SiteID string `json:"site_id"`
+	ProjectID int64 `json:"project_id"`
+	EnvironmentID int64 `json:"environment_id"`
 }
 
 func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Request) {
@@ -859,10 +861,15 @@ func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Reque
 	var in restoreDatabaseBackupInput
 	if err:=decodeJSON(r,&in);err!=nil { apiError(w,shared.ErrBadRequest("invalid restore request"));return }
 	in.Name=strings.TrimSpace(in.Name);in.Username=strings.TrimSpace(in.Username)
-	if in.BackupID<1||!postgresIdentifier.MatchString(in.Name)||!postgresIdentifier.MatchString(in.Username)||len(in.Password)<12||len(in.Password)>256||strings.IndexByte(in.Password,0)>=0 {
+	if in.BackupID<1||!postgresIdentifier.MatchString(in.Name)||!postgresIdentifier.MatchString(in.Username)||len(in.Password)<12||len(in.Password)>256||strings.IndexByte(in.Password,0)>=0||!validProjectEnvironmentScope(in.ProjectID,in.EnvironmentID) {
 		apiError(w,shared.ErrBadRequest("provide a valid backup, database name, username and password (12–256 characters)"));return
 	}
 	ownerID,_,accessErr:=s.authorizeBackup(r.Context(),in.BackupID,u.ID,"backup.manage");if accessErr!=nil{apiError(w,accessErr);return}
+	if in.ProjectID > 0 {
+		projectOwnerID, projectErr := s.authorizeProjectOwner(r.Context(), in.ProjectID, u.ID, "database.manage")
+		if projectErr != nil { apiError(w, projectErr); return }
+		if projectOwnerID != ownerID { apiError(w, shared.ErrNotFound("project not found")); return }
+	}
 	var deviceID int64;var backupServerID sql.NullInt64;var fileName,backupStatus,resourceType string
 	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,database_server_id,file_name,status,resource_type FROM backups WHERE id=? AND user_id=?`,in.BackupID,ownerID).Scan(&deviceID,&backupServerID,&fileName,&backupStatus,&resourceType)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database backup not found"));return }
@@ -873,9 +880,21 @@ func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Reque
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("source Database Server is no longer available"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load restore target server"));return }
 	if engine!="postgresql"||serverStatus!="ready" { apiError(w,shared.ErrBadRequest("restore requires the original PostgreSQL server to be ready"));return }
+	if in.ProjectID > 0 {
+		var assigned int
+		err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_database_servers pds
+			JOIN project_environment_database_servers eds ON eds.project_id=pds.project_id AND eds.database_server_id=pds.database_server_id
+			WHERE pds.project_id=? AND eds.environment_id=? AND pds.database_server_id=?`, in.ProjectID, in.EnvironmentID, backupServerID.Int64).Scan(&assigned)
+		if err != nil || assigned != 1 { apiError(w, shared.ErrNotFound("source Database Server is not assigned to this project environment")); return }
+	}
 	if in.SiteID!="" {
 		if !validBackupSiteID(in.SiteID) { apiError(w,shared.ErrBadRequest("invalid website id"));return }
 		var count int;if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,deviceID,in.SiteID,ownerID).Scan(&count);err!=nil||count!=1 { apiError(w,shared.ErrNotFound("website not found on source device"));return }
+		if in.ProjectID > 0 {
+			var scoped int
+			err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_environment_sites WHERE project_id=? AND environment_id=? AND device_id=? AND site_id=?`, in.ProjectID, in.EnvironmentID, deviceID, in.SiteID).Scan(&scoped)
+			if err != nil || scoped != 1 { apiError(w, shared.ErrNotFound("website is not assigned to the selected project environment")); return }
+		}
 	}
 	var duplicate int
 	if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM db_instances WHERE server_id=? AND name=?`,backupServerID.Int64,in.Name).Scan(&duplicate);err!=nil { apiError(w,shared.ErrInternal("could not validate target database name"));return }
@@ -889,11 +908,11 @@ func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Reque
 	if err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`DELETE FROM db_instances WHERE id=? AND user_id=?`,targetID,ownerID);apiError(w,shared.ErrInternal("could not queue restore job"));return }
 	jobID,_:=jobRes.LastInsertId()
 	req:=&shared.RestoreDatabaseBackup{BackupServerID:backupServerID.Int64,BackupFileName:fileName,Database:shared.CreateDatabase{DatabaseID:targetID,ServerID:backupServerID.Int64,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)}}
-	go s.runDatabaseRestore(jobID,in.BackupID,targetID,ownerID,u.ID,deviceID,conn,req,in.SiteID,nonce,ciphertext)
+	go s.runDatabaseRestore(jobID,in.BackupID,targetID,ownerID,u.ID,deviceID,in.ProjectID,in.EnvironmentID,conn,req,in.SiteID,nonce,ciphertext)
 	writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"job_id":jobID,"database":map[string]interface{}{"id":targetID,"name":in.Name,"status":"planned"},"status":"queued","message":"Backup will be restored into a new database; the source database and backup remain untouched."})
 }
 
-func (s *Server) runDatabaseRestore(jobID,backupID,targetID,ownerID,actorID,deviceID int64,conn *AgentConn,req *shared.RestoreDatabaseBackup,siteID string,nonce,ciphertext []byte) {
+func (s *Server) runDatabaseRestore(jobID,backupID,targetID,ownerID,actorID,deviceID,projectID,environmentID int64,conn *AgentConn,req *shared.RestoreDatabaseBackup,siteID string,nonce,ciphertext []byte) {
 	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='running' WHERE id=? AND user_id=?`,jobID,ownerID)
 	ctx,cancel:=context.WithTimeout(context.Background(),13*time.Minute);defer cancel()
 	result,err:=conn.SendCommand(ctx,"restore_database_backup",req)
@@ -909,6 +928,7 @@ func (s *Server) runDatabaseRestore(jobID,backupID,targetID,ownerID,actorID,devi
 		s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Database restore failed","Control Plane could not start the metadata transaction.");return}
 	_,err=tx.Exec(`INSERT INTO database_credentials(database_id,username,ciphertext,nonce,key_version) VALUES(?,?,?,?,1)`,targetID,req.Database.Username,ciphertext,nonce)
 	if err==nil { _,err=tx.Exec(`UPDATE db_instances SET status='ready' WHERE id=? AND user_id=?`,targetID,ownerID) }
+	if err==nil && projectID>0 && environmentID>0 { _,err=tx.Exec(`INSERT INTO project_environment_databases(project_id,environment_id,database_id) VALUES(?,?,?)`,projectID,environmentID,targetID) }
 	if err==nil&&siteID!="" { _,err=tx.Exec(`INSERT INTO site_database_connections(user_id,device_id,site_id,database_id) VALUES(?,?,?,?)`,ownerID,deviceID,siteID,targetID) }
 	if err==nil { _,err=tx.Exec(`UPDATE database_restore_jobs SET status='completed',error_message=NULL WHERE id=? AND user_id=?`,jobID,ownerID) }
 	if err!=nil { _=tx.Rollback();_,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_restore_jobs SET status='failed',error_message='Control Plane metadata save failed' WHERE id=? AND user_id=?`,jobID,ownerID);_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,targetID,ownerID);_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(actorID),DeviceID:shared.PtrInt64(deviceID),Action:"database_restore_failed",Details:map[string]interface{}{"ok":false,"job_id":jobID,"error":"metadata save failed"}})

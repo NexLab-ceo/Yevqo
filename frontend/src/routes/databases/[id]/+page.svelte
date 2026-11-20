@@ -73,7 +73,8 @@
     async function restoreBackup() {
         if (!restoreBackupID || !restoreName || !restoreUsername || restorePassword.length < 12 || restoreBusy) return;
         restoreBusy = true; actionError = ''; restoreNotice = '';
-        const result = await restoreDatabaseBackup(Number(restoreBackupID), { name: restoreName, username: restoreUsername, password: restorePassword, site_id: restoreSiteID });
+        const projectId = $route.url.searchParams.get('project_id') || ''; const environmentId = $route.url.searchParams.get('environment_id') || ''; const scope = projectId && environmentId ? { project_id: Number(projectId), environment_id: Number(environmentId) } : {};
+        const result = await restoreDatabaseBackup(Number(restoreBackupID), { name: restoreName, username: restoreUsername, password: restorePassword, site_id: restoreSiteID, ...scope });
         restoreBusy = false;
         if (result.ok) { restorePassword = ''; restoreTargetId = String(result.data?.database?.id || ''); restoreNotice = 'Restore queued. A new independent database is being prepared; the source database and backup remain unchanged.'; }
         else actionError = result.error || 'Could not queue database restore';
