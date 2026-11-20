@@ -76,14 +76,15 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label" for="password">Пароль</label>
+                <label class="form-label" for="password">Пароль (12–72 символа)</label>
                 <input
                     id="password"
                     class="input"
                     type="password"
                     bind:value={password}
                     required
-                    minlength="6"
+                    minlength="12"
+                    maxlength="72"
                     autocomplete="new-password"
                 />
             </div>
