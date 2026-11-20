@@ -288,8 +288,8 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		if _,err=tx.ExecContext(r.Context(),`UPDATE sites SET git_url=?,git_branch=?,github_webhook_secret_enc=?,github_webhook_enabled=?,github_webhook_updated_at=NOW() WHERE device_id=? AND site_id=?`,cloneURL,branch,webhookSecret,webhookEnabled,in.DeviceID,in.SiteID);err==nil{
 			_,err=tx.ExecContext(r.Context(),`INSERT INTO project_repository_sites(project_id,device_id,site_id,auto_deploy_enabled,deploy_branch,previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc,github_webhook_id) VALUES(?,?,?,?,?,?,?,?,?,NULLIF(?,0)) ON DUPLICATE KEY UPDATE auto_deploy_enabled=VALUES(auto_deploy_enabled),deploy_branch=VALUES(deploy_branch),github_webhook_id=VALUES(github_webhook_id)`,projectID,in.DeviceID,in.SiteID,in.AutoDeploy,branch,nullableString(previousURL.String),previousBranch,previousWebhookEnabled,previousWebhookSecret,hookID)
 		}
-		if err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not save repository deployment target"));return}
-		if err=tx.Commit();err!=nil{apiError(w,shared.ErrInternal("could not commit repository deployment target"));return}
+		if err!=nil{_=tx.Rollback();if hookID>0&&in.AutoDeploy{_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,hookID)};apiError(w,shared.ErrInternal("could not save repository deployment target"));return}
+		if err=tx.Commit();err!=nil{if hookID>0&&in.AutoDeploy{_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,hookID)};apiError(w,shared.ErrInternal("could not commit repository deployment target"));return}
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(userID),WorkspaceOwnerID:shared.PtrInt64(ownerID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"project_repository_site_connected",Details:map[string]interface{}{"project_id":projectID,"site_id":in.SiteID,"repository":fullName,"auto_deploy":in.AutoDeploy},IP:clientIP(r)})
 		if !in.AutoDeploy&&existingHookID>0{_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,existingHookID)}
 		webhookPath:=fmt.Sprintf("/webhooks/github/%d/%s",in.DeviceID,in.SiteID)
