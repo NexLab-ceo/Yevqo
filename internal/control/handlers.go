@@ -794,7 +794,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 					message := strings.TrimSpace(result.Message)
 					if len(message) > 900 { message = message[:900] }
 					_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(user.ID), DeviceID: shared.PtrInt64(deviceID), Action: "site_" + in.Action, Details: map[string]interface{}{"site_id": siteID, "ok": false, "error": message}, IP: clientIP(r)})
-					_, _ = s.db.conn.ExecContext(r.Context(), "INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)", user.ID, "error", "Deployment failed: "+siteID, message)
+					s.notifyWorkspaceEvent(r.Context(), dev.UserID, user.ID, "error", "Deployment failed: "+siteID, message)
 				}
 				writeJSON(w, http.StatusOK, map[string]interface{}{"ok": false, "message": result.Message})
 				return
@@ -818,6 +818,12 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				if started.CommitDate != "" { logDetails["commit_date"] = started.CommitDate }
 			}
 			_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(user.ID), DeviceID: shared.PtrInt64(deviceID), Action: "site_" + in.Action, Details: logDetails, IP: clientIP(r)})
+			if in.Action == "deploy" || in.Action == "rebuild" || in.Action == "rollback" {
+				commit := fmt.Sprint(logDetails["commit_hash"])
+				body := "Deployment completed successfully."
+				if commit != "" && commit != "<nil>" { body += " Commit: " + commit }
+				s.notifyWorkspaceEvent(r.Context(), dev.UserID, user.ID, "success", "Deployment completed: "+siteID, body)
+			}
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "message": result.Message})
 			return
 		}
