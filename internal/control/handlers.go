@@ -596,7 +596,7 @@ func (s *Server) handleSites(w http.ResponseWriter, r *http.Request) {
 					if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=? AND site_id=?`, projectID, d.ID, st.SiteID).Scan(&linked); err != nil { apiError(w, shared.ErrInternal("could not filter project applications")); return }
 					if linked == 0 { continue }
 				}
-				all = append(all, map[string]interface{}{"device_id":d.ID,"device_name":d.Hostname,"site":st})
+				all = append(all, map[string]interface{}{"device_id":d.ID,"device_name":d.Hostname,"workspace_owner_id":ownerID,"site":st})
 			}
 		}
 	}
