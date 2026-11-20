@@ -54,6 +54,23 @@ Read the relevant source, migrations, package scripts, and CI workflows before m
 - The user has asked for a staged approach: finish visual structure first when explicitly requested, then add interactions/backend in later stages. Do not silently expand a UI-only task into backend work.
 
 
+## Visual design system
+
+The authenticated Yevqo interface uses the dark green palette below as its default dark appearance. Keep these values centralized in `frontend/src/app.css` and reuse the CSS variables rather than introducing unrelated one-off colors.
+
+| Token | Value | Usage |
+|---|---|---|
+| Background | `#080A09` | Main application background |
+| Surface | `#101611` | Sidebar, cards, inputs and standard surfaces |
+| Elevated | `#18221A` | Elevated surfaces, hover and accent-soft backgrounds |
+| Primary green | `#A5EC79` | Primary actions, focus and key accents |
+| Secondary green | `#78C85A` | Hover states and secondary/success accents |
+| Main text | `#E9EEE8` | Primary readable text |
+| Muted text | `#929D91` | Secondary and subdued text |
+| Borders | `#2C392D` | Dividers, outlines and card borders |
+
+Keep semantic danger and warning colors distinct. The existing selectable light appearance remains separate and must not be overwritten by dark-palette changes.
+
 ## Project progress tracking (mandatory)
 
 Maintain project progress in this same root-level `codex.md` on every development task. This file is the source of truth for the phase/status overview.
@@ -299,3 +316,5 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 - 2026-11-20 — Implemented managed MariaDB/MySQL on `main`: Termux package bootstrap and system-table initialization refuse non-empty or symlinked data directories; each Control Plane server gets a dedicated `server-<id>` directory and binds only to `127.0.0.1`; TLS certificates are generated and protected for `require`/`prefer` modes. Agent commands now support lifecycle, database/user creation, role/user list/create/drop/password, database privileges, connection checks, statistics, SQL dump creation/verification, chunk download, retention and restore into a new target database. Provisioning and failed restores clean up newly created objects; SQL restore rewrites the dump's `USE` statement to the requested target database. Control Plane APIs, scheduled backups, and database/server UI now route by engine. Added tests for safe paths, dump rewriting and backup-name validation. CI at `69a1436` passed Go tests, Android ARM64 build, frontend build, package assembly and package verification before the final small follow-up commits; fresh CI is pending. No existing MariaDB data directory was adopted or changed, and no physical Android installation/restore was claimed.
 
 - 2026-11-20 — MariaDB integration follow-up: linked-site runtime variables now select `DB_CONNECTION=mysql` for MariaDB/MySQL-compatible servers (and retain `pgsql` for PostgreSQL); the connection inventory includes the engine, `DB_SSL_CA` is injected for MySQL-compatible sites and allowed by the Agent process environment, and users created under `ssl_mode=require` receive `REQUIRE SSL`. Added the matching PDO_MYSQL CA verification instructions and driver-selection unit test. Current CI: Go tests and Android ARM64 cross-compilation passed; frontend build/package verification is still running. `mysql` remains a Termux MariaDB compatibility alias, not Oracle MySQL Server.
+
+- 2026-11-20 — Applied the approved Yevqo dark-green palette to the authenticated frontend in `frontend/src/app.css`: `#080A09` background, `#101611` surface, `#18221A` elevated, `#A5EC79` primary, `#78C85A` secondary, `#E9EEE8` main text, `#929D91` muted text and `#2C392D` borders. Primary buttons and focus states now use the green accent; semantic danger/warning colors and the separately selectable light theme remain intact. Frontend/CI verification for this CSS-only change is pending.
