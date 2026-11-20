@@ -187,6 +187,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 type databaseServerInput struct {
 	DeviceID int64 `json:"device_id"`
 	ProjectID int64 `json:"project_id"`
+	EnvironmentID int64 `json:"environment_id"`
 	Name string `json:"name"`
 	Engine string `json:"engine"`
 	Version string `json:"version"`
@@ -262,6 +263,8 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 		ownerID:=u.ID
 		if in.ProjectID<0 { apiError(w,shared.ErrBadRequest("invalid project id"));return }
 		if in.ProjectID>0 { if err:=s.authorizeProjectAction(r.Context(),in.ProjectID,u.ID,"database.manage");err!=nil{apiError(w,err);return}; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT user_id FROM projects WHERE id=?`,in.ProjectID).Scan(&ownerID);err!=nil{apiError(w,shared.ErrNotFound("project not found"));return} }
+		if in.EnvironmentID<0 || (in.EnvironmentID>0 && in.ProjectID<1) { apiError(w,shared.ErrBadRequest("environment_id requires a project_id"));return }
+		if in.EnvironmentID>0 { var envCount int; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM project_environments WHERE id=? AND project_id=?`,in.EnvironmentID,in.ProjectID).Scan(&envCount);err!=nil||envCount!=1 { apiError(w,shared.ErrNotFound("environment not found"));return } }
 		if in.Engine!="postgresql"&&in.Engine!="mariadb"&&in.Engine!="mysql"{apiError(w,shared.ErrBadRequest("unsupported database engine"));return}
 		if in.Port<1024||in.Port>65535{apiError(w,shared.ErrBadRequest("invalid port"));return}
 		if in.NetworkAccess==""{in.NetworkAccess="private"}
@@ -285,6 +288,7 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 			if txErr==nil {
 				_,txErr=tx.ExecContext(r.Context(),`INSERT IGNORE INTO project_devices(project_id,device_id) VALUES(?,?)`,in.ProjectID,in.DeviceID)
 				if txErr==nil { _,txErr=tx.ExecContext(r.Context(),`INSERT IGNORE INTO project_database_servers(project_id,database_server_id) VALUES(?,?)`,in.ProjectID,id) }
+				if txErr==nil && in.EnvironmentID>0 { _,txErr=tx.ExecContext(r.Context(),`INSERT IGNORE INTO project_environment_database_servers(project_id,environment_id,database_server_id) VALUES(?,?,?)`,in.ProjectID,in.EnvironmentID,id) }
 				if txErr==nil { txErr=tx.Commit() } else { _=tx.Rollback() }
 			}
 			if txErr!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM database_servers WHERE id=? AND user_id=?`,id,ownerID);apiError(w,shared.ErrInternal("could not attach database server to project"));return }
