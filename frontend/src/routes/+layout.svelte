@@ -3,11 +3,11 @@
  import {onMount} from 'svelte';
  import {page} from '$app/stores';
  import {goto} from '$app/navigation';
- import {user,isAuthenticated,uiMode,theme,notify} from '$lib/stores.js';
+ import {user,isAuthenticated,uiMode,theme,notify,workspaceName,compactMode} from '$lib/stores.js';
  import {logout,me,getSettings,saveSettings,listProjects,listDevices,listDeployments,listLogs,listNotifications,markNotificationRead,listIntegrations,listIntegrationRepositories} from '$lib/api.js';
  import {locale} from '$lib/i18n.js';
  let loading=true,mobileNavOpen=false,modeSaving=false,searchOpen=false,searchQuery='',searchLoading=false,searchResults=[],notificationsOpen=false,notifications=[],notificationsLoading=false,profileOpen=false;
- let searchTimer,workspaceName='Personal workspace';
+ let searchTimer;
  $: ru=$locale!=='en';
  $: unreadCount=notifications.filter(n=>!n.read_at&&!n.read).length;
  const globalGroups=[
@@ -18,7 +18,7 @@
  $: projectId=(pathParts[1]==='projects'&&Number.isInteger(Number(pathParts[2]))&&Number(pathParts[2])>0?pathParts[2]:'')||$page.url.searchParams.get('project_id')||'';
  $: inProject=!!projectId;
  $: groups=globalGroups;
- onMount(async()=>{const [a,b]=await Promise.all([me(),getSettings()]);if(a.ok&&a.data?.user)user.set(a.data.user);if(b.ok){uiMode.set(b.data.settings?.mode||'simple');theme.set(b.data.settings?.theme==='light'?'light':'dark');locale.set(b.data.settings?.locale||'ru');workspaceName=b.data.settings?.workspace_name||workspaceName}loading=false});
+ onMount(async()=>{const [a,b]=await Promise.all([me(),getSettings()]);if(a.ok&&a.data?.user)user.set(a.data.user);if(b.ok){uiMode.set(b.data.settings?.mode||'simple');theme.set(b.data.settings?.theme==='light'?'light':'dark');locale.set(b.data.settings?.locale||'ru');workspaceName.set(b.data.settings?.workspace_name||'Personal workspace');compactMode.set(!!b.data.settings?.compact_mode)}loading=false});
  $: if(!loading&&!$isAuthenticated&&!$page.url.pathname.startsWith('/login')&&!$page.url.pathname.startsWith('/register'))goto('/login');
  $: currentTitle=groups.flatMap(g=>g.items).find(i=>{const href=i[1].split('?')[0];return $page.url.pathname===href||($page.url.pathname.startsWith(href+'/')&&href!=='/')})?.[0]||'Overview';
  async function runSearch(){const q=searchQuery.trim().toLowerCase();if(q.length<2){searchResults=[];return}searchLoading=true;const [p,d,dep,logs,ints]=await Promise.all([listProjects(),listDevices(),listDeployments(),listLogs(100),listIntegrations()]);const results=[];if(p.ok)for(const x of p.data.projects||[])if((x.name+' '+(x.description||'')).toLowerCase().includes(q))results.push({type:ru?'Проект':'Project',name:x.name,description:x.description||x.slug,url:'/projects/'+x.id});if(d.ok)for(const x of d.data.devices||[])if((x.hostname+' '+x.device_id+' '+x.platform).toLowerCase().includes(q))results.push({type:ru?'Устройство':'Device',name:x.hostname||x.device_id,description:(x.platform||'Android')+' · '+x.status,url:'/devices/'+x.id});if(dep.ok)for(const x of dep.data.deployments||[])if(JSON.stringify(x).toLowerCase().includes(q))results.push({type:ru?'Развёртывание':'Deployment',name:x.action||'Deployment',description:x.details?.site_id||x.device||'',url:'/deployments'});if(logs.ok)for(const x of logs.data.logs||[])if(JSON.stringify(x).toLowerCase().includes(q))results.push({type:ru?'Журнал':'Log',name:x.action||'Event',description:x.device||'',url:'/logs'});if(ints.ok){for(const integration of ints.data.integrations||[]){const repos=await listIntegrationRepositories(integration.id);if(repos.ok)for(const repo of repos.data.repositories||[])if((repo.full_name||repo.name||'').toLowerCase().includes(q))results.push({type:ru?'GitHub репозиторий':'GitHub repository',name:repo.full_name||repo.name,description:repo.default_branch||'',url:'/settings/integrations/github'})}}searchResults=results.slice(0,20);searchLoading=false}
@@ -36,11 +36,11 @@
 {#if loading}<div class="loading-screen"><span class="loading-mark">Y</span><span>Yevqo</span><i></i></div>
 {:else if !$isAuthenticated}<slot/>
 {:else}
-<div class="app-shell" data-mode={$uiMode} data-theme={$theme}>
+<div class="app-shell" data-mode={$uiMode} data-theme={$theme} data-compact={$compactMode}>
  {#if mobileNavOpen}<button class="mobile-scrim" aria-label="Закрыть меню" on:click={()=>mobileNavOpen=false}></button>{/if}
  <aside class:mobile-open={mobileNavOpen} class="sidebar">
   <a class="brand-lockup" href="/"><span class="brand-mark">Y.</span><span class="brand-copy"><strong>YEVQO</strong></span></a>
-  <button class="workspace-switcher" on:click={()=>goto(inProject?'/projects':'/settings')}><span class="workspace-avatar">N</span><span class="workspace-copy"><strong>{inProject?(ru?'Рабочая область проекта':'Project workspace'):workspaceName}</strong><small>{inProject?'Project #'+projectId:(ru?'Личный тариф · Локальный хост':'Personal workspace · Local host')}</small></span><span class="switch-chevron">⌄</span></button>
+  <button class="workspace-switcher" on:click={()=>goto(inProject?'/projects':'/settings')}><span class="workspace-avatar">N</span><span class="workspace-copy"><strong>{inProject?(ru?'Рабочая область проекта':'Project workspace'):$workspaceName}</strong><small>{inProject?'Project #'+projectId:(ru?'Личный тариф · Локальный хост':'Personal workspace · Local host')}</small></span><span class="switch-chevron">⌄</span></button>
   <nav class="sidebar-nav">
    {#each groups as group}
     <section class="nav-group"><div class="nav-label">{group.label? (ru?'УПРАВЛЕНИЕ':'MANAGEMENT'):''}</div>
