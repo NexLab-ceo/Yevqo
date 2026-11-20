@@ -66,7 +66,7 @@
    const parts=choice.split(':');if(parts.length<2||!parts[0]||!parts.slice(1).join(':')){notify('Выберите целевой сайт','warning');return}
    target={target_device_id:Number(parts[0]),target_site_id:parts.slice(1).join(':')};
   }else{
-   const serverId=Number(choice);if(!serverId){notify('Выберите целевой PostgreSQL сервер','warning');return}
+   const serverId=Number(choice);if(!serverId){notify('Выберите целевой совместимый сервер базы данных','warning');return}
    target={target_server_id:serverId};
   }
   transferBusyId=backup.id;const r=await transferBackup(backup.id,target);transferBusyId=0;
@@ -84,7 +84,7 @@
  function size(n){if(!n)return '—';const units=['B','KB','MB','GB'];let i=0,v=n;while(v>=1024&&i<3){v/=1024;i++}return v.toFixed(1)+' '+units[i]}
 </script>
 <div class="page-header"><div><div class="eyebrow">DATA PROTECTION</div><h1 class="page-title">Backup & Restore</h1><p class="page-desc">Локальные архивы сайтов и баз данных на исходных Android-устройствах. Удаление сайта не удаляет backup.</p></div><div class="header-actions">{#if $user?.is_admin}<Button variant="primary" loading={controlBusy} on:click={createControl}>Бэкап Control Plane</Button>{/if}<Button on:click={load}>↻ Обновить</Button></div></div>
-<section class="create-backup"><div><strong>Create backup</strong><small>Создаёт локальный TAR.GZ архив сайта или PostgreSQL custom-format dump на исходном Android-устройстве.</small></div><div class="create-controls"><select class="input" bind:value={selected}><option value="">Выбрать сайт или базу</option><optgroup label="Websites">{#each sites as item}<option value={'site:'+item.device_id+':'+item.site.site_id}>{item.device_name} / {item.site.site_id}</option>{/each}</optgroup><optgroup label="Databases">{#each databases as db}<option value={'db:'+db.id} disabled={db.status!=='ready'}>{db.name} · {db.server_name} ({db.status})</option>{/each}</optgroup></select><Button variant="primary" disabled={!selected||busy} loading={busy} on:click={create}>Create backup</Button></div></section>
+<section class="create-backup"><div><strong>Create backup</strong><small>Создаёт локальный TAR.GZ архив сайта или резервную копию базы данных (PostgreSQL dump / MariaDB SQL) на исходном Android-устройстве.</small></div><div class="create-controls"><select class="input" bind:value={selected}><option value="">Выбрать сайт или базу</option><optgroup label="Websites">{#each sites as item}<option value={'site:'+item.device_id+':'+item.site.site_id}>{item.device_name} / {item.site.site_id}</option>{/each}</optgroup><optgroup label="Databases">{#each databases as db}<option value={'db:'+db.id} disabled={db.status!=='ready'}>{db.name} · {db.server_name} ({db.status})</option>{/each}</optgroup></select><Button variant="primary" disabled={!selected||busy} loading={busy} on:click={create}>Create backup</Button></div></section>
 <section class="schedule-panel">
  <div class="schedule-heading"><div><strong>Scheduled backups</strong><small>Автоматическое создание копий по расписанию. Если устройство офлайн, запуск будет отмечен как ошибка.</small></div></div>
  <div class="schedule-controls">
