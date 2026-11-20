@@ -18,5 +18,6 @@ CREATE TABLE IF NOT EXISTS project_repositories (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_project_repositories_integration (integration_id),
     KEY idx_project_repositories_repo (repository_id),
-    CONSTRAINT fk_project_repositories_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    CONSTRAINT fk_project_repositories_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    CONSTRAINT fk_project_repositories_integration FOREIGN KEY (integration_id) REFERENCES integrations(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
