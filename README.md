@@ -17,15 +17,18 @@ The `main` branch is the active Yevqo implementation. The all-in-one package kee
 
 
 ### Workspace and operations foundation
-- Projects can group devices and websites. Deleting a project deletes only its grouping records; devices, sites, files and databases remain untouched.
-- Database Server configurations are stored as `planned` metadata. Saving a configuration does not install packages or modify an Android device.
-- Database Server records are isolated per account and device. A server cannot be removed while database metadata references it.
+- Projects can group workspace devices, websites and database servers. Resources can be attached/detached without deleting the underlying data; a project can be deleted without deleting its devices, sites, files or databases.
+- Projects have Production, Development and Staging environments. Environment application/database-server assignments are organizational metadata; they do not yet create isolated database instances or automatically switch runtime connections. Production rename/delete and assignment removal are blocked server-side.
+- Database Server configurations are stored as `planned` metadata until an Agent installation is confirmed. Saving a configuration does not install packages or modify an Android device.
+- Database Server records remain owned by the workspace owner; server-side role checks govern member access. A server cannot be removed while database metadata references it.
 - Account settings persist Simple / Advanced mode, locale and theme.
 - Activity logs, notifications, account summary reports and backup metadata have read APIs.
-- The Termux installer prepares MariaDB and the local application account, then copies SQL migrations into the Control Plane data directory. On every startup, Control Plane idempotently ensures its own database exists using the local MariaDB client, creates the core tables from `000_core.sql` on first run, then applies additive migrations `001`–`010`. Applied migration names and checksums are recorded in `schema_migrations`. Missing migration files are a startup error rather than silently skipping schema setup.
+- The Termux installer prepares MariaDB and the local application account, then copies SQL migrations into the Control Plane data directory. On every startup, Control Plane idempotently ensures its own database exists using the local MariaDB client, creates the core tables from `000_core.sql` on first run, then applies all available additive migrations in order (currently `001`–`022`). Applied migration names and checksums are recorded in `schema_migrations`. Missing migration files are a startup error rather than silently skipping schema setup.
+
+Project workspace and environment behavior, role boundaries, resource detach safety, and migration limitations are documented in [Project workspaces](docs/project-workspaces.md).
 
 ### Important implementation boundary
-PostgreSQL installation, database creation, application-role provisioning, encrypted credential storage, website process injection and local database backup are now wired through typed Agent commands. Restore, download/export, MariaDB/MySQL, existing-cluster adoption and full credential rotation remain pending. The UI reports device-side actions only after the Agent confirms them.
+PostgreSQL installation, database creation, application-role provisioning, encrypted credential storage, website process injection and local database backup are now wired through typed Agent commands. Backup restore, bounded backup download/transfer and scheduled backups have API/Agent command flows; end-to-end Agent validation and export remain open. Managed MariaDB/MySQL lifecycle, existing-cluster adoption and full credential rotation remain pending. The UI reports device-side actions only after the Agent confirms them.
 
 
 ### Website lifecycle and operations
