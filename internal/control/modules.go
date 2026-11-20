@@ -419,6 +419,7 @@ func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Reques
 	if err!=nil||!result.Ok {
 		if previous=="ready"||previous=="stopped" { _,_=s.db.conn.ExecContext(context.Background(),`UPDATE database_servers SET status=? WHERE id=? AND user_id=? AND status IN ('starting','stopping')`,previous,id,ownerID) }
 		message:="Agent PostgreSQL lifecycle command failed";if err!=nil{message=err.Error()}else if result!=nil&&result.Message!=""{message=result.Message}
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_"+action+"_failed",Details:map[string]interface{}{"ok":false,"server_id":id,"error":message},IP:clientIP(r)})
 		s.notifyWorkspaceEvent(r.Context(),ownerID,u.ID,"error","Database server "+action+" failed",message)
 		if err!=nil { apiError(w,shared.ErrInternal("Agent PostgreSQL lifecycle command failed"));return }
 		apiError(w,shared.ErrBadRequest(result.Message));return
