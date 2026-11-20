@@ -63,6 +63,9 @@ func (s *Server) handleAgentToken(w http.ResponseWriter, r *http.Request) {
 		apiError(w, shared.ErrInternal("could not save Agent token"))
 		return
 	}
+	if s.hub != nil {
+		s.hub.CloseUserConnections(user.ID)
+	}
 	_ = s.db.Log(r.Context(), &shared.LogEntry{
 		UserID: shared.PtrInt64(user.ID),
 		Action: "agent_token_rotated",
