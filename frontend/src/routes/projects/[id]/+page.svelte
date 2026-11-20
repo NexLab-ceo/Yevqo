@@ -44,7 +44,11 @@
  <div class="section-head"><div><h2>Source Repository</h2><p>{ru?'GitHub App и исходный репозиторий проекта':'GitHub App and the project source repository'}</p></div><span class:connected={!!projectRepository} class="coming-soon">{projectRepository?(ru?'Подключён':'Connected'):(ru?'Не подключён':'Not connected')}</span></div>
  {#if projectRepository}
  <div class="source-empty"><span class="resource-icon">GH</span><div><strong>{projectRepository.full_name}</strong><small>{projectRepository.private?(ru?'Приватный репозиторий':'Private repository'):(ru?'Публичный репозиторий':'Public repository')} · {ru?'Ветка деплоя':'Deploy branch'}: <code>{projectRepository.branch}</code></small><small>{ru?'Последний commit':'Latest commit'}: <code>{projectRepository.last_commit_sha||'—'}</code></small><a href={projectRepository.web_url} target="_blank" rel="noreferrer">{ru?'Открыть на GitHub':'Open on GitHub'} ↗</a></div></div>
- {#if project.can_manage}<div class="source-actions"><Button size="sm" variant="danger" disabled={sourceBusy} on:click={disconnectRepository}>{ru?'Отключить репозиторий':'Disconnect repository'}</Button></div>{/if}
+ {#if project.can_manage}
+ <div class="source-form">
+  <label>{ru?'Ветка деплоя':'Deploy branch'}<input class="input" bind:value={selectedBranch} maxlength="255" placeholder={projectRepository.default_branch||'main'}/></label>
+  <div class="source-actions"><Button size="sm" variant="primary" disabled={sourceBusy||!selectedBranch.trim()} on:click={connectRepository}>{ru?'Сохранить ветку':'Save branch'}</Button><Button size="sm" variant="danger" disabled={sourceBusy} on:click={disconnectRepository}>{ru?'Отключить репозиторий':'Disconnect repository'}</Button></div>
+ </div>{/if}
  {:else if project.can_manage}
  {#if githubIntegrations.length}
  <div class="source-form">
