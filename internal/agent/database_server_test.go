@@ -75,3 +75,11 @@ func TestManagePostgresServerRejectsUnknownAction(t *testing.T) {
 		t.Fatal("expected unsupported action to be rejected")
 	}
 }
+
+func TestRestoreDatabaseRejectsInvalidArchiveBeforeDatabaseMutation(t *testing.T) {
+	prefix:=t.TempDir()
+	t.Setenv("PREFIX",prefix)
+	req:=shared.RestoreDatabaseBackup{BackupServerID:1,BackupFileName:"../../not-a-dump",Database:shared.CreateDatabase{DatabaseID:2,ServerID:1,Database:"target_db",Username:"target_user",Password:"long-enough-password",Port:5432}}
+	if err:=restorePostgresDatabase(req);err==nil{t.Fatal("expected invalid backup filename to be rejected")}
+	if _,err:=os.Stat(filepath.Join(prefix,"var","lib","veltrix-agent","backups"));!os.IsNotExist(err){t.Fatalf("restore created backup directories before validating request: %v",err)}
+}
