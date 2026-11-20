@@ -88,7 +88,7 @@ This is a conservative starting snapshot based on the repository documentation a
 | Phase / area | Initial status | Notes |
 |---|---|---|
 | P0 — Go Control Plane and Agent foundation | PARTIAL | Core services and Android/Termux packaging are present; re-check full install/upgrade and device runtime coverage. |
-| P0 — Android package build and CI | DONE | Full build and PR checks passed at `99bce1e`: Go tests, Android ARM64 cross-compilation, frontend build, setup/updater validation, all-in-one and standalone package assembly/verification. Physical Android startup remains tracked separately under P3. |
+| P0 — Android package build and CI | DONE | Full build and PR checks passed at `755e16f`: Go tests, Android ARM64 cross-compilation, frontend build, setup/updater validation, all-in-one and standalone package assembly/verification. Release publishing was skipped; physical Android startup remains tracked separately under P3. |
 | P0 — Device pairing and one-device Free limit | DONE | `UpsertDevice` serializes registration per account, preserves same-device reconnect, rejects cross-account UUID rebinding, and enforces the Free one-device cap regardless of referral bonuses. Unit tests cover the Free cap; Hub tests cover replacement sockets and pending-command shutdown. Physical Android pairing remains under P3. |
 | P1 — Project/site lifecycle | PARTIAL | Per-site Environment tab supports encrypted custom variables, masked listing, add/update/delete, search and .env bulk import; a shared set currently applies to Build and Runtime. Built-in runtimes plus Custom Language runtime; arbitrary installed Termux tools and in-site executables can be launched with explicit shell-free start commands. Full end-to-end runtime coverage remains open. |
 | P1 — Git deployments, immutable releases, rollback | PARTIAL | Project-scoped deployment history is enforced and exposed in the dashboard. Release/rollback edge cases and full Agent failure-path coverage remain open. |
@@ -123,13 +123,15 @@ Before finishing every task:
 
 ### Progress history
 
-- 2026-11-20 — Fixed the MySQL client defaults-file regression test to ignore the expected trailing newline and added explicit quote/backslash escaping coverage. CI pending.
+- 2026-11-20 — Full main CI passed at `755e16f` (build run 44744440881; PR checks run 44744440856): Go tests, Android ARM64, frontend, setup/updater validation, and both package verifications. No release was published.
 
-- 2026-11-20 — Added audit events for Cloudflare account connect/disconnect and device unpairing after managed routes are removed. CI pending.
+- 2026-11-20 — Fixed the MySQL client defaults-file regression test to ignore the expected trailing newline and added explicit quote/backslash escaping coverage; included in successful main CI at `755e16f`.
+
+- 2026-11-20 — Added audit events for Cloudflare account connect/disconnect and device unpairing after managed routes are removed; included in successful main CI at `755e16f`.
 
 - 2026-11-20 — Fixed Control Plane MySQL backup option-file formatting (real newlines instead of literal `\\n`) and added a regression test. Hardened site/database restore and backup download against empty Agent responses. The first CI run caught a malformed Go string in the new regression test; simplified the fixture to focus on newline formatting, with fresh CI pending.
 
-- 2026-11-20 — Added Cloudflare route cleanup to device unpairing: all managed ingress/DNS routes are removed before the Agent is disconnected or device record deleted. CI pending.
+- 2026-11-20 — Added Cloudflare route cleanup to device unpairing: all managed ingress/DNS routes are removed before the Agent is disconnected or device record deleted; included in successful main CI at `755e16f`.
 
 - 2026-11-20 — Cloudflare ingress updates now preserve global `originRequest`, path-only rules and catch-all ordering, and refuse to overwrite an existing unmanaged hostname route. Real account/Android route verification remains open.
 
@@ -138,24 +140,24 @@ Before finishing every task:
 - 2026-11-20 — Completed CLI project/environment lifecycle and preview commands with explicit consent/confirmation; Android ARM64, frontend, Go tests and both packages passed (build run 44740854997; checks run 44740854986; commit `41699cf`).
 - 2026-11-20 — Added Cloudflare remotely-managed Tunnel ingress and DNS route API, including preserved existing ingress rules and safe route removal. Cloudflare account and real Android validation pending.
 
-- 2026-11-20 — Added CLI preview listing, creation and deletion. Preview creation requires explicit code consent; deletion requires `--confirm`; creation output includes the preview key/URL/port. Tests cover all three API workflows. CI pending.
+- 2026-11-20 — Added CLI preview listing, creation and deletion. Preview creation requires explicit code consent; deletion requires `--confirm`; creation output includes the preview key/URL/port. Tests cover all three API workflows; included in successful main CI at `755e16f`.
 
 - 2026-11-20 — Added project and environment create/update/delete commands to `yevqo-cli`; destructive commands require `--confirm`, and server-side Production protections remain authoritative. Added command/API tests and documented lifecycle commands (implementation commit `e319e39`).
 
-- 2026-11-20 — Extended `yevqo-cli` with authenticated project/environment create, update and delete workflows; delete commands require `--confirm` and preserve app/database data. Added API-method and command tests; CI pending.
+- 2026-11-20 — Extended `yevqo-cli` with authenticated project/environment create, update and delete workflows; delete commands require `--confirm` and preserve app/database data. Added API-method and command tests; included in successful main CI at `755e16f`.
 
 - 2026-11-20 — CLI deploy now refuses to run without the explicit `--allow-project-code` flag; the flag is passed to the Control Plane and covered by tests. Updated `docs/cli.md`. Go tests passed; full CI run 44740248528 / 44740248717 in progress (commit `36e02b1`).
 
 - 2026-11-20 — Expanded Infrastructure Summary with 7/30/90-day build and backup success/failure analytics and project-scoped filtering. Go tests and Android ARM64 cross-compilation passed; frontend/package CI was still running when the CLI hardening task started (implementation commit `ef18bb7`).
-- 2026-11-20 — CLI deploy now requires explicit `--allow-project-code` consent; tests verify the flag is required and transmitted. Go tests passed; full Android/frontend/package CI pending.
+- 2026-11-20 — CLI deploy now requires explicit `--allow-project-code` consent; tests verify the flag is required and transmitted; included in successful main CI at `755e16f`.
 
 - 2026-11-20 — Hardened preview creation/deletion against client cancellation, retained the 24-hour expiry cleanup worker, and added key/port/error tests. Go tests, Android ARM64 builds, frontend build and both package verifications passed (build run 44739751259; checks run 44739751260; commit `f4f77d6`).
-- 2026-11-20 — Added period-scoped build and backup analytics to Infrastructure Summary, including project filtering and success/failure counts. CI pending.
+- 2026-11-20 — Added period-scoped build and backup analytics to Infrastructure Summary, including project filtering and success/failure counts; included in successful main CI at `755e16f`.
 
 - 2026-11-20 — Added persisted CPU/RAM/storage/temperature threshold alerts and deduplicated Agent offline/reconnect notifications. Go tests, Android ARM64 builds, frontend build, package assembly and package verification passed (build run 44739395185; checks run 44739395193; commit `7c44984`).
-- 2026-11-20 — Hardened preview lifecycle cleanup so client cancellation cannot leave a live preview after failed metadata updates; added key, port-range and error-truncation tests. CI pending.
+- 2026-11-20 — Hardened preview lifecycle cleanup so client cancellation cannot leave a live preview after failed metadata updates; added key, port-range and error-truncation tests; included in successful main CI at `755e16f`.
 
-- 2026-11-20 — Verified device metric alerts and added deduplicated offline/reconnect notifications using the same persisted alert-state table. Go tests, Android ARM64 build, frontend build and both package verifications passed for metric alerts (build run 44738921259; checks run 44738921266; commit `7c44984`). Connectivity notification CI pending.
+- 2026-11-20 — Verified device metric alerts and added deduplicated offline/reconnect notifications using the same persisted alert-state table; all included in successful main CI at `755e16f`.
 
 - 2026-11-20 — Added persisted device alert state with CPU/memory/storage/temperature thresholds, recovery hysteresis and transition-only notifications. Metric ingestion from the Agent WebSocket now evaluates alerts without failing telemetry ingestion. CI pending.
 
