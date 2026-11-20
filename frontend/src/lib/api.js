@@ -274,7 +274,8 @@ export async function testDatabaseConnection(id) { return request('POST', `/api/
 export async function listIntegrations() { return request('GET', '/api/integrations'); }
 export async function connectIntegration(provider, token) { return request('POST', '/api/integrations', { provider, token }); }
 export async function getGitHubAppConfig() { return request('GET', '/api/integrations/github-app/config'); }
-export async function connectGitHubApp(installationId) { return request('POST', '/api/integrations', { provider: 'github_app', installation_id: String(installationId) }); }
+export async function createGitHubAppInstallState() { return request('POST', '/api/integrations/github-app/state', {}); }
+export async function connectGitHubApp(installationId, state) { return request('POST', '/api/integrations', { provider: 'github_app', installation_id: String(installationId), state }); }
 export async function disconnectIntegration(id) { return request('DELETE', `/api/integrations/${id}`); }
 export async function listIntegrationRepositories(id) { return request('GET', `/api/integrations/${id}/repositories`); }
 
