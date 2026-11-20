@@ -575,19 +575,48 @@ func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 		if accessErr != nil { apiError(w, accessErr); return }
 		projectID, ownerID = parsed, resolved
 	}
+	days, periodErr := parseReportPeriodDays(r.URL.Query().Get("days"))
+	if periodErr != nil { apiError(w, periodErr); return }
 	var devices, sites, running, dbServers int
 	if projectID > 0 {
-		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_devices pd JOIN devices d ON d.id=pd.device_id WHERE pd.project_id=? AND d.user_id=?`, projectID, ownerID).Scan(&devices)
-		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites ps JOIN sites s ON s.device_id=ps.device_id AND s.site_id=ps.site_id WHERE ps.project_id=?`, projectID).Scan(&sites)
-		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites ps JOIN sites s ON s.device_id=ps.device_id AND s.site_id=ps.site_id WHERE ps.project_id=? AND s.status='running'`, projectID).Scan(&running)
-		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.user_id=?`, projectID, ownerID).Scan(&dbServers)
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_devices pd JOIN devices d ON d.id=pd.device_id WHERE pd.project_id=? AND d.user_id=?`, projectID, ownerID).Scan(&devices); err != nil { apiError(w, shared.ErrInternal("could not count project devices")); return }
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites ps JOIN sites s ON s.device_id=ps.device_id AND s.site_id=ps.site_id WHERE ps.project_id=?`, projectID).Scan(&sites); err != nil { apiError(w, shared.ErrInternal("could not count project websites")); return }
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites ps JOIN sites s ON s.device_id=ps.device_id AND s.site_id=ps.site_id WHERE ps.project_id=? AND s.status='running'`, projectID).Scan(&running); err != nil { apiError(w, shared.ErrInternal("could not count running websites")); return }
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.user_id=?`, projectID, ownerID).Scan(&dbServers); err != nil { apiError(w, shared.ErrInternal("could not count database servers")); return }
 	} else {
-		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM devices WHERE user_id=?`, ownerID).Scan(&devices)
-		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites s JOIN devices d ON d.id=s.device_id WHERE d.user_id=?`, ownerID).Scan(&sites)
-		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites s JOIN devices d ON d.id=s.device_id WHERE d.user_id=? AND s.status='running'`, ownerID).Scan(&running)
-		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM database_servers WHERE user_id=?`, ownerID).Scan(&dbServers)
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM devices WHERE user_id=?`, ownerID).Scan(&devices); err != nil { apiError(w, shared.ErrInternal("could not count devices")); return }
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites s JOIN devices d ON d.id=s.device_id WHERE d.user_id=?`, ownerID).Scan(&sites); err != nil { apiError(w, shared.ErrInternal("could not count websites")); return }
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites s JOIN devices d ON d.id=s.device_id WHERE d.user_id=? AND s.status='running'`, ownerID).Scan(&running); err != nil { apiError(w, shared.ErrInternal("could not count running websites")); return }
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM database_servers WHERE user_id=?`, ownerID).Scan(&dbServers); err != nil { apiError(w, shared.ErrInternal("could not count database servers")); return }
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"report":map[string]interface{}{"generated_at":time.Now().UTC(),"devices":devices,"sites":sites,"running_sites":running,"database_servers":dbServers}})
+	var buildJobs, buildSucceeded, buildFailed int
+	if projectID > 0 {
+		err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*),COALESCE(SUM(b.status='succeeded'),0),COALESCE(SUM(b.status='failed'),0)
+			FROM build_jobs b WHERE b.user_id=? AND b.created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? DAY)
+			AND EXISTS(SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=b.device_id AND ps.site_id=b.site_id)`, ownerID, days, projectID).Scan(&buildJobs,&buildSucceeded,&buildFailed)
+		if err != nil { apiError(w, shared.ErrInternal("could not load project build analytics")); return }
+	} else {
+		err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*),COALESCE(SUM(status='succeeded'),0),COALESCE(SUM(status='failed'),0)
+			FROM build_jobs WHERE user_id=? AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? DAY)`, ownerID, days).Scan(&buildJobs,&buildSucceeded,&buildFailed)
+		if err != nil { apiError(w, shared.ErrInternal("could not load build analytics")); return }
+	}
+	var backups, backupsCompleted, backupsFailed int
+	if projectID > 0 {
+		err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*),COALESCE(SUM(b.status IN ('completed','verified')),0),COALESCE(SUM(b.status='failed'),0)
+			FROM backups b WHERE b.user_id=? AND b.created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? DAY)
+			AND ((b.resource_type='site' AND EXISTS(SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=b.device_id AND b.resource_id=CONCAT(ps.device_id,':',ps.site_id)))
+			OR (b.resource_type='database' AND EXISTS(SELECT 1 FROM project_database_servers pds JOIN db_instances d ON d.server_id=pds.database_server_id WHERE pds.project_id=? AND d.user_id=b.user_id AND CAST(d.id AS CHAR)=b.resource_id)))`, ownerID, days, projectID, projectID).Scan(&backups,&backupsCompleted,&backupsFailed)
+		if err != nil { apiError(w, shared.ErrInternal("could not load project backup analytics")); return }
+	} else {
+		err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*),COALESCE(SUM(status IN ('completed','verified')),0),COALESCE(SUM(status='failed'),0)
+			FROM backups WHERE user_id=? AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? DAY)`, ownerID, days).Scan(&backups,&backupsCompleted,&backupsFailed)
+		if err != nil { apiError(w, shared.ErrInternal("could not load backup analytics")); return }
+	}
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"report":map[string]interface{}{
+		"generated_at":time.Now().UTC(),"period_days":days,"devices":devices,"sites":sites,"running_sites":running,"database_servers":dbServers,
+		"build_jobs":buildJobs,"build_succeeded":buildSucceeded,"build_failed":buildFailed,
+		"backups":backups,"backups_completed":backupsCompleted,"backups_failed":backupsFailed,
+	}})
 }
 
 func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {

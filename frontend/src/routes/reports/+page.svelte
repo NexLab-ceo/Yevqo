@@ -22,7 +22,7 @@
 
  async function load() {
    loading = true;
-   const projectId = $page.url.searchParams.get('project_id') || ''; const [summary, audit] = await Promise.all([getReports(projectId), listAuditLogs(200, projectId)]);
+   const projectId = $page.url.searchParams.get('project_id') || ''; const [summary, audit] = await Promise.all([getReports(projectId, Number(periodDays)), listAuditLogs(200, projectId)]);
    if (summary.ok) report = summary.data?.report || null;
    else notify(summary.error || 'Не удалось загрузить сводку', 'error');
    if (audit.ok) logs = audit.data?.audit_logs || [];
@@ -59,7 +59,7 @@
  <div class="generator-heading"><div><h2>Генератор отчётов</h2><p>Выберите состав отчёта и сформируйте документ на основе текущих данных Control Plane.</p></div><span class="live-dot">● Данные аккаунта</span></div>
  <div class="controls">
   <label>Тип отчёта<select bind:value={reportType}><option value="security">Security Report</option><option value="infrastructure">Infrastructure Summary</option></select></label>
-  <label>Период<select bind:value={periodDays}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></label>
+  <label>Период<select bind:value={periodDays} on:change={load}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></label>
   <label>Область<select bind:value={scope}><option value="all">All projects</option></select></label>
   <div class="format"><span>Формат</span><strong>PDF</strong><small>Печать / Save as PDF</small></div>
  </div>
@@ -89,8 +89,12 @@
    </section>
    <p class="disclaimer">Отчёт сформирован по событиям аудита, доступным через Control Plane (до 200 последних записей). Отсутствие событий в журнале не является доказательством отсутствия инцидентов. Это не замена внешнему security-аудиту.</p>
   {:else if report}
-   <div class="metrics"><div><small>DEVICES</small><strong>{report.devices}</strong></div><div><small>WEBSITES</small><strong>{report.sites}</strong></div><div><small>RUNNING WEBSITES</small><strong>{report.running_sites}</strong></div><div><small>DATABASE SERVERS</small><strong>{report.database_servers}</strong></div></div>
-   <section class="report-section"><h3>Сводка инфраструктуры</h3><p class="muted">Снимок текущего состояния аккаунта на момент формирования отчёта.</p></section>
+   <div class="metrics">
+    <div><small>DEVICES</small><strong>{report.devices}</strong></div><div><small>WEBSITES</small><strong>{report.sites}</strong></div><div><small>RUNNING WEBSITES</small><strong>{report.running_sites}</strong></div><div><small>DATABASE SERVERS</small><strong>{report.database_servers}</strong></div>
+    <div><small>BUILD JOBS · {report.period_days}D</small><strong>{report.build_jobs}</strong></div><div><small>BUILDS SUCCEEDED</small><strong>{report.build_succeeded}</strong></div><div><small>BUILDS FAILED</small><strong>{report.build_failed}</strong></div>
+    <div><small>BACKUPS · {report.period_days}D</small><strong>{report.backups}</strong></div><div><small>BACKUPS COMPLETED</small><strong>{report.backups_completed}</strong></div><div><small>BACKUPS FAILED</small><strong>{report.backups_failed}</strong></div>
+   </div>
+   <section class="report-section"><h3>Сводка инфраструктуры</h3><p class="muted">Текущее состояние ресурсов и сборки/резервные копии за последние {report.period_days} дней.</p></section>
   {:else}
    <p class="muted">Нет данных для формирования отчёта.</p>
   {/if}
@@ -111,10 +115,10 @@
 .actions{display:flex;gap:8px;margin-top:15px;flex-wrap:wrap}
 .document-header h2{font-size:22px;margin:0 0 7px}.brand-mark{width:36px;height:36px;border-radius:10px;background:#312e81;color:#c7d2fe;display:grid;place-items:center;font-weight:800;font-size:20px}
 .document-meta{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #253149;border-bottom:1px solid #253149;padding:10px 0;margin:16px 0;color:#64748b;font-size:9px}
-.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:14px 0}.metrics>div{display:grid;gap:8px;padding:13px;background:#0b1220;border:1px solid #253149;border-radius:9px}.metrics small{font-size:8px;color:#64748b;letter-spacing:.08em}.metrics strong{font-size:22px}
+.metrics{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin:14px 0}.metrics>div{display:grid;gap:8px;padding:13px;background:#0b1220;border:1px solid #253149;border-radius:9px}.metrics small{font-size:8px;color:#64748b;letter-spacing:.08em}.metrics strong{font-size:22px}
 .report-section{margin-top:18px}.report-section h3{font-size:12px;margin:0 0 12px}.table-wrap{overflow:auto;border:1px solid #253149;border-radius:8px}
 table{border-collapse:collapse;width:100%;font-size:9px;text-align:left}th,td{padding:9px 10px;border-bottom:1px solid #253149;white-space:nowrap}th{color:#94a3b8;background:#0b1220;font-weight:600}td{color:#cbd5e1}tr:last-child td{border-bottom:0}
 .disclaimer{font-size:9px;line-height:1.6;color:#64748b;margin-top:14px}.document-footer{display:flex;justify-content:space-between;border-top:1px solid #253149;padding-top:11px;margin-top:22px;color:#64748b;font-size:9px}
-@media(max-width:700px){.controls{grid-template-columns:repeat(2,minmax(0,1fr))}.document-meta{flex-direction:column}.metrics{grid-template-columns:1fr 1fr}}
+@media(max-width:900px){.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:700px){.controls{grid-template-columns:repeat(2,minmax(0,1fr))}.document-meta{flex-direction:column}.metrics{grid-template-columns:1fr 1fr}}
 @media print{ :global(body){background:#fff!important;color:#111!important}.no-print{display:none!important}.report-document{background:#fff!important;border:0!important;color:#111!important;padding:0!important;margin:0!important}.report-document *{color:#111!important}.metrics>div,.table-wrap,th{background:#f5f5f5!important;border-color:#ddd!important}td,th{border-color:#ddd!important}.document-meta,.document-footer{border-color:#ddd!important}.disclaimer,.muted{color:#555!important}.page-header{display:none!important} }
 </style>

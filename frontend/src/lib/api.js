@@ -222,7 +222,7 @@ export async function listNotifications() { return request('GET', '/api/notifica
 export async function markNotificationRead(id) { return request('POST', '/api/notifications', { id }); }
 export async function getSettings() { return request('GET', '/api/settings'); }
 export async function saveSettings(settings) { return request('PUT', '/api/settings', settings); }
-export async function getReports(projectId = '') { return request('GET', '/api/reports' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
+export async function getReports(projectId = '', periodDays = 30) { const params = new URLSearchParams({ days: String(periodDays) }); if (projectId) params.set('project_id', projectId); return request('GET', '/api/reports?' + params.toString()); }
 export async function listBackups() { return request('GET', '/api/backups'); }
 export async function createControlPlaneBackup() { return request('POST', '/admin/api/backups/control-plane', {}); }
 export async function getDatabaseBackupChunk(id, offset, length = 262144) { return request('GET', `/api/backups/${id}/chunk?offset=${offset}&length=${length}`); }
