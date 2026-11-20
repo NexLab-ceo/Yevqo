@@ -292,24 +292,16 @@ func (s *Server) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
-	if user == nil {
-		apiError(w, shared.ErrUnauthorized("not logged in"))
-		return
-	}
-
+	if user == nil { apiError(w, shared.ErrUnauthorized("not logged in")); return }
 	projectID := int64(0)
 	if raw := r.URL.Query().Get("project_id"); raw != "" {
 		parsed, parseErr := strconv.ParseInt(raw, 10, 64)
 		if parseErr != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
-		var owned int
-		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM projects WHERE id=? AND user_id=?`, parsed, user.ID).Scan(&owned); err != nil || owned != 1 { apiError(w, shared.ErrNotFound("project not found")); return }
+		if err := s.authorizeProjectAction(r.Context(), parsed, user.ID, "project.read"); err != nil { apiError(w, err); return }
 		projectID = parsed
 	}
 	owners, err := s.db.WorkspaceOwnerIDs(r.Context(), user.ID)
-	if err != nil {
-		apiError(w, err)
-		return
-	}
+	if err != nil { apiError(w, err); return }
 	type deviceView struct {
 		shared.Device
 		SiteCount int `json:"site_count"`
@@ -318,27 +310,23 @@ func (s *Server) handleDevices(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]deviceView, 0)
 	for _, ownerID := range owners {
+		role, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, user.ID)
+		if roleErr != nil { apiError(w, roleErr); return }
+		if !allowed || !CanWorkspaceAction(role, "device.read") { continue }
 		devices, listErr := s.db.ListDevicesByUser(r.Context(), ownerID)
 		if listErr != nil { apiError(w, listErr); return }
-		role, _, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, user.ID)
-		if roleErr != nil { apiError(w, roleErr); return }
 		for _, d := range devices {
-			if projectID > 0 { var linked int; if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_devices WHERE project_id=? AND device_id=?`, projectID, d.ID).Scan(&linked); err != nil { apiError(w, shared.ErrInternal("could not filter project devices")); return }; if linked == 0 { continue } }
+			if projectID > 0 {
+				var linked int
+				if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_devices WHERE project_id=? AND device_id=?`, projectID, d.ID).Scan(&linked); err != nil { apiError(w, shared.ErrInternal("could not filter project devices")); return }
+				if linked == 0 { continue }
+			}
 			sites, _ := s.db.ListSitesByDevice(r.Context(), d.ID)
 			out = append(out, deviceView{Device:d, SiteCount:len(sites), WorkspaceOwnerID:ownerID, WorkspaceRole:role})
 		}
 	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":      true,
-		"devices": out,
-		"limit":   user.MaxDevicesTotal(),
-	})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"devices":out,"limit":user.MaxDevicesTotal()})
 }
-
-// ============================================================
-// /api/devices/{id}
-// ============================================================
 
 func (s *Server) handleDeviceByID(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
@@ -582,41 +570,38 @@ func parsePayload(action string, raw json.RawMessage) (interface{}, error) {
 
 func (s *Server) handleSites(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
-	if user == nil {
-		apiError(w, shared.ErrUnauthorized("not logged in"))
-		return
-	}
-
+	if user == nil { apiError(w, shared.ErrUnauthorized("not logged in")); return }
 	projectID := int64(0)
-	if raw := r.URL.Query().Get("project_id"); raw != "" { parsed, parseErr := strconv.ParseInt(raw, 10, 64); if parseErr != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }; var owned int; if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM projects WHERE id=? AND user_id=?`, parsed, user.ID).Scan(&owned); err != nil || owned != 1 { apiError(w, shared.ErrNotFound("project not found")); return }; projectID = parsed }
-	devices, _ := s.db.ListDevicesByUser(r.Context(), user.ID)
+	if raw := r.URL.Query().Get("project_id"); raw != "" {
+		parsed, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
+		if err := s.authorizeProjectAction(r.Context(), parsed, user.ID, "project.read"); err != nil { apiError(w, err); return }
+		projectID = parsed
+	}
+	owners, err := s.db.WorkspaceOwnerIDs(r.Context(), user.ID)
+	if err != nil { apiError(w, err); return }
 	all := make([]map[string]interface{}, 0)
-	for _, d := range devices {
-		sites, _ := s.db.ListSitesByDevice(r.Context(), d.ID)
-		for _, st := range sites {
-			if projectID > 0 { var linked int; if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=? AND site_id=?`, projectID, d.ID, st.SiteID).Scan(&linked); err != nil { apiError(w, shared.ErrInternal("could not filter project applications")); return }; if linked == 0 { continue } }
-			all = append(all, map[string]interface{}{
-				"device_id":   d.ID,
-				"device_name": d.Hostname,
-				"site":        st,
-			})
+	for _, ownerID := range owners {
+		role, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, user.ID)
+		if roleErr != nil { apiError(w, roleErr); return }
+		if !allowed || !CanWorkspaceAction(role, "device.read") { continue }
+		devices, listErr := s.db.ListDevicesByUser(r.Context(), ownerID)
+		if listErr != nil { apiError(w, listErr); return }
+		for _, d := range devices {
+			sites, listErr := s.db.ListSitesByDevice(r.Context(), d.ID)
+			if listErr != nil { apiError(w, listErr); return }
+			for _, st := range sites {
+				if projectID > 0 {
+					var linked int
+					if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=? AND site_id=?`, projectID, d.ID, st.SiteID).Scan(&linked); err != nil { apiError(w, shared.ErrInternal("could not filter project applications")); return }
+					if linked == 0 { continue }
+				}
+				all = append(all, map[string]interface{}{"device_id":d.ID,"device_name":d.Hostname,"site":st})
+			}
 		}
 	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":    true,
-		"sites": all,
-	})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"sites":all})
 }
-
-// ============================================================
-// /api/sites/{deviceID}/{siteID}
-// ============================================================
-
-var domainPattern = regexp.MustCompile("(?i)^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$")
-var releaseCommitPattern = regexp.MustCompile("^(?:[a-f0-9]{40}|[a-f0-9]{64})$")
-
-func nullableString(v string) interface{} { if v == "" { return nil }; return v }
 
 func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
