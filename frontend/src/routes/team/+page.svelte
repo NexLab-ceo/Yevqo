@@ -1,7 +1,7 @@
 <script>
  import { onMount } from 'svelte';
  import { user } from '$lib/stores.js';
- import { listWorkspaceMembers, inviteWorkspaceMember, removeWorkspaceMember, listWorkspaceInvitations, acceptWorkspaceInvitation } from '$lib/api.js';
+ import { listWorkspaces, listWorkspaceMembers, inviteWorkspaceMember, removeWorkspaceMember, listWorkspaceInvitations, acceptWorkspaceInvitation } from '$lib/api.js';
  import { notify } from '$lib/stores.js';
  import Button from '$lib/components/Button.svelte';
 
@@ -10,26 +10,30 @@
   {name:'Admin',desc:'Управление устройствами, сайтами, конфигурацией, участниками и аудитом'},
   {name:'Developer',desc:'Создание сайтов, deployments, управление процессами и просмотр логов'}
  ];
- let members=[], invitations=[], loading=true, busy=false;
+ let workspaces=[], selectedOwner='', members=[], invitations=[], loading=true, busy=false;
+ $: currentWorkspace=workspaces.find(w=>String(w.owner_user_id)===String(selectedOwner));
  let email='', role='developer';
 
  onMount(load);
  async function load(){
   loading=true;
-  const [m,i]=await Promise.all([listWorkspaceMembers(),listWorkspaceInvitations()]);
-  if(m.ok)members=m.data.members||[];else notify(m.error||'Не удалось загрузить участников','error');
+  const w=await listWorkspaces();
+  if(w.ok){workspaces=w.data.workspaces||[];if(!selectedOwner&&workspaces.length)selectedOwner=String(workspaces[0].owner_user_id);if(!workspaces.some(x=>String(x.owner_user_id)===String(selectedOwner)))selectedOwner=String(workspaces[0]?.owner_user_id||'');}
+  else notify(w.error||'Не удалось загрузить рабочие области','error');
+  const [m,i]=await Promise.all([selectedOwner?listWorkspaceMembers(selectedOwner):Promise.resolve({ok:true,data:{members:[]}}),listWorkspaceInvitations()]);
+  if(m.ok)members=m.data.members||[];else {members=[];notify(m.error||'Управление участниками доступно только Owner/Admin','error');}
   if(i.ok)invitations=i.data.invitations||[];else notify(i.error||'Не удалось загрузить приглашения','error');
   loading=false;
  }
  async function invite(){
   if(!email.trim())return;
-  busy=true;const r=await inviteWorkspaceMember(email,role);busy=false;
+  busy=true;const r=await inviteWorkspaceMember(email,role,selectedOwner);busy=false;
   if(!r.ok){notify(r.error||'Не удалось отправить приглашение','error');return}
   email='';notify('Приглашение отправлено','success');await load();
  }
  async function remove(member){
   if(!confirm('Удалить участника из workspace?'))return;
-  const r=await removeWorkspaceMember(member.id);
+  const r=await removeWorkspaceMember(member.id,selectedOwner);
   if(!r.ok){notify(r.error||'Не удалось удалить участника','error');return}
   notify('Участник удалён','success');await load();
  }
@@ -46,10 +50,11 @@
 </div>
 
 <section class="panel">
- <h2>Текущий workspace</h2>
- <div class="member owner-row"><span class="avatar">{($user?.username||'U').slice(0,1).toUpperCase()}</span><span class="member-main"><strong>{$user?.username}</strong><small>{$user?.email}</small></span><span class="role owner">Owner</span></div>
+ <div class="section-head"><h2>Рабочая область</h2><select class="input workspace-select" bind:value={selectedOwner} on:change={load}>{#each workspaces as w}<option value={String(w.owner_user_id)}>{w.owner_username} · {w.role}</option>{/each}</select></div>
+ {#if currentWorkspace}<div class="member owner-row"><span class="avatar">{(currentWorkspace.owner_username||'W').slice(0,1).toUpperCase()}</span><span class="member-main"><strong>{currentWorkspace.owner_username}</strong><small>{currentWorkspace.owner_email}</small></span><span class:owner={currentWorkspace.role==='Owner'} class:admin={currentWorkspace.role==='Admin'} class:developer={currentWorkspace.role==='Developer'} class="role">{currentWorkspace.role}</span></div>{/if}
 </section>
 
+{#if currentWorkspace?.can_manage_members}
 <section class="panel">
  <h2>Пригласить участника</h2>
  <div class="invite-form">
@@ -59,6 +64,7 @@
  </div>
  <p class="hint">Пользователь должен сначала зарегистрировать аккаунт NexLab. Приглашение появится у него в Team & Permissions.</p>
 </section>
+{:else}<section class="panel"><p class="hint">Просмотр и управление участниками доступны Owner и Admin выбранной рабочей области.</p></section>{/if}
 
 <section class="panel">
  <h2>Участники</h2>
@@ -67,7 +73,7 @@
    <div class="member-row">
     <div class="member-main"><strong>{member.username}</strong><small>{member.email} · {member.status}</small></div>
     <span class:admin={member.role==='admin'} class:developer={member.role==='developer'} class="role">{member.role}</span>
-    <Button variant="ghost" size="sm" on:click={()=>remove(member)}>Удалить</Button>
+    {#if currentWorkspace?.can_manage_members}<Button variant="ghost" size="sm" on:click={()=>remove(member)}>Удалить</Button>{/if}
    </div>
   {/each}
  {/if}
@@ -95,7 +101,7 @@
 <style>
 .eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}
 .panel{padding:16px;background:#101727;border:1px solid #253149;border-radius:11px;margin-bottom:12px}
-.panel h2{font-size:12px;margin-bottom:12px}
+.panel h2{font-size:12px;margin-bottom:12px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.workspace-select{max-width:240px}
 .member,.member-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #1e293b}
 .member-row:last-child{border-bottom:0}
 .avatar{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;background:#242b50;color:#c7d2fe;font-size:12px;font-weight:700}
