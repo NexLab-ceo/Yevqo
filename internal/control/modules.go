@@ -35,7 +35,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		rows, err := s.db.conn.QueryContext(r.Context(), `
-			SELECT p.id,p.name,p.slug,p.description,p.created_at,p.updated_at,
+			SELECT p.id,p.user_id,p.name,p.slug,p.description,p.created_at,p.updated_at,
 			(SELECT COUNT(*) FROM project_devices pd WHERE pd.project_id=p.id),
 			(SELECT COUNT(*) FROM project_sites ps WHERE ps.project_id=p.id)
 			FROM projects p WHERE p.user_id IN (SELECT owner_user_id FROM workspace_members WHERE member_user_id=? AND status='active' UNION SELECT ?) ORDER BY p.updated_at DESC`, u.ID, u.ID)
@@ -43,8 +43,8 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		defer rows.Close()
 		out := make([]map[string]interface{},0)
 		for rows.Next() {
-			var id int64; var name,slug,description string; var created,updated time.Time; var devices,sites int
-			if err:=rows.Scan(&id,&name,&slug,&description,&created,&updated,&devices,&sites);err!=nil { apiError(w,shared.ErrInternal("could not read projects"));return }
+			var id,ownerID int64; var name,slug,description string; var created,updated time.Time; var devices,sites int
+			if err:=rows.Scan(&id,&ownerID,&name,&slug,&description,&created,&updated,&devices,&sites);err!=nil { apiError(w,shared.ErrInternal("could not read projects"));return }
 			out=append(out,map[string]interface{}{"id":id,"owner_user_id":ownerID,"name":name,"slug":slug,"description":description,"created_at":created,"updated_at":updated,"device_count":devices,"site_count":sites})
 		}
 		if err:=rows.Err();err!=nil { apiError(w,shared.ErrInternal("could not read projects"));return }
@@ -170,7 +170,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 		databaseServers:=make([]map[string]interface{},0)
 		for dbRows.Next(){var serverID,deviceID int64;var serverName,engine,status string;if err:=dbRows.Scan(&serverID,&deviceID,&serverName,&engine,&status);err!=nil{dbRows.Close();apiError(w,shared.ErrInternal("could not read project database servers"));return};databaseServers=append(databaseServers,map[string]interface{}{"id":serverID,"device_id":deviceID,"name":serverName,"engine":engine,"status":status})}
 		if err:=dbRows.Err();err!=nil{dbRows.Close();apiError(w,shared.ErrInternal("could not read project database servers"));return};dbRows.Close()
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"name":name,"slug":slug,"description":description},"devices":devices,"sites":sites,"database_servers":databaseServers})
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"owner_user_id":ownerID,"name":name,"slug":slug,"description":description},"devices":devices,"sites":sites,"database_servers":databaseServers})
 	case http.MethodPatch:
 		var in projectInput;if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 		in.Name=strings.TrimSpace(in.Name);if len(in.Name)<2||len(in.Name)>80{apiError(w,shared.ErrBadRequest("project name must be 2–80 characters"));return}
