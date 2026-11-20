@@ -171,10 +171,22 @@ func createMariaDBDatabase(req shared.CreateDatabase) error {
 	if req.DatabaseID < 1 || req.ServerID < 1 || req.Port < 1024 || req.Port > 65535 || !mariaIdentifier.MatchString(req.Database) || !mariaIdentifier.MatchString(req.Username) || len(req.Password) < 12 || len(req.Password) > 256 || strings.IndexByte(req.Password, 0) >= 0 { return fmt.Errorf("invalid MariaDB database request") }
 	prefix := os.Getenv("PREFIX"); if prefix == "" { return fmt.Errorf("Termux PREFIX is not set") }
 	dataDir, err := mariaDataDirectory(prefix, req.ServerID, req.DataDirectory); if err != nil { return err }
-	// The server's configured data directory is supplied by Control Plane through the protocol in a later field; use the standard private path only for legacy requests.
-	sqlText := "CREATE DATABASE " + mariaQuoteIdentifier(req.Database) + " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\nCREATE USER " + mariaQuoteIdentifier(req.Username) + "@'127.0.0.1' IDENTIFIED BY " + mariaSQLLiteral(req.Password) + ";\nGRANT ALL PRIVILEGES ON " + mariaQuoteIdentifier(req.Database) + ".* TO " + mariaQuoteIdentifier(req.Username) + "@'127.0.0.1';"
+	return provisionMariaDBDatabase(dataDir, req)
+}
+
+func provisionMariaDBDatabase(dataDir string, req shared.CreateDatabase) error {
+	dbID := mariaQuoteIdentifier(req.Database)
+	userID := mariaQuoteIdentifier(req.Username) + "@'127.0.0.1'"
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second); defer cancel()
-	if err := runMariaSQL(ctx, dataDir, "", sqlText); err != nil { return err }
+	if err := runMariaSQL(ctx, dataDir, "", "CREATE DATABASE "+dbID+" CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"); err != nil { return err }
+	if err := runMariaSQL(ctx, dataDir, "", "CREATE USER "+userID+" IDENTIFIED BY "+mariaSQLLiteral(req.Password)+";"); err != nil {
+		_ = runMariaSQL(ctx, dataDir, "", "DROP DATABASE IF EXISTS "+dbID+";")
+		return err
+	}
+	if err := runMariaSQL(ctx, dataDir, "", "GRANT ALL PRIVILEGES ON "+dbID+".* TO "+userID+";"); err != nil {
+		_ = runMariaSQL(ctx, dataDir, "", "DROP DATABASE IF EXISTS "+dbID+"; DROP USER IF EXISTS "+userID+";")
+		return err
+	}
 	return nil
 }
 
@@ -282,9 +294,8 @@ func restoreMariaDBBackup(req shared.RestoreDatabaseBackup) error {
 	root, err := filepath.EvalSymlinks(prefix); if err != nil { return err }; realDir, err := filepath.EvalSymlinks(backupDir); if err != nil { return err }
 	rel, err := filepath.Rel(root, realDir); if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return fmt.Errorf("backup directory escapes private storage") }
 	dataDir, err := mariaDataDirectory(prefix, req.Database.ServerID, req.Database.DataDirectory); if err != nil { return err }
-	createSQL := "CREATE DATABASE " + mariaQuoteIdentifier(req.Database.Database) + " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER " + mariaQuoteIdentifier(req.Database.Username) + "@'127.0.0.1' IDENTIFIED BY " + mariaSQLLiteral(req.Database.Password) + "; GRANT ALL PRIVILEGES ON " + mariaQuoteIdentifier(req.Database.Database) + ".* TO " + mariaQuoteIdentifier(req.Database.Username) + "@'127.0.0.1';"
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute); defer cancel()
-	if err := runMariaSQL(ctx, dataDir, "", createSQL); err != nil { return err }
+	if err := provisionMariaDBDatabase(dataDir, req.Database); err != nil { return err }
 	cli, err := mariaCLI(); if err != nil { _ = runMariaSQL(context.Background(), dataDir, "", "DROP DATABASE "+mariaQuoteIdentifier(req.Database.Database)+"; DROP USER "+mariaQuoteIdentifier(req.Database.Username)+"@'127.0.0.1';"); return err }
 	f, err := os.Open(full); if err != nil { cleanupCtx, cancelCleanup := context.WithTimeout(context.Background(), 30*time.Second); _ = runMariaSQL(cleanupCtx, dataDir, "", "DROP DATABASE IF EXISTS "+mariaQuoteIdentifier(req.Database.Database)+"; DROP USER IF EXISTS "+mariaQuoteIdentifier(req.Database.Username)+"@'127.0.0.1';"); cancelCleanup(); return err }
 	reader, writer := io.Pipe()
