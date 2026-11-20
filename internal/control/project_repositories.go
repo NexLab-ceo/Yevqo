@@ -240,6 +240,10 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		var linked int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM project_sites ps JOIN devices d ON d.id=ps.device_id JOIN sites st ON st.device_id=ps.device_id AND st.site_id=ps.site_id WHERE ps.project_id=? AND ps.device_id=? AND ps.site_id=? AND d.user_id=?`,projectID,in.DeviceID,in.SiteID,ownerID).Scan(&linked);err!=nil||linked!=1{apiError(w,shared.ErrBadRequest("site must already be attached to this project"));return}
 		if strings.TrimSpace(in.Branch)!="" { branch=strings.TrimSpace(in.Branch) }; if !gitBranchPattern.MatchString(branch)||strings.Contains(branch,"..")||strings.Contains(branch,"@{")||strings.HasSuffix(branch,"/")||strings.HasSuffix(branch,"."){apiError(w,shared.ErrBadRequest("invalid deployment branch"));return}; if in.AutoDeploy&&!in.AllowProjectCode{apiError(w,shared.ErrForbidden("explicit consent to automatically execute repository code is required"));return}
+		ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
+		token,repoName,_,_,tokenErr:=s.projectRepositoryToken(ctx,ownerID,projectID);if tokenErr!=nil{apiError(w,shared.ErrForbidden("GitHub App installation is unavailable"));return}
+		owner,name,_,parseErr:=parseGitHubRepositoryName(repoName);if parseErr!=nil{apiError(w,shared.ErrBadRequest("invalid connected repository"));return}
+		if _,branchErr:=s.fetchGitHubBranch(ctx,token,owner,name,branch);branchErr!=nil{apiError(w,shared.ErrBadRequest("deployment branch is not available in the repository"));return}
 		var secret string;var encrypted interface{}
 		if in.AutoDeploy{
 			raw:=make([]byte,32);if _,err:=rand.Read(raw);err!=nil{apiError(w,shared.ErrInternal("could not create webhook secret"));return}
