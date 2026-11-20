@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"database/sql"
 		"strings"
 
 	"veltrix/internal/shared"
@@ -38,10 +39,22 @@ func (s *Server) authorizeWorkspace(ctx context.Context, ownerID, actorID int64,
 // authorizeProjectAction resolves the owning workspace and enforces its role.
 // Projects remain owned by the workspace owner; active members receive only
 // the actions allowed by their assigned role.
-func (s *Server) authorizeProjectAction(ctx context.Context, projectID, actorID int64, action string) error {
+func (s *Server) authorizeProjectOwner(ctx context.Context, projectID, actorID int64, action string) (int64, error) {
+	if projectID < 1 {
+		return 0, shared.ErrBadRequest("invalid project id")
+	}
 	var ownerID int64
 	if err := s.db.conn.QueryRowContext(ctx, "SELECT user_id FROM projects WHERE id=?", projectID).Scan(&ownerID); err != nil {
-		return err
+		if err == sql.ErrNoRows { return 0, shared.ErrNotFound("project not found") }
+		return 0, shared.ErrInternal("could not resolve project owner")
 	}
-	return s.authorizeWorkspace(ctx, ownerID, actorID, action)
+	if err := s.authorizeWorkspace(ctx, ownerID, actorID, action); err != nil {
+		return 0, err
+	}
+	return ownerID, nil
+}
+
+func (s *Server) authorizeProjectAction(ctx context.Context, projectID, actorID int64, action string) error {
+	_, err := s.authorizeProjectOwner(ctx, projectID, actorID, action)
+	return err
 }
