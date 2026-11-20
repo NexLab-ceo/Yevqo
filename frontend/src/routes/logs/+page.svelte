@@ -1,7 +1,7 @@
 <script>
- import {onMount} from 'svelte';import {listLogs, listAuditLogs} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';
+ import {onMount} from 'svelte';import {page} from '$app/stores';import {listLogs, listAuditLogs} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';
  let logs=[],auditLogs=[],loading=true,limit=100;
- async function load(){loading=true;const [r,a]=await Promise.all([listLogs(limit),listAuditLogs(limit)]);if(r.ok)logs=r.data.logs||[];else notify(r.error||'Не удалось загрузить логи','error');if(a.ok)auditLogs=a.data.audit_logs||[];else auditLogs=[];loading=false}
+ async function load(){loading=true;const projectId=$page.url.searchParams.get('project_id')||'';const [r,a]=await Promise.all([listLogs(limit,projectId),listAuditLogs(limit)]);if(r.ok)logs=r.data.logs||[];else notify(r.error||'Не удалось загрузить логи','error');if(a.ok)auditLogs=a.data.audit_logs||[];else auditLogs=[];loading=false}
  onMount(load);
  function details(d){if(!d)return '—';if(typeof d==='string')return d;return Object.entries(d).map(([k,v])=>k+': '+String(v)).join(' · ')}
 </script>
