@@ -311,3 +311,16 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 	default:http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
 }
+
+func (s *Server) restoreProjectRepositoryTargets(ctx context.Context, projectID int64) error {
+	tx,err:=s.db.conn.BeginTx(ctx,nil);if err!=nil{return err}
+	rows,err:=tx.QueryContext(ctx,`SELECT device_id,site_id,previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc FROM project_repository_sites WHERE project_id=?`,projectID)
+	if err!=nil{_=tx.Rollback();return err}
+	type restore struct{deviceID int64;siteID string;gitURL sql.NullString;branch string;webhook bool;secret []byte}
+	items:=make([]restore,0)
+	for rows.Next(){var v restore;if err:=rows.Scan(&v.deviceID,&v.siteID,&v.gitURL,&v.branch,&v.webhook,&v.secret);err!=nil{rows.Close();_=tx.Rollback();return err};items=append(items,v)}
+	if err:=rows.Err();err!=nil{rows.Close();_=tx.Rollback();return err};rows.Close()
+	for _,v:=range items{if _,err:=tx.ExecContext(ctx,`UPDATE sites SET git_url=?,git_branch=?,github_webhook_enabled=?,github_webhook_secret_enc=?,github_webhook_updated_at=NOW() WHERE device_id=? AND site_id=?`,nullableString(v.gitURL.String),v.branch,v.webhook,v.secret,v.deviceID,v.siteID);err!=nil{_=tx.Rollback();return err}}
+	if _,err:=tx.ExecContext(ctx,`DELETE FROM project_repositories WHERE project_id=?`,projectID);err!=nil{_=tx.Rollback();return err}
+	return tx.Commit()
+}
