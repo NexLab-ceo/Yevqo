@@ -3,7 +3,6 @@ package control
 import (
 	"context"
 
-	"veltrix/internal/shared"
 )
 
 // notifyWorkspaceEvent delivers a resource event to its workspace owner and,
