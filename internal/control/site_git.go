@@ -76,6 +76,13 @@ func (s *Server) siteGitSettings(ctx context.Context, deviceID int64, siteID str
 		if err != nil { return nil, shared.ErrInternal("could not decrypt Git credential") }
 		out.GitToken = string(plain)
 	}
+	if out.GitToken == "" && out.GitURL != "" {
+		var userID int64
+		if err := s.db.conn.QueryRowContext(ctx,`SELECT user_id FROM devices WHERE id=?`,deviceID).Scan(&userID); err != nil { return nil, err }
+		token, err := s.githubAppTokenForRepository(ctx,userID,out.GitURL)
+		if err != nil { return nil, shared.ErrInternal("could not refresh GitHub App installation token") }
+		out.GitToken = token
+	}
 	return &out, nil
 }
 
