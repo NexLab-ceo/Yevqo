@@ -59,7 +59,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		if err!=nil { apiError(w,shared.ErrBadRequest("project name is already in use"));return }
 		id,_:=res.LastInsertId()
 		for _, env := range []struct{name,slug,description string; protected bool}{{"Production","production","Live production workloads",true},{"Development","development","Development and integration workloads",false},{"Staging","staging","Pre-production validation workloads",false}} {
-			if _,envErr:=s.db.conn.ExecContext(r.Context(),`INSERT INTO project_environments(project_id,name,slug,description,is_protected) VALUES(?,?,?,?,?)`,id,env.name,env.slug,env.description,env.protected);envErr!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM projects WHERE id=? AND user_id=?`,id,u.ID);apiError(w,shared.ErrInternal("could not initialize project environments"));return }
+			if _,envErr:=s.db.conn.ExecContext(r.Context(),`INSERT INTO project_environments(project_id,name,slug,description,is_protected) VALUES(?,?,?,?,?)`,id,env.name,env.slug,env.description,env.protected);envErr!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM projects WHERE id=? AND user_id=?`,id,ownerID);apiError(w,shared.ErrInternal("could not initialize project environments"));return }
 		}
 		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"name":in.Name,"slug":slug,"description":in.Description}})
 	default: http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
