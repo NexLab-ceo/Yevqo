@@ -76,20 +76,20 @@ func (s *Server) siteGitSettings(ctx context.Context, deviceID int64, siteID str
 		if err != nil { return nil, shared.ErrInternal("could not decrypt Git credential") }
 		out.GitToken = string(plain)
 	}
-	if out.GitToken == "" && out.GitURL != "" {
+	if out.GitURL != "" {
 		var integrationID,integrationUserID int64
 		var fullName string
 		mapErr:=s.db.conn.QueryRowContext(ctx,`SELECT pr.integration_id,pr.full_name,i.user_id FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id JOIN integrations i ON i.id=pr.integration_id WHERE prs.device_id=? AND prs.site_id=? LIMIT 1`,deviceID,siteID).Scan(&integrationID,&fullName,&integrationUserID)
 		if mapErr==nil {
 			owner,_,_,parseErr:=parseGitHubRepositoryName(fullName);if parseErr!=nil{return nil,shared.ErrInternal("linked GitHub repository metadata is invalid")}
 			token,tokenErr:=s.githubAppTokenForIntegration(ctx,integrationUserID,integrationID,owner);if tokenErr!=nil{return nil,shared.ErrInternal("could not refresh linked GitHub App installation token")};out.GitToken=token
-		} else if mapErr==sql.ErrNoRows {
+		} else if mapErr==sql.ErrNoRows && out.GitToken=="" {
 			var userID int64
 			if err := s.db.conn.QueryRowContext(ctx,`SELECT user_id FROM devices WHERE id=?`,deviceID).Scan(&userID); err != nil { return nil, err }
 			token, err := s.githubAppTokenForRepository(ctx,userID,out.GitURL)
 			if err != nil { return nil, shared.ErrInternal("could not refresh GitHub App installation token") }
 			out.GitToken = token
-		} else { return nil, mapErr }
+		} } else { return nil, mapErr }
 	}
 	return &out, nil
 }
