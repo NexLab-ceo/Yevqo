@@ -47,3 +47,7 @@ export function notify(message, type = 'info') {
 
 // Persisted appearance preference: dark by default.
 export const theme = writable('dark');
+
+// Workspace display preferences shared by the shell and settings screen.
+export const workspaceName = writable('Personal workspace');
+export const compactMode = writable(false);
