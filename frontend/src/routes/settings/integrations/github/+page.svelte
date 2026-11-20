@@ -1,4 +1,5 @@
 <script>
+ import {formatDate} from '$lib/date.js';
  import {onMount} from 'svelte';
  import {page} from '$app/stores';
  import {goto} from '$app/navigation';
@@ -70,7 +71,7 @@
  {:else if !integration}
   <div class="intro"><h2>{ru?'Подключи аккаунт или организацию':'Connect an account or organization'}</h2><p>{ru?'Yevqo перенаправит тебя на GitHub. Выбери аккаунт и репозитории, к которым приложению разрешён доступ. После возврата Control Plane проверит Installation ID и подпись приложения.':'Yevqo will redirect you to GitHub. Choose an account and repositories the app may access. On return, the Control Plane verifies the installation ID using the App credentials held on the server.'}</p><button class="primary" disabled={connecting} on:click={startInstall}>{connecting?(ru?'Подготовка…':'Preparing…'):(ru?'Установить Yevqo на GitHub':'Install Yevqo on GitHub')} ↗</button></div>
  {:else}
-  <div class="connected-summary"><div><span class="field-label">{ru?'Подключённый аккаунт':'Connected account'}</span><strong>{integration.account_name}</strong></div><div><span class="field-label">Installation ID</span><strong class="mono">{integration.account_id}</strong></div><div><span class="field-label">{ru?'Последняя проверка':'Last verified'}</span><strong>{integration.last_verified_at?new Date(integration.last_verified_at).toLocaleString():'—'}</strong></div></div>
+  <div class="connected-summary"><div><span class="field-label">{ru?'Подключённый аккаунт':'Connected account'}</span><strong>{integration.account_name}</strong></div><div><span class="field-label">Installation ID</span><strong class="mono">{integration.account_id}</strong></div><div><span class="field-label">{ru?'Последняя проверка':'Last verified'}</span><strong>{integration.last_verified_at?formatDate(integration.last_verified_at):'—'}</strong></div></div>
   <div class="actions"><button class="outline" on:click={loadRepositories}>{ru?'Показать репозитории':'View repositories'}</button><a class="outline" href="https://github.com/settings/installations" target="_blank" rel="noreferrer">{ru?'Управлять установкой':'Manage installation'} ↗</a><button class="danger" on:click={disconnect}>{ru?'Отключить':'Disconnect'}</button></div>
   {#if repositoriesLoading}<div class="empty">{ru?'Загружаем репозитории…':'Loading repositories…'}</div>
   {:else if repositories.length}
