@@ -121,14 +121,14 @@ func (s *Server) handleProjectDeployments(w http.ResponseWriter,r *http.Request)
 func (s *Server) queueProjectDeployment(ctx context.Context,actorID,ownerID,projectID int64,in projectDeploymentRequest,source string)(int64,error){
 	if in.DeviceID<1||!validLogSiteID(in.SiteID){return 0,shared.ErrBadRequest("valid deployment target is required")}
 	if !in.AllowProjectCode{return 0,shared.ErrForbidden("explicit project-code consent is required")}
-	var fullName,branch string;var integrationID int64
-	err:=s.db.conn.QueryRowContext(ctx,`SELECT pr.full_name,prs.deploy_branch,pr.integration_id FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id WHERE prs.project_id=? AND prs.device_id=? AND prs.site_id=?`,projectID,in.DeviceID,in.SiteID).Scan(&fullName,&branch,&integrationID)
+	var fullName,branch string
+	err:=s.db.conn.QueryRowContext(ctx,`SELECT pr.full_name,prs.deploy_branch FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id WHERE prs.project_id=? AND prs.device_id=? AND prs.site_id=?`,projectID,in.DeviceID,in.SiteID).Scan(&fullName,&branch)
 	if err!=nil{return 0,shared.ErrBadRequest("connect this project repository to the selected site first")}
 	if strings.TrimSpace(in.Branch)!=""{branch=strings.TrimSpace(in.Branch)}
 	if !gitBranchPattern.MatchString(branch)||strings.Contains(branch,"..")||strings.Contains(branch,"@{")||strings.HasSuffix(branch,"/")||strings.HasSuffix(branch,"."){return 0,shared.ErrBadRequest("invalid deployment branch")}
 	if in.Commit!=""&&!releaseCommitPattern.MatchString(in.Commit){return 0,shared.ErrBadRequest("invalid commit SHA")}
 	owner,name,_,err:=parseGitHubRepositoryName(fullName);if err!=nil{return 0,shared.ErrBadRequest("invalid connected repository")}
-	token,err:=s.githubAppTokenForIntegration(ctx,ownerID,integrationID,owner);if err!=nil{return 0,shared.ErrForbidden("GitHub App installation is unavailable")}
+	token,_,_,_,err:=s.projectRepositoryToken(ctx,ownerID,projectID);if err!=nil{return 0,shared.ErrForbidden("GitHub App installation is unavailable")}
 	apiCtx,cancel:=context.WithTimeout(ctx,20*time.Second);defer cancel()
 	branchInfo,err:=s.fetchGitHubBranch(apiCtx,token,owner,name,branch);if err!=nil{return 0,shared.ErrBadRequest("deployment branch is not accessible")}
 	if in.Commit==""{in.Commit=branchInfo.Commit.SHA}else{
