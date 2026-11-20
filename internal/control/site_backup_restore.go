@@ -16,8 +16,8 @@ func (s *Server) handleRestoreSiteBackup(w http.ResponseWriter,r *http.Request){
 	if r.Method!=http.MethodPost{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
 	u:=UserFromContext(r.Context())
 	var in struct{BackupID int64 `json:"backup_id"`}
-	ownerID,_,accessErr:=s.authorizeBackup(r.Context(),in.BackupID,u.ID,"backup.manage");if accessErr!=nil{apiError(w,accessErr);return}
 	if err:=decodeJSON(r,&in);err!=nil||in.BackupID<1{apiError(w,shared.ErrBadRequest("invalid site restore request"));return}
+	ownerID,_,accessErr:=s.authorizeBackup(r.Context(),in.BackupID,u.ID,"backup.manage");if accessErr!=nil{apiError(w,accessErr);return}
 	var deviceID int64;var fileName,status,resourceType,resourceID string;var size int64
 	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,file_name,status,resource_type,resource_id,size_bytes FROM backups WHERE id=? AND user_id=?`,in.BackupID,ownerID).Scan(&deviceID,&fileName,&status,&resourceType,&resourceID,&size)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("site backup not found"));return}
