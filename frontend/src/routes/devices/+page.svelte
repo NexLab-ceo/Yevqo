@@ -1,6 +1,8 @@
 <script>
  import {onMount} from 'svelte';import {page} from '$app/stores';import {goto} from '$app/navigation';import {listDevices,getMonitoring} from '$lib/api.js';import {locale} from '$lib/i18n.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
- let loading=true;let items=[];let metrics={};let search='';let statusFilter='all';let limit=1;\n $: ru=$locale!=='en';\n $: filtered=items.filter(d=>{const q=search.trim().toLowerCase();if(q&&!(d.hostname+' '+d.device_id+' '+d.platform+' '+d.architecture).toLowerCase().includes(q))return false;if(statusFilter!=='all'&&d.status!==statusFilter)return false;return true});
+ let loading=true;let items=[];let metrics={};let search='';let statusFilter='all';let limit=1;
+ $: ru=$locale!=='en';
+ $: filtered=items.filter(d=>{const q=search.trim().toLowerCase();if(q&&!(d.hostname+' '+d.device_id+' '+d.platform+' '+d.architecture).toLowerCase().includes(q))return false;if(statusFilter!=='all'&&d.status!==statusFilter)return false;return true});
  onMount(async()=>{const [r,m]=await Promise.all([listDevices($page.url.searchParams.get('project_id')||''),getMonitoring($page.url.searchParams.get('project_id')||'')]);if(r.ok){items=r.data.devices||[];limit=r.data.limit||1}else notify(r.error||'Не удалось загрузить устройства','error');if(m.ok)for(const d of m.data.devices||[])metrics[d.id]=d.metrics||{};loading=false});
 </script>
 <div class="page-header"><div><div class="eyebrow">INFRASTRUCTURE</div><h1 class="page-title">{ru?'Устройства':'Devices'}</h1><p class="page-desc">{ru?'Управляй серверами и устройствами, подключёнными к Yevqo.':'Manage all servers and devices connected to Yevqo.'}</p></div><Button variant="primary" on:click={()=>goto('/overview')}>{ru?'Подключить устройство':'Connect device'}</Button></div>
