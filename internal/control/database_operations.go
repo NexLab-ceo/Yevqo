@@ -36,7 +36,7 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 	if err:=decodeJSON(r,&in);err!=nil { apiError(w,shared.ErrBadRequest("invalid JSON"));return }
 	in.Name=strings.TrimSpace(in.Name);in.Username=strings.TrimSpace(in.Username)
 	if in.ServerID<1 || !postgresIdentifier.MatchString(in.Name) || !postgresIdentifier.MatchString(in.Username) {
-		apiError(w,shared.ErrBadRequest("database and username must be valid PostgreSQL identifiers (1–63 characters)"));return
+		apiError(w,shared.ErrBadRequest("database and username must be valid SQL identifiers (1–63 characters)"));return
 	}
 	if len(in.Password)<12 || len(in.Password)>256 || strings.IndexByte(in.Password,0)>=0 {
 		apiError(w,shared.ErrBadRequest("password must be 12–256 characters and cannot contain NUL"));return
@@ -288,11 +288,13 @@ func (s *Server) handleDatabaseByID(w http.ResponseWriter,r *http.Request) {
 	if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM site_database_connections WHERE database_id=? AND user_id=?`,id,ownerID).Scan(&linkedSites);err!=nil { apiError(w,shared.ErrInternal("could not load database connections"));return }
 	user:=""
 	if username.Valid { user=username.String }
+	permissions := []string{"CONNECT","USAGE ON SCHEMA public","SELECT","INSERT","UPDATE","DELETE","USAGE/SELECT/UPDATE ON SEQUENCES"}
+	if engine == "mariadb" || engine == "mysql" { permissions = []string{"SELECT","INSERT","UPDATE","DELETE","CREATE","DROP","INDEX","ALTER","REFERENCES","EXECUTE","TRIGGER"} }
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"database":map[string]interface{}{
 		"id":databaseID,"server_id":serverID,"name":name,"status":status,"created_at":created,
 		"device_id":deviceID,"server_name":serverName,"engine":engine,"port":port,
 		"username":user,"host":"127.0.0.1","ssl_mode":sslMode,"restore_status":restoreStatus.String,"linked_sites":linkedSites,
-		"role_type":"Application user","permissions":[]string{"CONNECT","USAGE ON SCHEMA public","SELECT","INSERT","UPDATE","DELETE","USAGE/SELECT/UPDATE ON SEQUENCES"},
+		"role_type":"Application user","permissions":permissions,
 	}})
 }
 
