@@ -192,10 +192,10 @@ func (s *Server) finishScheduledBackup(item dueBackupSchedule, backupID int64) {
 	if err:=s.db.conn.QueryRowContext(ctx,`SELECT status FROM backups WHERE id=? AND user_id=?`,backupID,item.UserID).Scan(&status);err!=nil{return}
 	if status=="failed" { s.failBackupSchedule(item,"backup job failed"); return }
 	_,_ = s.db.conn.ExecContext(ctx,`UPDATE backup_schedules SET last_status='completed',last_error=NULL WHERE id=?`,item.ID)
-	_,_ = s.db.conn.ExecContext(ctx,`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,item.UserID,"success","Scheduled backup completed",fmt.Sprintf("Backup #%d completed. Retention target: %d.",backupID,item.Retention))
+	if s.notificationPreferenceEnabled(ctx,item.UserID,"system") { _,_ = s.db.conn.ExecContext(ctx,`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,item.UserID,"success","Scheduled backup completed",fmt.Sprintf("Backup #%d completed. Retention target: %d.",backupID,item.Retention)) }
 }
 
 func (s *Server) failBackupSchedule(item dueBackupSchedule, reason string) {
 	_,_ = s.db.conn.ExecContext(context.Background(),`UPDATE backup_schedules SET last_status='failed',last_error=? WHERE id=?`,reason,item.ID)
-	_,_ = s.db.conn.ExecContext(context.Background(),`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,item.UserID,"error","Scheduled backup failed",reason)
+	if s.notificationPreferenceEnabled(context.Background(),item.UserID,"system") { _,_ = s.db.conn.ExecContext(context.Background(),`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,item.UserID,"error","Scheduled backup failed",reason) }
 }
