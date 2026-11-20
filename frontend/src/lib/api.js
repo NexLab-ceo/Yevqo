@@ -183,7 +183,7 @@ export async function updateWorkspaceMemberRole(id, role, ownerId = '') { return
 export async function listWorkspaceInvitations() { return request('GET', '/api/workspace/invitations'); }
 export async function acceptWorkspaceInvitation(id) { return request('POST', '/api/workspace/invitations', { id }); }
 export async function listProjects() { return request('GET', '/api/projects'); }
-export async function createProject(name, description = '') { return request('POST', '/api/projects', { name, description }); }
+export async function createProject(name, description = '', ownerUserId = '') { return request('POST', '/api/projects', { name, description, ...(ownerUserId ? { owner_user_id: Number(ownerUserId) } : {}) }); }
 export async function getProject(id) { return request('GET', `/api/projects/${id}`); }
 export async function listProjectEnvironments(id) { return request('GET', `/api/projects/${id}/environments`); }
 export async function createProjectEnvironment(id, name, description = '') { return request('POST', `/api/projects/${id}/environments`, { name, description }); }
