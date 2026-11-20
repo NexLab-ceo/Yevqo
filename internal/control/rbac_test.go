@@ -12,6 +12,8 @@ func TestCanWorkspaceActionRoleMatrix(t *testing.T) {
 		{"Developer","device.read",true},
 		{"Developer","deploy",true},
 		{"Developer","stop_site",true},
+		{"Developer","get_site_restart_policy",true},
+		{"Developer","set_site_restart_policy",false},
 		{"Developer","stop",true},
 		{"Developer","rollback",true},
 		{"Developer","site.configure",false},
