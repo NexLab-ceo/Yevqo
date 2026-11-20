@@ -129,7 +129,9 @@ func siteDatabaseEnvironmentFilter(projectID, environmentID int64) (string, []in
 		[]interface{}{projectID, environmentID}, nil
 }
 
-func databaseConnectionDriver(engine string) string { if engine == "mariadb" || engine == "mysql" { return "mysql" }; return "pgsql" }\n\nfunc (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID int64, siteID string, projectID, environmentID int64) (map[string]string,error) {
+func databaseConnectionDriver(engine string) string { if engine == "mariadb" || engine == "mysql" { return "mysql" }; return "pgsql" }
+
+func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID int64, siteID string, projectID, environmentID int64) (map[string]string,error) {
 	filter, filterArgs, err := siteDatabaseEnvironmentFilter(projectID, environmentID)
 	if err != nil { return nil, err }
 	if projectID > 0 {
