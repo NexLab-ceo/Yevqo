@@ -37,13 +37,13 @@ yevqo-setup
 
 Choose **Control Plane** for a single-phone first smoke test. Complete the prompts. The setup creates a local MariaDB database/config only when needed and preserves an existing Control Plane config. Do not delete or manually replace the data directory to fix setup errors.
 
-After the dashboard loads, sign in or register. Open **Profile → Agent pairing code** and copy the code. Then configure the Agent on this same phone:
+After the dashboard loads, sign in or register. Open **Profile → Agent pairing token**, create a token and copy it. Creating a new token revokes the previous one. Then configure the Agent on this same phone:
 
 ```sh
 yevqo-setup-agent
 ```
 
-Use `ws://127.0.0.1:8080/ws` as the Control Plane WebSocket URL and paste the pairing code when prompted. The pairing code is the account's referral/authentication token; it is not a separate per-device token. Keep it private. The installer stores Agent credentials in Termux's private app storage (not shared `/sdcard` storage) and migrates a valid older shared-storage config into the private location. Existing Agent config is preserved.
+Use `ws://127.0.0.1:8080/ws` as the Control Plane WebSocket URL and paste the pairing token when prompted. The pairing token is separate from the public referral code. Only its SHA-256 hash is stored by Control Plane; the raw token is shown once. Keep it private. Existing Agent configurations using the old referral code must be reconfigured with the newly generated pairing token before reconnecting. The installer stores Agent credentials in Termux's private app storage (not shared `/sdcard` storage) and migrates a valid older shared-storage config into the private location. Existing Agent config is preserved.
 
 Check service state and logs:
 
