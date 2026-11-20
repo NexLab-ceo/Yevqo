@@ -64,6 +64,12 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 		if in.SiteDeviceID!=deviceID || len(in.SiteID)>64 { apiError(w,shared.ErrBadRequest("site and database must be on the same device for localhost connections"));return }
 		var exists int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,in.SiteDeviceID,in.SiteID,ownerID).Scan(&exists);err!=nil||exists!=1 { apiError(w,shared.ErrNotFound("site not found on selected device"));return }
+		if in.ProjectID > 0 && in.EnvironmentID > 0 {
+			var siteAssigned int
+			if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM project_environment_sites WHERE project_id=? AND environment_id=? AND device_id=? AND site_id=?`,in.ProjectID,in.EnvironmentID,in.SiteDeviceID,in.SiteID).Scan(&siteAssigned);err!=nil||siteAssigned!=1 {
+				apiError(w,shared.ErrBadRequest("website and database must belong to the same selected project environment"));return
+			}
+		}
 	}
 	conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
 	ctx,cancel:=context.WithTimeout(r.Context(),2*time.Minute);defer cancel()
