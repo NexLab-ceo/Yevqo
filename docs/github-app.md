@@ -23,6 +23,7 @@ Set these environment variables on the **Control Plane service**, not in fronten
 | `YEVQO_GITHUB_APP_ID` | Numeric GitHub App ID |
 | `YEVQO_GITHUB_APP_SLUG` | Public GitHub App slug used to build the installation URL |
 | `YEVQO_GITHUB_APP_PRIVATE_KEY` | RSA PEM private key; use real newlines or escaped `\n` |
+| `YEVQO_PUBLIC_URL` | Public HTTPS Control Plane origin (for example the Cloudflare Tunnel hostname); enables automatic push webhook registration |
 
 Restart the Control Plane after setting the variables. The public config endpoint returns only whether the App is configured and its public slug. It never returns the App ID or private key.
 
