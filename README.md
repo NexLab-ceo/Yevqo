@@ -28,7 +28,7 @@ The `main` branch is the active Yevqo implementation. The all-in-one package kee
 Project workspace and environment behavior, role boundaries, resource detach safety, and migration limitations are documented in [Project workspaces](docs/project-workspaces.md).
 
 ### Important implementation boundary
-PostgreSQL installation, database creation, application-role provisioning, encrypted credential storage, website process injection and local database backup are now wired through typed Agent commands. Backup restore, bounded backup download/transfer and scheduled backups have API/Agent command flows; end-to-end Agent validation and export remain open. Managed MariaDB/MySQL lifecycle, existing-cluster adoption and full credential rotation remain pending. The UI reports device-side actions only after the Agent confirms them.
+PostgreSQL and MariaDB/MySQL now have typed Agent workflows for server installation, start/stop, database and least-privilege application-user provisioning, user/role management, database privileges, connection tests, statistics and local backups. MariaDB uses a dedicated per-server Termux data directory, loopback-only binding, TLS certificates when SSL is enabled, verified SQL dumps and restore into a new database with rollback cleanup. Existing non-empty data directories are refused and never initialized over. Physical Android/Termux validation, existing-cluster adoption, cross-engine backup transfer and full credential rotation remain open. The UI reports device-side actions only after the Agent confirms them.
 
 
 
@@ -79,7 +79,7 @@ PostgreSQL installation, database creation, application-role provisioning, encry
 - The Agent validates the Termux prefix, data path, port, storage headroom and connection limit; installs only the allowlisted `postgresql` package and initializes only an empty data directory.
 - Existing non-empty directories and detected PostgreSQL clusters are rejected without overwrite. PostgreSQL binds to localhost; remote access stays disabled.
 - SSL require/prefer modes create a local self-signed certificate with a private key file; disable explicitly turns TLS off. The generated certificate provides encryption, not a public CA identity.
-- MariaDB/MySQL installation and existing-cluster adoption remain pending.
+- MariaDB/MySQL managed lifecycle and local database operations are implemented on `main`; existing-cluster adoption and physical Android validation remain pending.
 
 ### Database creation and website connections
 - A ready PostgreSQL server can create an independent database and a separate application login role.
