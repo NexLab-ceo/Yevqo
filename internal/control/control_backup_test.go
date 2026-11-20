@@ -7,7 +7,7 @@ import (
 
 func TestMySQLClientDefaultsFileUsesRealLines(t *testing.T) {
 	got := mysqlClientDefaultsFile("yevqo", "safe-pass", "127.0.0.1", "3306")
-	lines := strings.Split(got, "\n")
+	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
 	want := []string{
 		"[client]",
 		"user=\"yevqo\"",
