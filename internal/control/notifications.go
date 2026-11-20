@@ -3,9 +3,33 @@ package control
 import (
 	"context"
 	"fmt"
+	"encoding/json"
+	"strings"
 
 	"veltrix/internal/shared"
 )
+
+
+// notificationPreferenceEnabled checks the recipient's persisted notification category.
+func (s *Server) notificationPreferenceEnabled(ctx context.Context, userID int64, category string) bool {
+	var raw []byte
+	if err := s.db.conn.QueryRowContext(ctx, `SELECT setting_value FROM user_settings WHERE user_id=? AND setting_key='notifications'`, userID).Scan(&raw); err != nil { return true }
+	var preferences map[string]bool
+	if json.Unmarshal(raw, &preferences) != nil { return true }
+	enabled, exists := preferences[category]
+	return !exists || enabled
+}
+
+func notificationCategory(kind, title string) string {
+	lower := strings.ToLower(title)
+	if strings.Contains(lower, "deployment") || strings.Contains(lower, "deploy") || strings.Contains(lower, "build") {
+		if kind == "error" { return "deployment_errors" }
+		return "system"
+	}
+	if strings.Contains(lower, "device") || strings.Contains(lower, "agent") { return "device_events" }
+	if strings.Contains(lower, "project") || strings.Contains(lower, "workspace") { return "project_updates" }
+	return "system"
+}
 
 // notifyWorkspaceEvent delivers a resource event to its workspace owner and,
 // when different, to the member who initiated the action.
@@ -15,6 +39,7 @@ func (s *Server) notifyWorkspaceEvent(ctx context.Context, ownerID, actorID int6
 		recipients = append(recipients, actorID)
 	}
 	for _, recipientID := range recipients {
+		if !s.notificationPreferenceEnabled(ctx, recipientID, notificationCategory(kind,title)) { continue }
 		_, _ = s.db.conn.ExecContext(ctx, `INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`, recipientID, kind, title, body)
 	}
 }
@@ -73,7 +98,7 @@ func (s *Server) evaluateDeviceMetricAlerts(ctx context.Context, userID, deviceI
 		kind := "warning"
 		if transition == "recovered" { title = fmt.Sprintf("%s recovered on %s", alert.label, hostname); kind = "success" }
 		body := fmt.Sprintf("%s is %.1f%s; alert threshold %.1f%s, recovery threshold %.1f%s.",alert.label,alert.value,alert.unit,alert.threshold,alert.unit,alert.recovery,alert.unit)
-		if _, err := tx.ExecContext(ctx, `INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,userID,kind,title,body); err != nil { return err }
+		if s.notificationPreferenceEnabled(ctx,userID,"device_events") { if _, err := tx.ExecContext(ctx, `INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,userID,kind,title,body); err != nil { return err } }
 	}
 	return tx.Commit()
 }
@@ -96,7 +121,7 @@ func (s *Server) evaluateDeviceConnectivityAlert(ctx context.Context, userID, de
 	if transition!=""{
 		kind,title,body:="warning","Device disconnected: "+hostname,"The Agent connection to Yevqo was lost."
 		if transition=="recovered"{kind="success";title="Device reconnected: "+hostname;body="The Agent has reconnected to Yevqo."}
-		if _,err:=tx.ExecContext(ctx,`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,userID,kind,title,body);err!=nil{return err}
+		if s.notificationPreferenceEnabled(ctx,userID,"device_events"){if _,err:=tx.ExecContext(ctx,`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,userID,kind,title,body);err!=nil{return err}}
 	}
 	return tx.Commit()
 }
