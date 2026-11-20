@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -91,6 +92,18 @@ func verifyProviderToken(ctx context.Context, provider, token string) (providerA
 	return account, "", nil
 }
 
+
+ // handleGitHubAppConfig exposes only the public installation slug; credentials stay server-side.
+ func (s *Server) handleGitHubAppConfig(w http.ResponseWriter, r *http.Request) {
+  if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+  slug := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_SLUG"))
+  appID := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_ID"))
+  privateKey := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_PRIVATE_KEY"))
+  configured := slug != "" && appID != "" && privateKey != ""
+  if strings.ContainsAny(slug, "/\\?#") { slug = ""; configured = false }
+  writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"configured":configured,"app_slug":slug})
+ }
+
 func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 	u := UserFromContext(r.Context())
 	switch r.Method {
@@ -116,7 +129,18 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 		in.Provider=strings.ToLower(strings.TrimSpace(in.Provider))
 		in.Token=strings.TrimSpace(in.Token)
 		if in.Provider == "github_app" {
-			credentials := githubAppCredentials{AppID:strings.TrimSpace(in.AppID),InstallationID:strings.TrimSpace(in.InstallationID),PrivateKey:in.PrivateKey}
+			appID := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_ID"))
+			privateKey := strings.ReplaceAll(os.Getenv("YEVQO_GITHUB_APP_PRIVATE_KEY"), "\\n", "\n")
+			// Backward-compatible manual setup is retained for existing installations.
+			if appID == "" || privateKey == "" {
+				appID = strings.TrimSpace(in.AppID)
+				privateKey = in.PrivateKey
+			}
+			credentials := githubAppCredentials{AppID:appID,InstallationID:strings.TrimSpace(in.InstallationID),PrivateKey:privateKey}
+			if appID == "" || strings.TrimSpace(privateKey) == "" {
+				apiError(w, shared.ErrUnavailable("GitHub App is not configured on this Control Plane. Set YEVQO_GITHUB_APP_ID and YEVQO_GITHUB_APP_PRIVATE_KEY on the server."))
+				return
+			}
 			if err := validateGitHubAppCredentials(credentials); err != nil { apiError(w,shared.ErrBadRequest(err.Error())); return }
 			ctx,cancel := context.WithTimeout(r.Context(),20*time.Second); defer cancel()
 			_, account, err := githubAppInstallationToken(ctx,credentials)
