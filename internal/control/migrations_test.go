@@ -137,3 +137,18 @@ func TestCloudflareTunnelRouteMigrationIsAdditive(t *testing.T) {
 	}
 	for _, forbidden := range []string{"drop table","truncate table","delete from","drop column"} { if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) } }
 }
+
+func TestAgentPairingTokenMigrationIsAdditive(t *testing.T) {
+	path := filepath.Join("..", "..", "migrations", "023_agent_pairing_tokens.sql")
+	content, err := os.ReadFile(path)
+	if err != nil { t.Fatalf("read Agent token migration: %v", err) }
+	statements := splitSQL(string(content))
+	if len(statements) != 1 { t.Fatalf("migration has %d statements, want 1", len(statements)) }
+	normalized := strings.ToLower(strings.Join(statements, "\n"))
+	for _, required := range []string{"create table if not exists agent_tokens","user_id bigint unsigned not null primary key","token_hash char(64) not null unique","revoked_at timestamp null","references users(id) on delete cascade"} {
+		if !strings.Contains(normalized, required) { t.Errorf("migration is missing %q", required) }
+	}
+	for _, forbidden := range []string{"drop table","truncate table","delete from","drop column","alter table users"} {
+		if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) }
+	}
+}
