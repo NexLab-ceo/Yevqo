@@ -235,8 +235,8 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 	case http.MethodPost:
 		var in struct{DeviceID int64 `json:"device_id"`;SiteID string `json:"site_id"`;AutoDeploy bool `json:"auto_deploy_enabled"`;AllowProjectCode bool `json:"allow_project_code"`}
 		if err:=decodeJSON(r,&in);err!=nil||in.DeviceID<1||!validLogSiteID(in.SiteID){apiError(w,shared.ErrBadRequest("valid device_id and site_id are required"));return}
-		var fullName,cloneURL,branch string;var repoID,integrationID int64
-		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT repository_id,integration_id,full_name,clone_url,deploy_branch FROM project_repositories WHERE project_id=?`,projectID).Scan(&repoID,&integrationID,&fullName,&cloneURL,&branch);err!=nil{apiError(w,shared.ErrBadRequest("connect a GitHub repository first"));return}
+		var fullName,cloneURL,branch string
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT full_name,clone_url,deploy_branch FROM project_repositories WHERE project_id=?`,projectID).Scan(&fullName,&cloneURL,&branch);err!=nil{apiError(w,shared.ErrBadRequest("connect a GitHub repository first"));return}
 		var linked int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM project_sites ps JOIN devices d ON d.id=ps.device_id JOIN sites st ON st.device_id=ps.device_id AND st.site_id=ps.site_id WHERE ps.project_id=? AND ps.device_id=? AND ps.site_id=? AND d.user_id=?`,projectID,in.DeviceID,in.SiteID,ownerID).Scan(&linked);err!=nil||linked!=1{apiError(w,shared.ErrBadRequest("site must already be attached to this project"));return}
 		if in.AutoDeploy&&!in.AllowProjectCode{apiError(w,shared.ErrForbidden("explicit consent to automatically execute repository code is required"));return}
