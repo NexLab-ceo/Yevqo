@@ -284,8 +284,8 @@ func (s *Server) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 			WHERE a.workspace_owner_id=?`
 		args:=[]interface{}{ownerID}
 		if projectID>0 {
-			query+=` AND a.target_type='device' AND a.target_id IN (SELECT CAST(pd.device_id AS CHAR) FROM project_devices pd WHERE pd.project_id=?)`
-			args=append(args,projectID)
+			query+=` AND ((a.target_type='device' AND a.target_id IN (SELECT CAST(pd.device_id AS CHAR) FROM project_devices pd WHERE pd.project_id=?)) OR (a.target_type='workspace' AND CAST(JSON_UNQUOTE(JSON_EXTRACT(a.details,'$.project_id')) AS UNSIGNED)=?))`
+			args=append(args,projectID,projectID)
 		}
 		query+=" ORDER BY a.created_at DESC,a.id DESC LIMIT ?";args=append(args,limit)
 		rows,queryErr:=s.db.conn.QueryContext(r.Context(),query,args...)
