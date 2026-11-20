@@ -362,8 +362,8 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 	id,err:=strconv.ParseInt(parts[0],10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid server id"));return}
 	action:="database.manage";if r.Method==http.MethodGet{action="database.read"};ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,u.ID,action);if accessErr!=nil{apiError(w,accessErr);return}
 	if len(parts)==2&&parts[1]=="roles"&&r.Method==http.MethodGet {
-		var deviceID int64;var engine,status,dataDir string;var port,maxConnections int
-		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port,data_directory,max_connections FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&port,&dataDir,&maxConnections)
+		var deviceID int64;var engine,status,dataDir string;var port int
+		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port,data_directory FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&port,&dataDir)
 		if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
 		if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
 		if (engine!="postgresql"&&engine!="mariadb"&&engine!="mysql")||status!="ready" { apiError(w,shared.ErrBadRequest("a supported ready database server is required to inspect users"));return }
@@ -397,8 +397,8 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 func (s *Server) handleDatabaseServerAction(w http.ResponseWriter,r *http.Request,id int64,action string) {
 	u:=UserFromContext(r.Context())
 	ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,u.ID,"database.manage");if accessErr!=nil{apiError(w,accessErr);return}
-	var deviceID int64;var engine,status,dataDir string;var port int
-	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,data_directory,port FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&dataDir,&port)
+	var deviceID int64;var engine,status,dataDir string;var port,maxConnections int
+	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,data_directory,port,max_connections FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&dataDir,&port,&maxConnections)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
 	if engine!="postgresql" && engine!="mariadb" && engine!="mysql" { apiError(w,shared.ErrBadRequest("unsupported database engine"));return }
@@ -630,7 +630,7 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 			if accessErr != nil { apiError(w, accessErr); return }
 			var database, engine, databaseStatus, serverStatus, dataDir string
 			var port int
-			err := s.db.conn.QueryRowContext(r.Context(), `SELECT d.name,ds.engine,d.status,ds.status,ds.port
+			err := s.db.conn.QueryRowContext(r.Context(), `SELECT d.name,ds.engine,d.status,ds.status,ds.port,ds.data_directory
 				FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id
 				WHERE d.id=? AND d.user_id=?`, in.DatabaseID, ownerID).Scan(&database, &engine, &databaseStatus, &serverStatus, &port, &dataDir)
 			if err != nil { apiError(w, shared.ErrInternal("could not load database backup target")); return }
@@ -641,7 +641,7 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 			if err != nil { apiError(w, shared.ErrInternal("could not queue database backup")); return }
 			backupID, _ := res.LastInsertId()
 			go s.runDatabaseBackup(backupID, ownerID, u.ID, deviceID, conn, &shared.CreateDatabaseBackup{DatabaseID: in.DatabaseID, ServerID: serverID, Engine:engine,DataDirectory:dataDir,Database: database, Port: uint32(port)})
-			writeJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "backup": map[string]interface{}{"id": backupID, "device_id": deviceID, "resource_type": "database", "resource_id": fmt.Sprint(in.DatabaseID), "file_name": fmt.Sprintf("pending-%d.dump", in.DatabaseID), "size_bytes": 0, "status": "queued"}})
+			writeJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "backup": map[string]interface{}{"id": backupID, "device_id": deviceID, "resource_type": "database", "resource_id": fmt.Sprint(in.DatabaseID), "file_name": fmt.Sprintf("pending-%d", in.DatabaseID), "size_bytes": 0, "status": "queued"}})
 			return
 		}
 		if in.DeviceID < 1 || !validBackupSiteID(in.SiteID) { apiError(w, shared.ErrBadRequest("invalid device or site")); return }
