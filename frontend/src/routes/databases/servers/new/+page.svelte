@@ -59,7 +59,7 @@
     function setEngine(value) {
         engine = value;
         port = value === 'postgresql' ? 5432 : 3306;
-        dataDirectory = value === 'postgresql' ? '$PREFIX/var/lib/postgresql' : '$PREFIX/var/lib/mysql';
+        dataDirectory = value === 'postgresql' ? '$PREFIX/var/lib/postgresql' : '$PREFIX/var/lib/yevqo/mariadb';
         if (value !== 'postgresql' && authMethod === 'scram') authMethod = 'password';
     }
 
