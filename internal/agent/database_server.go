@@ -15,7 +15,8 @@ import (
 )
 
 func installDatabaseServer(req shared.InstallDatabaseServer) (*shared.DatabaseServerInstallResult,error) {
-	if req.Engine != "postgresql" { return nil, fmt.Errorf("Agent installation currently supports PostgreSQL only; MariaDB/MySQL remain planned") }
+	if req.Engine == "mariadb" || req.Engine == "mysql" { return installMariaDBServer(req) }
+	if req.Engine != "postgresql" { return nil, fmt.Errorf("unsupported database engine") }
 	if req.Port < 1024 || req.Port > 65535 { return nil, fmt.Errorf("invalid database port") }
 	if req.MaxConnections < 1 || req.MaxConnections > 1000 { return nil, fmt.Errorf("max connections must be 1–1000") }
 	prefix:=os.Getenv("PREFIX");if prefix==""{return nil,fmt.Errorf("Termux PREFIX is not set; run the Agent inside Termux")}
