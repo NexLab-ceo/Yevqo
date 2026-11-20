@@ -191,9 +191,18 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 		_,err:=s.db.conn.ExecContext(r.Context(),`UPDATE projects SET name=?,slug=?,description=? WHERE id=? AND user_id=?`,in.Name,projectSlug(in.Name),strings.TrimSpace(in.Description),id,ownerID)
 		if err!=nil{apiError(w,shared.ErrBadRequest("project name is already in use"));return};_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_updated",Details:map[string]interface{}{"project_id":id,"name":in.Name},IP:clientIP(r)});writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	case http.MethodDelete:
-		// Удаляется только группировка. Устройства, сайты и их данные остаются нетронутыми.
-		_,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM projects WHERE id=? AND user_id=?`,id,ownerID)
-		if err!=nil{apiError(w,shared.ErrInternal("could not delete project"));return};_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_deleted",Details:map[string]interface{}{"project_id":id,"name":name},IP:clientIP(r)});writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
+		// Restore each site's pre-project Git/webhook configuration before cascading project bindings.
+		tx,txErr:=s.db.conn.BeginTx(r.Context(),nil);if txErr!=nil{apiError(w,shared.ErrInternal("could not start project deletion"));return}
+		rows,queryErr:=tx.QueryContext(r.Context(),`SELECT device_id,site_id,previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc FROM project_repository_sites WHERE project_id=?`,id)
+		if queryErr!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not load project deployment targets"));return}
+		type priorSiteGit struct{deviceID int64;siteID string;gitURL sql.NullString;branch string;webhook bool;secret []byte}
+		prior:=make([]priorSiteGit,0)
+		for rows.Next(){var item priorSiteGit;if scanErr:=rows.Scan(&item.deviceID,&item.siteID,&item.gitURL,&item.branch,&item.webhook,&item.secret);scanErr!=nil{rows.Close();_=tx.Rollback();apiError(w,shared.ErrInternal("could not read project deployment targets"));return};prior=append(prior,item)}
+		if rows.Err()!=nil{rows.Close();_=tx.Rollback();apiError(w,shared.ErrInternal("could not read project deployment targets"));return};rows.Close()
+		for _,item:=range prior{if _,err=tx.ExecContext(r.Context(),`UPDATE sites SET git_url=?,git_branch=?,github_webhook_enabled=?,github_webhook_secret_enc=?,github_webhook_updated_at=NOW() WHERE device_id=? AND site_id=?`,nullableString(item.gitURL.String),item.branch,item.webhook,item.secret,item.deviceID,item.siteID);err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not restore site Git settings"));return}}
+		if _,err=tx.ExecContext(r.Context(),`DELETE FROM projects WHERE id=? AND user_id=?`,id,ownerID);err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not delete project"));return}
+		if err=tx.Commit();err!=nil{apiError(w,shared.ErrInternal("could not commit project deletion"));return}
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_deleted",Details:map[string]interface{}{"project_id":id,"name":name},IP:clientIP(r)});writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	default: http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
 }
