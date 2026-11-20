@@ -361,8 +361,8 @@ func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request)
 	id,err:=strconv.ParseInt(parts[0],10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid server id"));return}
 	action:="database.manage";if r.Method==http.MethodGet{action="database.read"};ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),id,u.ID,action);if accessErr!=nil{apiError(w,accessErr);return}
 	if len(parts)==2&&parts[1]=="roles"&&r.Method==http.MethodGet {
-		var deviceID int64;var engine,status string;var port int
-		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&port)
+		var deviceID int64;var engine,status,dataDir string;var port int
+		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status,port,data_directory FROM database_servers WHERE id=? AND user_id=?`,id,ownerID).Scan(&deviceID,&engine,&status,&port,&dataDir)
 		if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database server not found"));return }
 		if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
 		if (engine!="postgresql"&&engine!="mariadb"&&engine!="mysql")||status!="ready" { apiError(w,shared.ErrBadRequest("a supported ready database server is required to inspect users"));return }
@@ -627,19 +627,19 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 		if in.DatabaseID > 0 {
 			ownerID, serverID, deviceID, accessErr := s.authorizeDatabaseInstance(r.Context(), in.DatabaseID, u.ID, "database.manage")
 			if accessErr != nil { apiError(w, accessErr); return }
-			var database, engine, databaseStatus, serverStatus string
+			var database, engine, databaseStatus, serverStatus, dataDir string
 			var port int
 			err := s.db.conn.QueryRowContext(r.Context(), `SELECT d.name,ds.engine,d.status,ds.status,ds.port
 				FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id
-				WHERE d.id=? AND d.user_id=?`, in.DatabaseID, ownerID).Scan(&database, &engine, &databaseStatus, &serverStatus, &port)
+				WHERE d.id=? AND d.user_id=?`, in.DatabaseID, ownerID).Scan(&database, &engine, &databaseStatus, &serverStatus, &port, &dataDir)
 			if err != nil { apiError(w, shared.ErrInternal("could not load database backup target")); return }
-			if engine != "postgresql" || databaseStatus != "ready" || serverStatus != "ready" { apiError(w, shared.ErrBadRequest("database and PostgreSQL server must be ready")); return }
+			if (engine != "postgresql" && engine != "mariadb" && engine != "mysql") || databaseStatus != "ready" || serverStatus != "ready" { apiError(w, shared.ErrBadRequest("database and server must be ready")); return }
 			conn, online := s.hub.Get(deviceID)
 			if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
-			res, err := s.db.conn.ExecContext(r.Context(), `INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,?,0,'queued')`, ownerID, deviceID, serverID, "database", fmt.Sprint(in.DatabaseID), fmt.Sprintf("pending-%d.dump", in.DatabaseID))
+			res, err := s.db.conn.ExecContext(r.Context(), `INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,?,0,'queued')`, ownerID, deviceID, serverID, "database", fmt.Sprint(in.DatabaseID), fmt.Sprintf("pending-%d", in.DatabaseID))
 			if err != nil { apiError(w, shared.ErrInternal("could not queue database backup")); return }
 			backupID, _ := res.LastInsertId()
-			go s.runDatabaseBackup(backupID, ownerID, u.ID, deviceID, conn, &shared.CreateDatabaseBackup{DatabaseID: in.DatabaseID, ServerID: serverID, Database: database, Port: uint32(port)})
+			go s.runDatabaseBackup(backupID, ownerID, u.ID, deviceID, conn, &shared.CreateDatabaseBackup{DatabaseID: in.DatabaseID, ServerID: serverID, Engine:engine,DataDirectory:dataDir,Database: database, Port: uint32(port)})
 			writeJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "backup": map[string]interface{}{"id": backupID, "device_id": deviceID, "resource_type": "database", "resource_id": fmt.Sprint(in.DatabaseID), "file_name": fmt.Sprintf("pending-%d.dump", in.DatabaseID), "size_bytes": 0, "status": "queued"}})
 			return
 		}
@@ -904,12 +904,12 @@ func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Reque
 	err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,database_server_id,file_name,status,resource_type FROM backups WHERE id=? AND user_id=?`,in.BackupID,ownerID).Scan(&deviceID,&backupServerID,&fileName,&backupStatus,&resourceType)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database backup not found"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load database backup"));return }
-	if resourceType!="database"||backupStatus!="verified"||!backupServerID.Valid { apiError(w,shared.ErrBadRequest("only verified PostgreSQL database backups can be restored"));return }
-	var engine,serverStatus string;var port int
-	err=s.db.conn.QueryRowContext(r.Context(),`SELECT engine,status,port FROM database_servers WHERE id=? AND user_id=? AND device_id=?`,backupServerID.Int64,ownerID,deviceID).Scan(&engine,&serverStatus,&port)
+	if resourceType!="database"||backupStatus!="verified"||!backupServerID.Valid { apiError(w,shared.ErrBadRequest("only verified database backups can be restored"));return }
+	var engine,serverStatus,dataDir string;var port int
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT engine,status,port,data_directory FROM database_servers WHERE id=? AND user_id=? AND device_id=?`,backupServerID.Int64,ownerID,deviceID).Scan(&engine,&serverStatus,&port,&dataDir)
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("source Database Server is no longer available"));return }
 	if err!=nil { apiError(w,shared.ErrInternal("could not load restore target server"));return }
-	if engine!="postgresql"||serverStatus!="ready" { apiError(w,shared.ErrBadRequest("restore requires the original PostgreSQL server to be ready"));return }
+	if (engine!="postgresql"&&engine!="mariadb"&&engine!="mysql")||serverStatus!="ready" { apiError(w,shared.ErrBadRequest("restore requires the original database server to be ready"));return }
 	if in.ProjectID > 0 {
 		var assigned int
 		err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_database_servers pds
@@ -937,7 +937,7 @@ func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Reque
 	jobRes,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO database_restore_jobs(user_id,backup_id,target_database_id,status) VALUES(?,?,?,'queued')`,ownerID,in.BackupID,targetID)
 	if err!=nil { _,_=s.db.conn.ExecContext(context.Background(),`DELETE FROM db_instances WHERE id=? AND user_id=?`,targetID,ownerID);apiError(w,shared.ErrInternal("could not queue restore job"));return }
 	jobID,_:=jobRes.LastInsertId()
-	req:=&shared.RestoreDatabaseBackup{BackupServerID:backupServerID.Int64,BackupFileName:fileName,Database:shared.CreateDatabase{DatabaseID:targetID,ServerID:backupServerID.Int64,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)}}
+	req:=&shared.RestoreDatabaseBackup{BackupServerID:backupServerID.Int64,BackupFileName:fileName,Database:shared.CreateDatabase{Engine:engine,DataDirectory:dataDir,DatabaseID:targetID,ServerID:backupServerID.Int64,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)}}
 	go s.runDatabaseRestore(jobID,in.BackupID,targetID,ownerID,u.ID,deviceID,in.ProjectID,in.EnvironmentID,conn,req,in.SiteID,nonce,ciphertext)
 	writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"job_id":jobID,"database":map[string]interface{}{"id":targetID,"name":in.Name,"status":"planned"},"status":"queued","message":"Backup will be restored into a new database; the source database and backup remain untouched."})
 }
