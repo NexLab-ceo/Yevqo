@@ -42,6 +42,17 @@ yevqo-cli delete-environment 12 4 --confirm
 
 Delete commands require `--confirm`. Project deletion removes only the project grouping; it does not delete sites, databases, or their data. Environment deletion removes the environment and its assignments; Production remains protected by the Control Plane.
 
+## Preview deployments
+
+```sh
+yevqo-cli previews 12 my-site
+y evqo-cli preview-create 12 my-site --allow-project-code
+y evqo-cli preview-create 12 my-site feature/test abc123 --allow-project-code
+y evqo-cli preview-delete 12 my-site <preview-key> --confirm
+```
+
+Preview creation requires explicit project-code consent. Preview deletion requires `--confirm`.
+
 ## Site operations
 
 ```sh

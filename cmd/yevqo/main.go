@@ -27,6 +27,13 @@ type apiResponse struct {
 	Message string `json:"message"`
 	Error string `json:"error"`
 	Payload json.RawMessage `json:"payload"`
+	Key string `json:"key,omitempty"`
+	Status string `json:"status,omitempty"`
+	Port int `json:"port,omitempty"`
+	PID int `json:"pid,omitempty"`
+	Commit string `json:"commit,omitempty"`
+	URL string `json:"url,omitempty"`
+	ExpiresInHours int `json:"expires_in_hours,omitempty"`
 }
 
 func newAPIClient(baseURL, session string) (*apiClient, error) {
@@ -97,8 +104,21 @@ func (c *apiClient) patch(path string, body any) (apiResponse, error) { return c
 func (c *apiClient) delete(path string) (apiResponse, error) { return c.mutate(http.MethodDelete,path,nil) }
 
 func printMutationResult(result apiResponse, stdout io.Writer, fallback string) {
+	if result.Key != "" {
+		encoded,err:=json.MarshalIndent(result,"","  ")
+		if err==nil { fmt.Fprintln(stdout,string(encoded)); return }
+	}
 	if result.Message != "" { fmt.Fprintln(stdout,result.Message); return }
 	fmt.Fprintln(stdout,fallback)
+}
+
+func printJSON(data []byte, stdout io.Writer) error {
+	var value any
+	if err:=json.Unmarshal(data,&value);err!=nil{return err}
+	encoded,err:=json.MarshalIndent(value,"","  ")
+	if err!=nil{return err}
+	_,err=fmt.Fprintln(stdout,string(encoded))
+	return err
 }
 
 func positiveCLIID(raw string) error {
@@ -115,7 +135,7 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 	if err := global.Parse(args); err != nil { return 2 }
 	rest := global.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(stderr, "usage: yevqo-cli [--server URL] [--session COOKIE] <projects|devices|sites|databases|database-servers|backups|backup-schedules|deployments|monitoring|project|environments|create-project|update-project|delete-project|create-environment|update-environment|delete-environment|deploy|start|stop|restart|logs|backup-site|backup-db> [arguments]")
+		fmt.Fprintln(stderr, "usage: yevqo-cli [--server URL] [--session COOKIE] <projects|devices|sites|databases|database-servers|backups|backup-schedules|deployments|monitoring|project|environments|create-project|update-project|delete-project|create-environment|update-environment|delete-environment|previews|preview-create|preview-delete|deploy|start|stop|restart|logs|backup-site|backup-db> [arguments]")
 		return 2
 	}
 	command := rest[0]
@@ -177,6 +197,28 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		path:="/api/projects/"+url.PathEscape(rest[1])+"/environments/"+url.PathEscape(rest[2])
 		result,err:=client.delete(path)
 		if err!=nil{fmt.Fprintln(stderr,err);return 1};printMutationResult(result,stdout,"environment assignments removed; app data was not deleted");return 0
+	}
+	if command=="previews" {
+		if len(rest)!=3 { fmt.Fprintln(stderr,"expected device-id and site-id");return 2 }
+		if err:=positiveCLIID(rest[1]);err!=nil{fmt.Fprintln(stderr,err);return 2}
+		data,err:=client.get("/api/sites/"+url.PathEscape(rest[1])+"/"+url.PathEscape(rest[2])+"/previews")
+		if err!=nil{fmt.Fprintln(stderr,err);return 1};if err:=printJSON(data,stdout);err!=nil{fmt.Fprintln(stderr,err);return 1};return 0
+	}
+	if command=="preview-create" {
+		if len(rest)<4 || len(rest)>6 || rest[len(rest)-1]!="--allow-project-code" { fmt.Fprintln(stderr,"preview creation requires --allow-project-code consent");return 2 }
+		if err:=positiveCLIID(rest[1]);err!=nil{fmt.Fprintln(stderr,err);return 2}
+		body:=map[string]any{"allow_project_code":true}
+		if len(rest)>=5 { body["branch"]=rest[3] }
+		if len(rest)==6 { body["commit"]=rest[4] }
+		result,err:=client.post("/api/sites/"+url.PathEscape(rest[1])+"/"+url.PathEscape(rest[2])+"/previews",body)
+		if err!=nil{fmt.Fprintln(stderr,err);return 1};printMutationResult(result,stdout,"preview queued");return 0
+	}
+	if command=="preview-delete" {
+		if len(rest)!=5 || rest[4]!="--confirm" { fmt.Fprintln(stderr,"deleting a preview requires --confirm");return 2 }
+		if err:=positiveCLIID(rest[1]);err!=nil{fmt.Fprintln(stderr,err);return 2}
+		path:="/api/sites/"+url.PathEscape(rest[1])+"/"+url.PathEscape(rest[2])+"/previews/"+url.PathEscape(rest[3])
+		result,err:=client.delete(path)
+		if err!=nil{fmt.Fprintln(stderr,err);return 1};printMutationResult(result,stdout,"preview deleted");return 0
 	}
 	if command=="project"||command=="environments" {
 		if len(rest)!=2 { fmt.Fprintln(stderr,"expected a project id");return 2 }

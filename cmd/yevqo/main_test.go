@@ -149,3 +149,39 @@ func TestCLIDestructiveLifecycleCommandsRequireConfirmation(t *testing.T) {
 		if code!=2||called||!strings.Contains(stderr.String(),"--confirm"){t.Fatalf("args=%v exit=%d called=%v stderr=%q",args,code,called,stderr.String())}
 	}
 }
+
+func TestCLIPreviewLifecycleCommands(t *testing.T) {
+	cases:=[]struct{name string;args []string;method,path string;body map[string]any}{
+		{"list",[]string{"previews","12","demo"},http.MethodGet,"/api/sites/12/demo/previews",nil},
+		{"create",[]string{"preview-create","12","demo","feature/test","abc123","--allow-project-code"},http.MethodPost,"/api/sites/12/demo/previews",map[string]any{"allow_project_code":true,"branch":"feature/test","commit":"abc123"}},
+		{"delete",[]string{"preview-delete","12","demo","0123456789abcdef0123456789abcdef","--confirm"},http.MethodDelete,"/api/sites/12/demo/previews/0123456789abcdef0123456789abcdef",nil},
+	}
+	for _,tc:=range cases { t.Run(tc.name,func(t *testing.T){
+		called:=false
+		server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+			called=true
+			if r.Method!=tc.method||r.URL.Path!=tc.path{t.Fatalf("request=%s %s, want %s %s",r.Method,r.URL.Path,tc.method,tc.path)}
+			if tc.body!=nil{var got map[string]any;if err:=json.NewDecoder(r.Body).Decode(&got);err!=nil{t.Fatal(err)};for k,v:=range tc.body{if got[k]!=v{t.Fatalf("%s=%#v, want %#v",k,got[k],v)}}}
+			w.Header().Set("Content-Type","application/json")
+			if tc.name=="list"{_,_=w.Write([]byte(`{"ok":true,"previews":[{"key":"abc","status":"ready"}]}`))}else if tc.name=="create"{_,_=w.Write([]byte(`{"ok":true,"key":"abc","status":"ready","port":32001,"url":"http://127.0.0.1:32001","expires_in_hours":24}`))}else{_,_=w.Write([]byte(`{"ok":true,"message":"preview deleted"}`))}
+		}))
+		defer server.Close()
+		var stdout,stderr strings.Builder
+		args:=append([]string{"--server",server.URL,"--session","test-session"},tc.args...)
+		if code:=run(args,func(string)string{return ""},&stdout,&stderr);code!=0{t.Fatalf("exit=%d stderr=%s",code,stderr.String())}
+		if !called{t.Fatal("Control Plane was not called")}
+		if tc.name=="create"&&!strings.Contains(stdout.String(),"\"key\": \"abc\""){t.Fatalf("preview key not printed: %s",stdout.String())}
+	})}
+}
+
+func TestCLIPreviewCreateAndDeleteRequireConfirmation(t *testing.T) {
+	for _,args:=range [][]string{{"preview-create","12","demo"},{"preview-delete","12","demo","0123456789abcdef0123456789abcdef"}}{
+		called:=false
+		server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){called=true}))
+		var stdout,stderr strings.Builder
+		all:=append([]string{"--server",server.URL,"--session","test-session"},args...)
+		code:=run(all,func(string)string{return ""},&stdout,&stderr)
+		server.Close()
+		if code!=2||called{t.Fatalf("args=%v exit=%d called=%v stderr=%q",args,code,called,stderr.String())}
+	}
+}
