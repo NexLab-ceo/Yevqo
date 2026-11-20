@@ -128,7 +128,11 @@ func (c *AgentConn) readPump(srv *Server) {
 		c.shutdown()
 		if c.Device != nil {
 			if c.hub.RemoveConn(c) {
-				_ = c.db.MarkDeviceOffline(context.Background(), c.Device.ID)
+				offlineCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				if err := c.db.MarkDeviceOffline(offlineCtx, c.Device.ID); err == nil {
+					if alertErr := srv.evaluateDeviceConnectivityAlert(offlineCtx, c.Device.UserID, c.Device.ID, false); alertErr != nil { log.Printf("evaluate device offline alert: %v", alertErr) }
+				}
+				cancel()
 				if srv.logStreams != nil { srv.logStreams.publishAgentStatus(c.Device.UserID, c.Device.ID, "offline") }
 			}
 		}
@@ -235,6 +239,7 @@ func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 
 	c.Device = device
 	c.hub.Add(c)
+	if alertErr := srv.evaluateDeviceConnectivityAlert(ctx, device.UserID, device.ID, true); alertErr != nil { log.Printf("evaluate device online alert: %v", alertErr) }
 	if srv.logStreams != nil { srv.logStreams.publishAgentStatus(device.UserID, device.ID, "online") }
 
 	resp := shared.Envelope{

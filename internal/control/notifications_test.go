@@ -8,6 +8,8 @@ func TestMetricAlertTransitionUsesHysteresis(t *testing.T) {
 		{false,87,90,85,false,""},
 		{true,88,90,85,true,""},
 		{true,85,90,85,false,"recovered"},
+		{false,1,1,0,true,"triggered"},
+		{true,0,1,0,false,"recovered"},
 	}
 	for _, tc := range cases {
 		gotActive, gotEvent := metricAlertTransition(tc.active,tc.value,tc.threshold,tc.recovery)

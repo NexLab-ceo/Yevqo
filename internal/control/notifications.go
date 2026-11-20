@@ -77,3 +77,26 @@ func (s *Server) evaluateDeviceMetricAlerts(ctx context.Context, userID, deviceI
 	}
 	return tx.Commit()
 }
+
+func (s *Server) evaluateDeviceConnectivityAlert(ctx context.Context, userID, deviceID int64, online bool) error {
+	if userID < 1 || deviceID < 1 { return nil }
+	var hostname string
+	if err := s.db.conn.QueryRowContext(ctx, `SELECT hostname FROM devices WHERE id=? AND user_id=?`,deviceID,userID).Scan(&hostname); err != nil { return err }
+	if hostname == "" { hostname = fmt.Sprintf("Device #%d",deviceID) }
+	value := 1.0
+	if online { value = 0 }
+	tx, err := s.db.conn.BeginTx(ctx,nil)
+	if err != nil { return err }
+	defer tx.Rollback()
+	if _,err:=tx.ExecContext(ctx,`INSERT IGNORE INTO device_alert_state(device_id,user_id,alert_key,active,last_value) VALUES(?,?, 'offline',0,?)`,deviceID,userID,value);err!=nil{return err}
+	var active bool
+	if err:=tx.QueryRowContext(ctx,`SELECT active FROM device_alert_state WHERE device_id=? AND alert_key='offline' FOR UPDATE`,deviceID).Scan(&active);err!=nil{return err}
+	nextActive,transition:=metricAlertTransition(active,value,1,0)
+	if _,err:=tx.ExecContext(ctx,`UPDATE device_alert_state SET user_id=?,active=?,last_value=?,updated_at=CURRENT_TIMESTAMP WHERE device_id=? AND alert_key='offline'`,userID,nextActive,value,deviceID);err!=nil{return err}
+	if transition!=""{
+		kind,title,body:="warning","Device disconnected: "+hostname,"The Agent connection to Yevqo was lost."
+		if transition=="recovered"{kind="success";title="Device reconnected: "+hostname;body="The Agent has reconnected to Yevqo."}
+		if _,err:=tx.ExecContext(ctx,`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,userID,kind,title,body);err!=nil{return err}
+	}
+	return tx.Commit()
+}
