@@ -81,7 +81,7 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 	res,err:=s.db.conn.ExecContext(ctx,`INSERT INTO db_instances(user_id,server_id,name,status) VALUES(?,?,?,'planned')`,ownerID,in.ServerID,in.Name)
 	if err!=nil { apiError(w,shared.ErrBadRequest("database name already exists or could not be reserved"));return }
 	databaseID,_:=res.LastInsertId()
-	cmdResult,err:=conn.SendCommand(ctx,"create_database",&shared.CreateDatabase{Engine:engine,DataDirectory:serverDataDirectory(s.db.conn,ctx,in.ServerID,ownerID),DatabaseID:databaseID,ServerID:in.ServerID,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)})
+	cmdResult,err:=conn.SendCommand(ctx,"create_database",&shared.CreateDatabase{Engine:engine,SSLMode:sslMode,DataDirectory:serverDataDirectory(s.db.conn,ctx,in.ServerID,ownerID),DatabaseID:databaseID,ServerID:in.ServerID,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)})
 	if err!=nil || !cmdResult.Ok {
 		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,databaseID,ownerID)
 		if err!=nil { apiError(w,shared.ErrInternal("Agent database creation command failed"));return }
@@ -150,7 +150,7 @@ func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID i
 			return nil, shared.ErrBadRequest("select the project environment before starting a site with managed database connections")
 		}
 	}
-	query := `SELECT d.name,ds.port,ds.ssl_mode,dc.username,dc.ciphertext,dc.nonce,ds.engine
+	query := `SELECT d.name,ds.port,ds.ssl_mode,dc.username,dc.ciphertext,dc.nonce,ds.engine,ds.data_directory
 		FROM site_database_connections c
 		JOIN db_instances d ON d.id=c.database_id
 		JOIN database_servers ds ON ds.id=d.server_id AND ds.user_id=d.user_id
@@ -160,11 +160,11 @@ func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID i
 	args = append(args, filterArgs...)
 	rows,err:=s.db.conn.QueryContext(ctx,query,args...)
 	if err!=nil{return nil,err};defer rows.Close()
-	type databaseEnv struct { Name string `json:"name"`; Engine string `json:"engine"`; Host string `json:"host"`; Port int `json:"port"`; SSLMode string `json:"ssl_mode"`; Username string `json:"username"`; Password string `json:"password"` }
+	type databaseEnv struct { Name string `json:"name"`; Engine string `json:"engine"`; DataDirectory string `json:"data_directory"`; Host string `json:"host"`; Port int `json:"port"`; SSLMode string `json:"ssl_mode"`; Username string `json:"username"`; Password string `json:"password"` }
 	all:=make([]databaseEnv,0)
 	for rows.Next(){
 		var item databaseEnv;var ciphertext,nonce []byte
-		if err:=rows.Scan(&item.Name,&item.Port,&item.SSLMode,&item.Username,&ciphertext,&nonce,&item.Engine);err!=nil{return nil,err}
+		if err:=rows.Scan(&item.Name,&item.Port,&item.SSLMode,&item.Username,&ciphertext,&nonce,&item.Engine,&item.DataDirectory);err!=nil{return nil,err}
 		plain,err:=decryptCredential(s.credentialKey,nonce,ciphertext);if err!=nil{return nil,err}
 		item.Host="127.0.0.1";item.Password=string(plain);all=append(all,item)
 	}
@@ -172,7 +172,7 @@ func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID i
 	if len(all)==0{return nil,nil}
 	encoded,err:=json.Marshal(all);if err!=nil{return nil,err}
 	first:=all[0]
-	return map[string]string{"DB_CONNECTION":databaseConnectionDriver(first.Engine),"DB_HOST":first.Host,"DB_PORT":strconv.Itoa(first.Port),"DB_SSLMODE":first.SSLMode,"DB_DATABASE":first.Name,"DB_USERNAME":first.Username,"DB_PASSWORD":first.Password,"VELTRIX_DATABASES":string(encoded)},nil
+	env := map[string]string{"DB_CONNECTION":databaseConnectionDriver(first.Engine),"DB_HOST":first.Host,"DB_PORT":strconv.Itoa(first.Port),"DB_SSLMODE":first.SSLMode,"DB_DATABASE":first.Name,"DB_USERNAME":first.Username,"DB_PASSWORD":first.Password,"VELTRIX_DATABASES":string(encoded)}\n\tif first.Engine == "mariadb" || first.Engine == "mysql" { env["DB_SSL_CA"] = filepath.Join(first.DataDirectory, "server.crt") }\n\treturn env,nil
 }
 
 func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Request) {
