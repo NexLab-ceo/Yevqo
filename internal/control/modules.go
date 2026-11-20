@@ -165,7 +165,12 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 		srows,err:=s.db.conn.QueryContext(r.Context(),`SELECT ps.device_id,ps.site_id,d.hostname FROM project_sites ps JOIN devices d ON d.id=ps.device_id WHERE ps.project_id=? AND d.user_id=?`,id,ownerID)
 		if err!=nil { apiError(w,shared.ErrInternal("could not load project sites"));return }
 		sites:=make([]map[string]interface{},0);for srows.Next(){var did int64;var sid,host string;if srows.Scan(&did,&sid,&host)==nil{sites=append(sites,map[string]interface{}{"device_id":did,"site_id":sid,"device_name":host})}};srows.Close()
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"name":name,"slug":slug,"description":description},"devices":devices,"sites":sites})
+		dbRows,err:=s.db.conn.QueryContext(r.Context(),`SELECT ds.id,ds.device_id,ds.name,ds.engine,ds.status FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.user_id=? ORDER BY ds.created_at DESC`,id,ownerID)
+		if err!=nil { apiError(w,shared.ErrInternal("could not load project database servers"));return }
+		databaseServers:=make([]map[string]interface{},0)
+		for dbRows.Next(){var serverID,deviceID int64;var serverName,engine,status string;if err:=dbRows.Scan(&serverID,&deviceID,&serverName,&engine,&status);err!=nil{dbRows.Close();apiError(w,shared.ErrInternal("could not read project database servers"));return};databaseServers=append(databaseServers,map[string]interface{}{"id":serverID,"device_id":deviceID,"name":serverName,"engine":engine,"status":status})}
+		if err:=dbRows.Err();err!=nil{dbRows.Close();apiError(w,shared.ErrInternal("could not read project database servers"));return};dbRows.Close()
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"name":name,"slug":slug,"description":description},"devices":devices,"sites":sites,"database_servers":databaseServers})
 	case http.MethodPatch:
 		var in projectInput;if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 		in.Name=strings.TrimSpace(in.Name);if len(in.Name)<2||len(in.Name)>80{apiError(w,shared.ErrBadRequest("project name must be 2–80 characters"));return}
