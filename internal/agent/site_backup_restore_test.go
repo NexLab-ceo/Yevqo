@@ -59,7 +59,12 @@ func TestExtractSiteArchiveRejectsEmptyArchive(t *testing.T) {
 
 func TestExtractSiteArchiveRejectsOversizedEntryBeforeWriting(t *testing.T) {
 	dir:=t.TempDir();archive:=filepath.Join(dir,"large.tar.gz");out:=filepath.Join(dir,"out")
-	writeTestSiteArchive(t,archive,[]*tar.Header{{Name:"large.bin",Mode:0600,Size:maxSiteRestoreBytes+1,Typeflag:tar.TypeReg}},[]string{""})
+	file,err:=os.Create(archive);if err!=nil{t.Fatal(err)}
+	gz:=gzip.NewWriter(file);tw:=tar.NewWriter(gz)
+	if err:=tw.WriteHeader(&tar.Header{Name:"large.bin",Mode:0600,Size:maxSiteRestoreBytes+1,Typeflag:tar.TypeReg});err!=nil{t.Fatal(err)}
+	_ = tw.Close() // intentionally leave the declared file payload truncated
+	if err:=gz.Close();err!=nil{t.Fatal(err)}
+	if err:=file.Close();err!=nil{t.Fatal(err)}
 	if err:=os.Mkdir(out,0700);err!=nil{t.Fatal(err)}
 	if err:=extractSiteArchive(archive,out);err==nil{t.Fatal("expected oversized archive entry to be rejected")}
 	if _,err:=os.Stat(filepath.Join(out,"large.bin"));!os.IsNotExist(err){t.Fatalf("oversized entry was written: %v",err)}
