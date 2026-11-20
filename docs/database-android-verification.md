@@ -114,10 +114,16 @@ try {
         getenv('DB_HOST') ?: '127.0.0.1',
         getenv('DB_PORT') ?: '3306',
         getenv('DB_DATABASE') ?: '');
-    $pdo = new PDO($dsn, getenv('DB_USERNAME') ?: '', getenv('DB_PASSWORD') ?: '', [
+    $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_EMULATE_PREPARES => false,
-    ]);
+    ];
+    $ca = getenv('DB_SSL_CA');
+    if ($ca && defined('PDO::MYSQL_ATTR_SSL_CA')) {
+        $options[PDO::MYSQL_ATTR_SSL_CA] = $ca;
+        $options[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = true;
+    }
+    $pdo = new PDO($dsn, getenv('DB_USERNAME') ?: '', getenv('DB_PASSWORD') ?: '', $options);
     echo json_encode(['ok' => true, 'result' => $pdo->query('SELECT DATABASE() AS db, CURRENT_USER() AS user, 1 AS connection_ok')->fetch(PDO::FETCH_ASSOC)]);
 } catch (Throwable $e) {
     http_response_code(500);
