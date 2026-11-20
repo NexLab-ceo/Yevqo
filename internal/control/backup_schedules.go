@@ -28,49 +28,78 @@ type backupSchedule struct {
 
 func (s *Server) handleBackupSchedules(w http.ResponseWriter, r *http.Request) {
 	u := UserFromContext(r.Context())
-	if r.Method == http.MethodGet {
-		rows, err := s.db.conn.QueryContext(r.Context(), `SELECT id,resource_type,device_id,COALESCE(site_id,''),COALESCE(database_id,0),interval_hours,retention_count,enabled,next_run_at,last_run_at,last_status,COALESCE(last_error,'') FROM backup_schedules WHERE user_id=? ORDER BY created_at DESC`, u.ID)
-		if err != nil { apiError(w, shared.ErrInternal("could not load backup schedules")); return }
-		defer rows.Close()
+	switch r.Method {
+	case http.MethodGet:
+		owners, err := s.db.WorkspaceOwnerIDs(r.Context(), u.ID)
+		if err != nil { apiError(w, err); return }
 		out := make([]backupSchedule, 0)
-		for rows.Next() {
-			var item backupSchedule
-			if err := rows.Scan(&item.ID,&item.ResourceType,&item.DeviceID,&item.SiteID,&item.DatabaseID,&item.IntervalHours,&item.RetentionCount,&item.Enabled,&item.NextRunAt,&item.LastRunAt,&item.LastStatus,&item.LastError); err != nil { apiError(w, shared.ErrInternal("could not read backup schedules")); return }
-			out = append(out, item)
+		for _, ownerID := range owners {
+			role, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
+			if roleErr != nil { apiError(w, roleErr); return }
+			if !allowed || !CanWorkspaceAction(role, "backup.read") { continue }
+			rows, queryErr := s.db.conn.QueryContext(r.Context(), `SELECT id,resource_type,device_id,COALESCE(site_id,''),COALESCE(database_id,0),interval_hours,retention_count,enabled,next_run_at,last_run_at,last_status,COALESCE(last_error,'') FROM backup_schedules WHERE user_id=? ORDER BY created_at DESC`, ownerID)
+			if queryErr != nil { apiError(w, shared.ErrInternal("could not load backup schedules")); return }
+			for rows.Next() {
+				var item backupSchedule
+				if err := rows.Scan(&item.ID,&item.ResourceType,&item.DeviceID,&item.SiteID,&item.DatabaseID,&item.IntervalHours,&item.RetentionCount,&item.Enabled,&item.NextRunAt,&item.LastRunAt,&item.LastStatus,&item.LastError); err != nil {
+					rows.Close(); apiError(w, shared.ErrInternal("could not read backup schedules")); return
+				}
+				out = append(out, item)
+			}
+			if err := rows.Err(); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read backup schedules")); return }
+			rows.Close()
 		}
-		if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read backup schedules")); return }
-		writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"schedules":out}); return
-	}
-	if r.Method == http.MethodPost {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"schedules":out})
+	case http.MethodPost:
 		var in struct { ResourceType string `json:"resource_type"`; DeviceID int64 `json:"device_id"`; SiteID string `json:"site_id"`; DatabaseID int64 `json:"database_id"`; IntervalHours int `json:"interval_hours"`; RetentionCount int `json:"retention_count"` }
 		if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid schedule")); return }
 		if in.IntervalHours < 6 || in.IntervalHours > 8760 { apiError(w, shared.ErrBadRequest("interval must be between 6 hours and 365 days")); return }
 		if in.RetentionCount < 1 || in.RetentionCount > 50 { apiError(w, shared.ErrBadRequest("retention must be between 1 and 50 backups")); return }
-		var owned int
+		var ownerID int64
 		if in.ResourceType == "site" {
 			if !validBackupSiteID(in.SiteID) || in.DeviceID < 1 || in.DatabaseID != 0 { apiError(w, shared.ErrBadRequest("invalid website schedule target")); return }
-			if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`, in.DeviceID,in.SiteID,u.ID).Scan(&owned); err != nil || owned != 1 { apiError(w, shared.ErrNotFound("website not found")); return }
+			var accessErr error
+			ownerID, accessErr = s.authorizeDeviceOwner(r.Context(), in.DeviceID, u.ID, "backup.manage")
+			if accessErr != nil { apiError(w, accessErr); return }
+			var owned int
+			if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`, in.DeviceID, in.SiteID, ownerID).Scan(&owned); err != nil || owned != 1 {
+				apiError(w, shared.ErrNotFound("website not found")); return
+			}
 		} else if in.ResourceType == "database" {
 			if in.SiteID != "" { apiError(w, shared.ErrBadRequest("database schedules cannot include a website id")); return }
 			if in.DatabaseID < 1 { apiError(w, shared.ErrBadRequest("database id is required")); return }
-			if err := s.db.conn.QueryRowContext(r.Context(), `SELECT ds.device_id FROM db_instances db JOIN database_servers ds ON ds.id=db.server_id WHERE db.id=? AND db.user_id=? AND db.status='ready' AND ds.status='ready'`, in.DatabaseID,u.ID).Scan(&in.DeviceID); err != nil || in.DeviceID < 1 { apiError(w, shared.ErrNotFound("ready database not found")); return }
+			var deviceID int64
+			var accessErr error
+			ownerID, _, deviceID, accessErr = s.authorizeDatabaseInstance(r.Context(), in.DatabaseID, u.ID, "database.manage")
+			if accessErr != nil { apiError(w, accessErr); return }
+			in.DeviceID = deviceID
+			var databaseStatus, serverStatus string
+			if err := s.db.conn.QueryRowContext(r.Context(), `SELECT db.status,ds.status FROM db_instances db JOIN database_servers ds ON ds.id=db.server_id WHERE db.id=? AND db.user_id=?`, in.DatabaseID, ownerID).Scan(&databaseStatus, &serverStatus); err != nil || databaseStatus != "ready" || serverStatus != "ready" {
+				apiError(w, shared.ErrNotFound("ready database not found")); return
+			}
 		} else { apiError(w, shared.ErrBadRequest("resource_type must be site or database")); return }
-		res, err := s.db.conn.ExecContext(r.Context(), `INSERT INTO backup_schedules(user_id,device_id,resource_type,site_id,database_id,interval_hours,retention_count,next_run_at) VALUES(?,?,?,?,?,?,?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? HOUR))`, u.ID,in.DeviceID,in.ResourceType,nullableString(in.SiteID),nullablePositiveID(in.DatabaseID),in.IntervalHours,in.RetentionCount,in.IntervalHours)
+		res, err := s.db.conn.ExecContext(r.Context(), `INSERT INTO backup_schedules(user_id,device_id,resource_type,site_id,database_id,interval_hours,retention_count,next_run_at) VALUES(?,?,?,?,?,?,?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL ? HOUR))`, ownerID,in.DeviceID,in.ResourceType,nullableString(in.SiteID),nullablePositiveID(in.DatabaseID),in.IntervalHours,in.RetentionCount,in.IntervalHours)
 		if err != nil { apiError(w, shared.ErrInternal("could not create backup schedule")); return }
-		id,_ := res.LastInsertId()
+		id, _ := res.LastInsertId()
 		_ = s.db.Log(r.Context(), &shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"backup_schedule_created",Details:map[string]interface{}{"schedule_id":id,"resource_type":in.ResourceType}})
-		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"schedule_id":id}); return
-	}
-	if r.Method == http.MethodDelete {
+		writeJSON(w, http.StatusCreated, map[string]interface{}{"ok":true,"schedule_id":id})
+	case http.MethodDelete:
 		raw := strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/backup-schedules/"),"/")
 		id, err := strconv.ParseInt(raw,10,64)
-		if err != nil || id < 1 { apiError(w,shared.ErrBadRequest("invalid schedule id")); return }
-		res, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM backup_schedules WHERE id=? AND user_id=?`,id,u.ID)
-		if err != nil { apiError(w,shared.ErrInternal("could not delete backup schedule")); return }
-		n,_ := res.RowsAffected(); if n == 0 { apiError(w,shared.ErrNotFound("schedule not found")); return }
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true}); return
+		if err != nil || id < 1 { apiError(w, shared.ErrBadRequest("invalid schedule id")); return }
+		var ownerID int64
+		err = s.db.conn.QueryRowContext(r.Context(), `SELECT user_id FROM backup_schedules WHERE id=?`, id).Scan(&ownerID)
+		if err == sql.ErrNoRows { apiError(w, shared.ErrNotFound("schedule not found")); return }
+		if err != nil { apiError(w, shared.ErrInternal("could not resolve backup schedule owner")); return }
+		if err := s.authorizeWorkspace(r.Context(), ownerID, u.ID, "backup.manage"); err != nil { apiError(w, err); return }
+		res, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM backup_schedules WHERE id=? AND user_id=?`, id, ownerID)
+		if err != nil { apiError(w, shared.ErrInternal("could not delete backup schedule")); return }
+		n, _ := res.RowsAffected()
+		if n == 0 { apiError(w, shared.ErrNotFound("schedule not found")); return }
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
-	http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 }
 
 func nullablePositiveID(id int64) interface{} { if id > 0 { return id }; return nil }
