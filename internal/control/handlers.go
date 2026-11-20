@@ -247,8 +247,19 @@ func (s *Server) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 		if err != nil || parsed < 1 || parsed > 500 { apiError(w, shared.ErrBadRequest("limit must be between 1 and 500")); return }
 		limit = parsed
 	}
-	owners, err := s.db.WorkspaceOwnerIDs(r.Context(), user.ID)
-	if err != nil { apiError(w, err); return }
+	projectID := int64(0)
+	var owners []int64
+	if raw := r.URL.Query().Get("project_id"); raw != "" {
+		parsed, err := strconv.ParseInt(raw,10,64)
+		if err != nil || parsed < 1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }
+		ownerID,accessErr:=s.authorizeProjectOwner(r.Context(),parsed,user.ID,"audit.read")
+		if accessErr!=nil{apiError(w,accessErr);return}
+		projectID=parsed;owners=[]int64{ownerID}
+	} else {
+		var err error
+		owners,err=s.db.WorkspaceOwnerIDs(r.Context(),user.ID)
+		if err!=nil{apiError(w,err);return}
+	}
 	type auditView struct {
 		ID int64 `json:"id"`
 		WorkspaceOwnerID int64 `json:"workspace_owner_id"`
@@ -259,28 +270,34 @@ func (s *Server) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 		Outcome string `json:"outcome"`
 		RequestID string `json:"request_id"`
 		IP string `json:"ip"`
+		Device string `json:"device,omitempty"`
 		Details json.RawMessage `json:"details,omitempty"`
 		CreatedAt time.Time `json:"created_at"`
 	}
-	out := make([]auditView, 0, limit)
-	for _, ownerID := range owners {
-		role, ok, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, user.ID)
-		if roleErr != nil { apiError(w, roleErr); return }
-		if !ok || !CanWorkspaceAction(role, "audit.read") { continue }
-		rows, queryErr := s.db.conn.QueryContext(r.Context(), `SELECT id,workspace_owner_id,actor_user_id,target_type,target_id,action,outcome,request_id,ip,details,created_at FROM audit_logs WHERE workspace_owner_id=? ORDER BY created_at DESC,id DESC LIMIT ?`, ownerID, limit)
-		if queryErr != nil { apiError(w, shared.ErrInternal("could not load audit log")); return }
-		for rows.Next() {
-			var item auditView
-			var actor sql.NullInt64
-			var details []byte
-			if scanErr := rows.Scan(&item.ID,&item.WorkspaceOwnerID,&actor,&item.TargetType,&item.TargetID,&item.Action,&item.Outcome,&item.RequestID,&item.IP,&details,&item.CreatedAt); scanErr != nil {
-				rows.Close(); apiError(w, shared.ErrInternal("could not read audit log")); return
-			}
-			if actor.Valid { value:=actor.Int64; item.ActorUserID=&value }
-			if len(details)>0 { item.Details=append(json.RawMessage(nil),details...) }
+	out:=make([]auditView,0,limit)
+	for _,ownerID:=range owners {
+		role,allowed,roleErr:=s.db.WorkspaceRole(r.Context(),ownerID,user.ID)
+		if roleErr!=nil{apiError(w,roleErr);return}
+		if !allowed||!CanWorkspaceAction(role,"audit.read"){continue}
+		query:=`SELECT a.id,a.workspace_owner_id,a.actor_user_id,a.target_type,a.target_id,a.action,a.outcome,a.request_id,a.ip,a.details,a.created_at,COALESCE(d.hostname,'')
+			FROM audit_logs a LEFT JOIN devices d ON a.target_type='device' AND d.id=CAST(a.target_id AS UNSIGNED)
+			WHERE a.workspace_owner_id=?`
+		args:=[]interface{}{ownerID}
+		if projectID>0 {
+			query+=` AND a.target_type='device' AND a.target_id IN (SELECT CAST(pd.device_id AS CHAR) FROM project_devices pd WHERE pd.project_id=?)`
+			args=append(args,projectID)
+		}
+		query+=" ORDER BY a.created_at DESC,a.id DESC LIMIT ?";args=append(args,limit)
+		rows,queryErr:=s.db.conn.QueryContext(r.Context(),query,args...)
+		if queryErr!=nil{apiError(w,shared.ErrInternal("could not load audit log"));return}
+		for rows.Next(){
+			var item auditView;var actor sql.NullInt64;var details []byte
+			if scanErr:=rows.Scan(&item.ID,&item.WorkspaceOwnerID,&actor,&item.TargetType,&item.TargetID,&item.Action,&item.Outcome,&item.RequestID,&item.IP,&details,&item.CreatedAt,&item.Device);scanErr!=nil{rows.Close();apiError(w,shared.ErrInternal("could not read audit log"));return}
+			if actor.Valid{value:=actor.Int64;item.ActorUserID=&value}
+			if len(details)>0{item.Details=append(json.RawMessage(nil),details...)}
 			out=append(out,item)
 		}
-		if rowsErr:=rows.Err(); rowsErr!=nil { rows.Close(); apiError(w, shared.ErrInternal("could not read audit log")); return }
+		if rowsErr:=rows.Err();rowsErr!=nil{rows.Close();apiError(w,shared.ErrInternal("could not read audit log"));return}
 		rows.Close()
 	}
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"audit_logs":out})
