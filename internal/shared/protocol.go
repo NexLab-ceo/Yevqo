@@ -57,6 +57,7 @@ type InstallDatabaseServer struct {
 }
 
 type DatabaseServerAction struct {
+	MaxConnections uint32 `json:"max_connections,omitempty"`
 	Engine string `json:"engine,omitempty"`
 	ServerID int64 `json:"server_id"`
 	Port uint32 `json:"port"`
