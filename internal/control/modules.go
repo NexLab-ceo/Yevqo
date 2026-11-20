@@ -331,18 +331,23 @@ func (s *Server) runDatabaseServerInstall(id,userID,deviceID int64,conn *AgentCo
 	if err!=nil || !result.Ok {
 		_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,userID)
 		_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_install_failed",Details:map[string]interface{}{"server_id":id}})
+		message:="Database server installation failed";if result!=nil&&result.Message!=""{message=result.Message}else if err!=nil{message=err.Error()}
+		s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Database server installation failed",message)
 		return
 	}
 	var installed shared.DatabaseServerInstallResult
 	if err:=shared.Unmarshal(result.Payload,&installed);err!=nil {
 		_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,userID)
+		s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Database server installation failed","The Agent returned an invalid installation result.")
 		return
 	}
 	if _,err:=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='ready',version=?,data_directory=? WHERE id=? AND user_id=?",installed.Version,installed.DataDirectory,id,userID);err!=nil {
 		_,_=s.db.conn.ExecContext(context.Background(),"UPDATE database_servers SET status='error' WHERE id=? AND user_id=?",id,userID)
+		s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Database server installation failed","The Control Plane could not persist the installation result.")
 		return
 	}
 	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(deviceID),Action:"database_server_installed",Details:map[string]interface{}{"server_id":id,"engine":req.Engine,"version":installed.Version}})
+	s.notifyWorkspaceEvent(context.Background(),userID,0,"success","Database server ready",fmt.Sprintf("%s %s installed and verified.",req.Engine,installed.Version))
 }
 
 func (s *Server) handleDatabaseServerByID(w http.ResponseWriter,r *http.Request) {
