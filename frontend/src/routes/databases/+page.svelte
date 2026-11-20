@@ -3,7 +3,7 @@
  let servers=[],databases=[],loading=true;
  async function load(){const projectId=$page.url.searchParams.get('project_id')||'';const environmentId=$page.url.searchParams.get('environment_id')||'';const [s,d]=await Promise.all([listDatabaseServers(projectId,environmentId),listDatabases(projectId,environmentId)]);if(s.ok)servers=s.data.servers||[];else notify(s.error||'Не удалось загрузить Database Servers','error');if(d.ok)databases=d.data.databases||[];else if(d.status!==0)notify(d.error||'Не удалось загрузить базы','error');loading=false}
  onMount(load);
- function scopedQuery(){const q=new URLSearchParams();const projectId=$page.url.searchParams.get('project_id');const environmentId=$page.url.searchParams.get('environment_id');if(projectId)q.set('project_id',projectId);if(environmentId)q.set('environment_id',environmentId);return q.size?'?'+q.toString():''}
+ function scopedQuery(){const q=new URLSearchParams();const projectId=$page.url.searchParams.get('project_id');const environmentId=$page.url.searchParams.get('environment_id');if(projectId)q.set('project_id',projectId);if(environmentId)q.set('environment_id',environmentId);const query=q.toString();return query?'?'+query:''}
  function stateLabel(s){return ({planned:'Configuration saved',installing:'Installing',ready:'Ready',stopped:'Stopped',error:'Error'})[s]||s}
 </script>
 <svelte:head><title>Databases · VELTRIX Dock</title></svelte:head>
