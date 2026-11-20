@@ -381,7 +381,7 @@ func (c *AgentConn) SendCommand(ctx context.Context, action string, payload inte
 	}
 
 	commandTimeout := wsCommandTimeout
-	if action == "build_site" { commandTimeout = 2 * time.Hour }
+	if action == "build_site" || action == "deploy" || action == "rebuild" || action == "rollback_site_release" { commandTimeout = 3 * time.Hour }
 	ch := make(chan *shared.Result, 1)
 	c.pendingMu.Lock()
 	c.pending[cmdID] = ch
