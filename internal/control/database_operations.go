@@ -94,14 +94,44 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 	writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"database":map[string]interface{}{"id":databaseID,"server_id":in.ServerID,"name":in.Name,"username":in.Username,"status":"ready"},"message":"Database and least-privilege application role created. Password stored encrypted."})
 }
 
-func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID int64, siteID string) (map[string]string,error) {
-	rows,err:=s.db.conn.QueryContext(ctx,`SELECT d.name,ds.port,ds.ssl_mode,dc.username,dc.ciphertext,dc.nonce
+func siteDatabaseEnvironmentFilter(projectID, environmentID int64) (string, []interface{}, error) {
+	if projectID < 0 || environmentID < 0 || (projectID == 0) != (environmentID == 0) {
+		return "", nil, shared.ErrBadRequest("project_id and environment_id must be provided together")
+	}
+	if projectID == 0 { return "", nil, nil }
+	return ` AND EXISTS (SELECT 1 FROM project_environment_databases edb
+		WHERE edb.project_id=? AND edb.environment_id=? AND edb.database_id=d.id)`,
+		[]interface{}{projectID, environmentID}, nil
+}
+
+func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID int64, siteID string, projectID, environmentID int64) (map[string]string,error) {
+	filter, filterArgs, err := siteDatabaseEnvironmentFilter(projectID, environmentID)
+	if err != nil { return nil, err }
+	if projectID > 0 {
+		var assigned int
+		err := s.db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM project_environment_sites es
+			JOIN projects p ON p.id=es.project_id
+			WHERE es.project_id=? AND es.environment_id=? AND es.device_id=? AND es.site_id=? AND p.user_id=?`,
+			projectID, environmentID, deviceID, siteID, userID).Scan(&assigned)
+		if err != nil { return nil, err }
+		if assigned != 1 { return nil, shared.ErrNotFound("site is not assigned to the selected project environment") }
+	} else {
+		var connections, environmentAssignments int
+		if err := s.db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM site_database_connections WHERE user_id=? AND device_id=? AND site_id=?`, userID, deviceID, siteID).Scan(&connections); err != nil { return nil, err }
+		if err := s.db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM project_environment_sites es JOIN projects p ON p.id=es.project_id WHERE p.user_id=? AND es.device_id=? AND es.site_id=?`, userID, deviceID, siteID).Scan(&environmentAssignments); err != nil { return nil, err }
+		if connections > 0 && environmentAssignments > 0 {
+			return nil, shared.ErrBadRequest("select the project environment before starting a site with managed database connections")
+		}
+	}
+	query := `SELECT d.name,ds.port,ds.ssl_mode,dc.username,dc.ciphertext,dc.nonce
 		FROM site_database_connections c
 		JOIN db_instances d ON d.id=c.database_id
-		JOIN database_servers ds ON ds.id=d.server_id
+		JOIN database_servers ds ON ds.id=d.server_id AND ds.user_id=d.user_id
 		JOIN database_credentials dc ON dc.database_id=d.id
-		WHERE c.user_id=? AND c.device_id=? AND c.site_id=? AND d.status='ready' AND ds.status='ready'
-		ORDER BY c.id`,userID,deviceID,siteID)
+		WHERE c.user_id=? AND c.device_id=? AND c.site_id=? AND d.status='ready' AND ds.status='ready'` + filter + ` ORDER BY c.id`
+	args := []interface{}{userID, deviceID, siteID}
+	args = append(args, filterArgs...)
+	rows,err:=s.db.conn.QueryContext(ctx,query,args...)
 	if err!=nil{return nil,err};defer rows.Close()
 	type databaseEnv struct { Name string `json:"name"`; Host string `json:"host"`; Port int `json:"port"`; SSLMode string `json:"ssl_mode"`; Username string `json:"username"`; Password string `json:"password"` }
 	all:=make([]databaseEnv,0)

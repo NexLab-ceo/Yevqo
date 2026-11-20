@@ -11,6 +11,8 @@
 
     let deviceId = '';
     let siteId = '';
+    let projectId = '';
+    let environmentId = '';
     let device = null;
     let site = null;
     let online = false;
@@ -100,6 +102,8 @@
     onMount(async () => {
         deviceId = $page.params.device_id;
         siteId = $page.params.site_id;
+        projectId = $page.url.searchParams.get('project_id') || '';
+        environmentId = $page.url.searchParams.get('environment_id') || '';
         await refresh();
         loading = false;
         metricsPoller = setInterval(() => {
@@ -347,7 +351,7 @@
                 site_id: site.site_id, path: site.path, port: site.port, runtime: site.runtime
             });
         } else {
-            res = await runSiteCommand(deviceId, siteId, action, action === 'deploy' || action === 'rebuild' ? allowDeployCode : false, '', action === 'deploy' || action === 'rebuild' ? deployCommit.trim() : '');
+            res = await runSiteCommand(deviceId, siteId, action, action === 'deploy' || action === 'rebuild' ? allowDeployCode : false, '', action === 'deploy' || action === 'rebuild' ? deployCommit.trim() : '', projectId, environmentId);
         }
         busyAction = '';
         if (action === 'deploy' || action === 'rebuild') deploymentJobBusy = false;
@@ -647,7 +651,7 @@
         if (!window.confirm('Откатить сайт на релиз ' + commit.slice(0, 12) + '? Текущая версия останется в истории релизов.')) return;
         busyAction = 'rollback';
         rollbackTarget = commit;
-        const res = await runSiteCommand(deviceId, siteId, 'rollback', false, commit);
+        const res = await runSiteCommand(deviceId, siteId, 'rollback', false, commit, '', projectId, environmentId);
         busyAction = '';
         rollbackTarget = '';
         if (!res.ok || !res.data?.ok) {

@@ -119,8 +119,9 @@ export async function getSite(deviceId, siteId) {
     return request('GET', `/api/sites/${deviceId}/${siteId}`);
 }
 
-export async function runSiteCommand(deviceId, siteId, action, allowProjectCode = false, releaseCommit = '', gitCommit = '') {
-    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/cmd`, { action, allow_project_code: allowProjectCode, release_commit: releaseCommit, git_commit: gitCommit });
+export async function runSiteCommand(deviceId, siteId, action, allowProjectCode = false, releaseCommit = '', gitCommit = '', projectId = '', environmentId = '') {
+    const scope = projectId && environmentId ? { project_id: Number(projectId), environment_id: Number(environmentId) } : {};
+    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/cmd`, { action, allow_project_code: allowProjectCode, release_commit: releaseCommit, git_commit: gitCommit, ...scope });
 }
 export async function getSiteReleases(deviceId, siteId) {
     return request('GET', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/releases`);

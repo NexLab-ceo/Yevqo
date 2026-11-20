@@ -91,10 +91,10 @@ func (s *Server) siteEnvironment(ctx context.Context, userID, deviceID int64, si
 	return out, rows.Err()
 }
 
-func (s *Server) siteRuntimeEnvironment(ctx context.Context, userID, deviceID int64, siteID string) (map[string]string, error) {
+func (s *Server) siteRuntimeEnvironment(ctx context.Context, userID, deviceID int64, siteID string, projectID, environmentID int64) (map[string]string, error) {
 	custom, err := s.siteEnvironment(ctx, userID, deviceID, siteID)
 	if err != nil { return nil, err }
-	database, err := s.siteDatabaseEnvironment(ctx, userID, deviceID, siteID)
+	database, err := s.siteDatabaseEnvironment(ctx, userID, deviceID, siteID, projectID, environmentID)
 	if err != nil { return nil, err }
 	// Database connection values are authoritative and cannot be shadowed by
 	// custom variables; credentials remain encrypted at rest.

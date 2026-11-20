@@ -59,3 +59,20 @@ func TestGitRepositoryAndRootDirectoryValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestSiteDatabaseEnvironmentFilterRequiresPairedScope(t *testing.T) {
+	for _, tc := range []struct { projectID, environmentID int64; wantError bool }{
+		{0, 0, false}, {7, 0, true}, {0, 3, true}, {7, 3, false},
+	} {
+		filter, args, err := siteDatabaseEnvironmentFilter(tc.projectID, tc.environmentID)
+		if (err != nil) != tc.wantError { t.Fatalf("scope (%d,%d) error=%v, wantError=%v", tc.projectID, tc.environmentID, err, tc.wantError) }
+		if tc.wantError { continue }
+		if tc.projectID == 0 {
+			if filter != "" || len(args) != 0 { t.Fatalf("unscoped query unexpectedly filtered: %q %#v", filter, args) }
+			continue
+		}
+		if !strings.Contains(filter, "project_environment_databases") || len(args) != 2 || args[0] != int64(7) || args[1] != int64(3) {
+			t.Fatalf("environment filter is not scoped: %q %#v", filter, args)
+		}
+	}
+}

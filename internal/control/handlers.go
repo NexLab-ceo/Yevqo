@@ -479,8 +479,8 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 	ctx, cancel := context.WithTimeout(r.Context(), commandTimeout)
 	defer cancel()
 	if start, ok := payload.(*shared.StartSite); ok {
-		env, envErr := s.siteRuntimeEnvironment(ctx, dev.UserID, dev.ID, start.SiteId)
-		if envErr != nil { apiError(w, shared.ErrInternal("could not prepare protected database environment")); return }
+		env, envErr := s.siteRuntimeEnvironment(ctx, dev.UserID, dev.ID, start.SiteId, 0, 0)
+		if envErr != nil { apiError(w, envErr); return }
 		start.Env = env
 	}
 
@@ -752,8 +752,14 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(parts) == 3 && parts[2] == "cmd" {
 			if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
-			var in struct { Action string `json:"action"`; AllowProjectCode bool `json:"allow_project_code"`; ReleaseCommit string `json:"release_commit"`; GitCommit string `json:"git_commit"` }
+			var in struct { Action string `json:"action"`; AllowProjectCode bool `json:"allow_project_code"`; ReleaseCommit string `json:"release_commit"`; GitCommit string `json:"git_commit"`; ProjectID int64 `json:"project_id"`; EnvironmentID int64 `json:"environment_id"` }
 			if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
+			if in.ProjectID < 0 || in.EnvironmentID < 0 || ((in.ProjectID == 0) != (in.EnvironmentID == 0)) { apiError(w, shared.ErrBadRequest("project_id and environment_id must be provided together")); return }
+			if in.ProjectID > 0 {
+				projectOwnerID, projectErr := s.authorizeProjectOwner(r.Context(), in.ProjectID, user.ID, "project.read")
+				if projectErr != nil { apiError(w, projectErr); return }
+				if projectOwnerID != dev.UserID { apiError(w, shared.ErrNotFound("project not found")); return }
+			}
 			if in.Action != "deploy" && in.Action != "rebuild" && in.Action != "restart" && in.Action != "stop" && in.Action != "rollback" {
 				apiError(w, shared.ErrBadRequest("unsupported site action")); return
 			}
@@ -788,8 +794,8 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				payload = &shared.StopSite{SiteId: st.SiteID}
 			}
 			if siteAction, ok := payload.(*shared.SiteAction); ok {
-				env, envErr := s.siteRuntimeEnvironment(r.Context(), dev.UserID, deviceID, siteID)
-				if envErr != nil { apiError(w, shared.ErrInternal("could not prepare protected site environment")); return }
+				env, envErr := s.siteRuntimeEnvironment(r.Context(), dev.UserID, deviceID, siteID, in.ProjectID, in.EnvironmentID)
+				if envErr != nil { apiError(w, envErr); return }
 				siteAction.Env = env
 			}
 			commandTimeout := 2 * time.Minute
