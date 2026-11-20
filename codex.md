@@ -89,6 +89,7 @@ This is a conservative starting snapshot based on the repository documentation a
 |---|---|---|
 | P0 — Go Control Plane and Agent foundation | PARTIAL | Core services and Android/Termux packaging are present; re-check full install/upgrade and device runtime coverage. |
 | P0 — Android package build and CI | DONE | Full build and PR checks passed at `755e16f`: Go tests, Android ARM64 cross-compilation, frontend build, setup/updater validation, all-in-one and standalone package assembly/verification. Release publishing was skipped; physical Android startup remains tracked separately under P3. |
+| P0 — Account password policy | PARTIAL | Registration and password changes now share a 12–72 byte policy; bcrypt's 72-byte limit and leading/trailing whitespace are enforced. Unit coverage added; full CI verification pending. Existing password hashes and accounts are unchanged. |
 | P0 — Device pairing and one-device Free limit | DONE | `UpsertDevice` serializes registration per account, preserves same-device reconnect, rejects cross-account UUID rebinding, and enforces the Free one-device cap regardless of referral bonuses. Unit tests cover the Free cap; Hub tests cover replacement sockets and pending-command shutdown. Physical Android pairing remains under P3. |
 | P1 — Project/site lifecycle | PARTIAL | Per-site Environment tab supports encrypted custom variables, masked listing, add/update/delete, search and .env bulk import; a shared set currently applies to Build and Runtime. Built-in runtimes plus Custom Language runtime; arbitrary installed Termux tools and in-site executables can be launched with explicit shell-free start commands. Full end-to-end runtime coverage remains open. |
 | P1 — Git deployments, immutable releases, rollback | PARTIAL | Project-scoped deployment history is enforced and exposed in the dashboard. Release/rollback edge cases and full Agent failure-path coverage remain open. |
@@ -122,6 +123,8 @@ Before finishing every task:
 7. Keep the ledger concise and current. Do not append repetitive logs; update existing rows and add only meaningful history entries.
 
 ### Progress history
+
+- 2026-11-20 — Unified registration and password-change validation: passwords must be 12–72 bytes, cannot have leading/trailing whitespace, and are validated consistently before bcrypt hashing. Updated registration UI and added boundary/UTF-8 tests. Existing accounts and stored hashes are untouched; CI verification is pending.
 
 - 2026-11-20 — Full main CI passed at `755e16f` (build run 44744440881; PR checks run 44744440856): Go tests, Android ARM64, frontend, setup/updater validation, and both package verifications. No release was published.
 
