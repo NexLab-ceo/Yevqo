@@ -648,6 +648,14 @@ func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"summary":map[string]int{"devices":totalDevices,"online_devices":onlineDevices,"sites":totalSites,"running_sites":runningSites,"database_servers":totalDB},"devices":devices})
 }
 
+type restoreDatabaseBackupInput struct {
+	BackupID int64 `json:"backup_id"`
+	Name string `json:"name"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	SiteID string `json:"site_id"`
+}
+
 func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Request) {
 	if r.Method!=http.MethodPost { http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return }
 	u:=UserFromContext(r.Context())
