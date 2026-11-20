@@ -307,13 +307,46 @@ func (s *Server) handleDatabases(w http.ResponseWriter,r *http.Request) {
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"databases":out})
 }
 
-func (s *Server) handleLogs(w http.ResponseWriter,r *http.Request) {
-	u:=UserFromContext(r.Context());limit:=100
-	if v:=r.URL.Query().Get("limit");v!=""{if n,err:=strconv.Atoi(v);err==nil&&n>0&&n<=200{limit=n}}
-	rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT l.id,l.action,l.details,l.ip,l.created_at,COALESCE(d.hostname,'') FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=? ORDER BY l.id DESC LIMIT ?`,u.ID,limit)
-	if err!=nil{apiError(w,shared.ErrInternal("could not load logs"));return};defer rows.Close()
-	out:=make([]map[string]interface{},0);for rows.Next(){var id int64;var action,ip,host string;var details []byte;var created time.Time;if err:=rows.Scan(&id,&action,&details,&ip,&created,&host);err!=nil{apiError(w,shared.ErrInternal("could not read logs"));return};var parsed interface{};if len(details)>0{_ = json.Unmarshal(details,&parsed)};out=append(out,map[string]interface{}{"id":id,"action":action,"details":parsed,"ip":ip,"created_at":created,"device":host})}
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"logs":out})
+func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
+	u := UserFromContext(r.Context())
+	limit := 100
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 200 { apiError(w, shared.ErrBadRequest("limit must be between 1 and 200")); return }
+		limit = n
+	}
+	ownerID := u.ID
+	projectID := int64(0)
+	if raw := r.URL.Query().Get("project_id"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
+		resolved, accessErr := s.authorizeProjectOwner(r.Context(), parsed, u.ID, "project.read")
+		if accessErr != nil { apiError(w, accessErr); return }
+		projectID, ownerID = parsed, resolved
+	}
+	query := `SELECT l.id,l.action,l.details,l.ip,l.created_at,COALESCE(d.hostname,'')
+		FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=?`
+	args := []interface{}{ownerID}
+	if projectID > 0 {
+		query += ` AND (EXISTS (SELECT 1 FROM project_devices pd WHERE pd.project_id=? AND pd.device_id=l.device_id)
+			OR EXISTS (SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=l.device_id))`
+		args = append(args, projectID, projectID)
+	}
+	query += " ORDER BY l.id DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := s.db.conn.QueryContext(r.Context(), query, args...)
+	if err != nil { apiError(w, shared.ErrInternal("could not load logs")); return }
+	defer rows.Close()
+	out := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		var id int64; var action, ip, host string; var details []byte; var created time.Time
+		if err := rows.Scan(&id, &action, &details, &ip, &created, &host); err != nil { apiError(w, shared.ErrInternal("could not read logs")); return }
+		var parsed interface{}
+		if len(details) > 0 { _ = json.Unmarshal(details, &parsed) }
+		out = append(out, map[string]interface{}{"id":id,"action":action,"details":parsed,"ip":ip,"created_at":created,"device":host})
+	}
+	if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read logs")); return }
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"logs":out})
 }
 
 func (s *Server) handleNotifications(w http.ResponseWriter,r *http.Request) {
@@ -353,14 +386,30 @@ func (s *Server) handleSettings(w http.ResponseWriter,r *http.Request) {
 	http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 }
 
-func (s *Server) handleReports(w http.ResponseWriter,r *http.Request) {
-	u:=UserFromContext(r.Context())
-	var devices,sites,running,dbServers int
-	_ = s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM devices WHERE user_id=?`,u.ID).Scan(&devices)
-	_ = s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites s JOIN devices d ON d.id=s.device_id WHERE d.user_id=?`,u.ID).Scan(&sites)
-	_ = s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites s JOIN devices d ON d.id=s.device_id WHERE d.user_id=? AND s.status='running'`,u.ID).Scan(&running)
-	_ = s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM database_servers WHERE user_id=?`,u.ID).Scan(&dbServers)
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"report":map[string]interface{}{"generated_at":time.Now().UTC(),"devices":devices,"sites":sites,"running_sites":running,"database_servers":dbServers}})
+func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
+	u := UserFromContext(r.Context())
+	ownerID := u.ID
+	projectID := int64(0)
+	if raw := r.URL.Query().Get("project_id"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
+		resolved, accessErr := s.authorizeProjectOwner(r.Context(), parsed, u.ID, "project.read")
+		if accessErr != nil { apiError(w, accessErr); return }
+		projectID, ownerID = parsed, resolved
+	}
+	var devices, sites, running, dbServers int
+	if projectID > 0 {
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_devices pd JOIN devices d ON d.id=pd.device_id WHERE pd.project_id=? AND d.user_id=?`, projectID, ownerID).Scan(&devices)
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites ps JOIN sites s ON s.device_id=ps.device_id AND s.site_id=ps.site_id WHERE ps.project_id=?`, projectID).Scan(&sites)
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites ps JOIN sites s ON s.device_id=ps.device_id AND s.site_id=ps.site_id WHERE ps.project_id=? AND s.status='running'`, projectID).Scan(&running)
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.user_id=?`, projectID, ownerID).Scan(&dbServers)
+	} else {
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM devices WHERE user_id=?`, ownerID).Scan(&devices)
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites s JOIN devices d ON d.id=s.device_id WHERE d.user_id=?`, ownerID).Scan(&sites)
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites s JOIN devices d ON d.id=s.device_id WHERE d.user_id=? AND s.status='running'`, ownerID).Scan(&running)
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM database_servers WHERE user_id=?`, ownerID).Scan(&dbServers)
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"report":map[string]interface{}{"generated_at":time.Now().UTC(),"devices":devices,"sites":sites,"running_sites":running,"database_servers":dbServers}})
 }
 
 func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
@@ -465,66 +514,138 @@ func validBackupSiteID(siteID string) bool {
 var _ = fmt.Sprintf
 
 func (s *Server) handleDomains(w http.ResponseWriter, r *http.Request) {
-	u:=UserFromContext(r.Context())
-	if r.Method!=http.MethodGet { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
-	rows,err:=s.db.conn.QueryContext(r.Context(),"SELECT st.device_id,st.site_id,st.domain,st.port,st.status,COALESCE(d.hostname,'Android host') FROM sites st JOIN devices d ON d.id=st.device_id WHERE d.user_id=? AND st.domain IS NOT NULL AND st.domain<>'' ORDER BY st.updated_at DESC",u.ID)
-	if err!=nil { apiError(w,shared.ErrInternal("could not load domains")); return }
-	defer rows.Close()
-	out:=make([]map[string]interface{},0)
-	for rows.Next(){var deviceID int64;var siteID,domain,status,hostname string;var port int
-		if err:=rows.Scan(&deviceID,&siteID,&domain,&port,&status,&hostname);err!=nil{apiError(w,shared.ErrInternal("could not read domains"));return}
-		out=append(out,map[string]interface{}{"device_id":deviceID,"site_id":siteID,"domain":domain,"port":port,"site_status":status,"device_name":hostname,"routing_status":"not_verified"})
+	u := UserFromContext(r.Context())
+	if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+	ownerID := u.ID
+	projectID := int64(0)
+	if raw := r.URL.Query().Get("project_id"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
+		resolved, accessErr := s.authorizeProjectOwner(r.Context(), parsed, u.ID, "project.read")
+		if accessErr != nil { apiError(w, accessErr); return }
+		projectID, ownerID = parsed, resolved
 	}
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"domains":out})
+	query := `SELECT st.device_id,st.site_id,st.domain,st.port,st.status,COALESCE(d.hostname,'Android host')
+		FROM sites st JOIN devices d ON d.id=st.device_id
+		WHERE d.user_id=? AND st.domain IS NOT NULL AND st.domain<>''`
+	args := []interface{}{ownerID}
+	if projectID > 0 { query += ` AND EXISTS (SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=st.device_id AND ps.site_id=st.site_id)`; args = append(args, projectID) }
+	query += " ORDER BY st.updated_at DESC"
+	rows, err := s.db.conn.QueryContext(r.Context(), query, args...)
+	if err != nil { apiError(w, shared.ErrInternal("could not load domains")); return }
+	defer rows.Close()
+	out := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		var deviceID int64; var siteID, domain, status, hostname string; var port int
+		if err := rows.Scan(&deviceID, &siteID, &domain, &port, &status, &hostname); err != nil { apiError(w, shared.ErrInternal("could not read domains")); return }
+		out = append(out, map[string]interface{}{"device_id":deviceID,"site_id":siteID,"domain":domain,"port":port,"site_status":status,"device_name":hostname,"routing_status":"not_verified"})
+	}
+	if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read domains")); return }
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"domains":out})
 }
 
-func (s *Server) handleDeployments(w http.ResponseWriter,r *http.Request) {
-	u:=UserFromContext(r.Context())
-	if r.Method!=http.MethodGet { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
-	projectID:=int64(0); if raw:=r.URL.Query().Get("project_id"); raw!="" { parsed,parseErr:=strconv.ParseInt(raw,10,64); if parseErr!=nil||parsed<1 { apiError(w,shared.ErrBadRequest("invalid project id"));return }; var owned int; if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM projects WHERE id=? AND user_id IN (SELECT owner_user_id FROM workspace_members WHERE member_user_id=? AND status='active' UNION SELECT ?)`,parsed,u.ID,u.ID).Scan(&owned);err!=nil||owned!=1 { apiError(w,shared.ErrNotFound("project not found"));return }; projectID=parsed }
-	deploymentOwnerID:=u.ID; if projectID>0 { if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT user_id FROM projects WHERE id=?`,projectID).Scan(&deploymentOwnerID);err!=nil { apiError(w,shared.ErrNotFound("project not found"));return } }
-	query:=`SELECT l.id,l.action,l.details,l.created_at,COALESCE(d.hostname,'') FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=? AND l.action IN ('site_deploy','site_rebuild','site_rollback','site_restart')`; args:=[]interface{}{deploymentOwnerID}; if projectID>0 { query+=` AND EXISTS (SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=l.device_id AND ps.site_id=JSON_UNQUOTE(JSON_EXTRACT(l.details,'$.site_id')))`;args=append(args,projectID) }; query+=` ORDER BY l.id DESC LIMIT 100`; rows,err:=s.db.conn.QueryContext(r.Context(),query,args...)
-	if err!=nil { apiError(w,shared.ErrInternal("could not load deployment history")); return }
-	defer rows.Close()
-	out:=make([]map[string]interface{},0)
-	for rows.Next(){var id int64;var action,hostname string;var details []byte;var created time.Time
-		if err:=rows.Scan(&id,&action,&details,&created,&hostname);err!=nil{apiError(w,shared.ErrInternal("could not read deployment history"));return}
-		var parsed interface{};if len(details)>0{_ = json.Unmarshal(details,&parsed)}
-		out=append(out,map[string]interface{}{"id":id,"action":action,"details":parsed,"created_at":created,"device":hostname})
+func (s *Server) handleDeployments(w http.ResponseWriter, r *http.Request) {
+	u := UserFromContext(r.Context())
+	if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+	ownerID := u.ID
+	projectID := int64(0)
+	if raw := r.URL.Query().Get("project_id"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
+		resolved, accessErr := s.authorizeProjectOwner(r.Context(), parsed, u.ID, "project.read")
+		if accessErr != nil { apiError(w, accessErr); return }
+		projectID, ownerID = parsed, resolved
 	}
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"deployments":out})
+	query := `SELECT l.id,l.action,l.details,l.created_at,COALESCE(d.hostname,'')
+		FROM logs l LEFT JOIN devices d ON d.id=l.device_id
+		WHERE l.user_id=? AND l.action IN ('site_deploy','site_rebuild','site_rollback','site_restart')`
+	args := []interface{}{ownerID}
+	if projectID > 0 {
+		query += ` AND EXISTS (SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=l.device_id AND ps.site_id=JSON_UNQUOTE(JSON_EXTRACT(l.details,'$.site_id')))`
+		args = append(args, projectID)
+	}
+	query += " ORDER BY l.id DESC LIMIT 100"
+	rows, err := s.db.conn.QueryContext(r.Context(), query, args...)
+	if err != nil { apiError(w, shared.ErrInternal("could not load deployment history")); return }
+	defer rows.Close()
+	out := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		var id int64; var action, hostname string; var details []byte; var created time.Time
+		if err := rows.Scan(&id, &action, &details, &created, &hostname); err != nil { apiError(w, shared.ErrInternal("could not read deployment history")); return }
+		var parsed interface{}
+		if len(details) > 0 { _ = json.Unmarshal(details, &parsed) }
+		out = append(out, map[string]interface{}{"id":id,"action":action,"details":parsed,"created_at":created,"device":hostname})
+	}
+	if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read deployment history")); return }
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"deployments":out})
 }
 
-func (s *Server) handleMonitoring(w http.ResponseWriter,r *http.Request) {
-	u:=UserFromContext(r.Context())
-	if r.Method!=http.MethodGet { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
-	var totalDevices,onlineDevices,totalSites,runningSites,totalDB int
-	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM devices WHERE user_id=?",u.ID).Scan(&totalDevices)
-	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM devices WHERE user_id=? AND status='online'",u.ID).Scan(&onlineDevices)
-	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE d.user_id=?",u.ID).Scan(&totalSites)
-	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE d.user_id=? AND st.status='running'",u.ID).Scan(&runningSites)
-	_ = s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM database_servers WHERE user_id=?",u.ID).Scan(&totalDB)
-	rows,err:=s.db.conn.QueryContext(r.Context(),"SELECT d.id,COALESCE(d.hostname,'Android host'),d.status,d.agent_version,d.last_seen,(SELECT COUNT(*) FROM sites st WHERE st.device_id=d.id),(SELECT COUNT(*) FROM sites st WHERE st.device_id=d.id AND st.status='running'),m.cpu_percent,m.load_1m,m.memory_total_bytes,m.memory_available_bytes,m.storage_total_bytes,m.storage_available_bytes,m.temperature_celsius,m.captured_at FROM devices d LEFT JOIN device_metrics m ON m.id=(SELECT MAX(mx.id) FROM device_metrics mx WHERE mx.device_id=d.id) WHERE d.user_id=? ORDER BY d.last_seen DESC",u.ID)
-	if err!=nil{apiError(w,shared.ErrInternal("could not load monitoring data"));return};defer rows.Close()
-	devices:=make([]map[string]interface{},0)
-	for rows.Next(){var id int64;var hostname,status,version string;var lastSeen,metricAt sql.NullTime;var sites,running int
-		var cpu,load,temp sql.NullFloat64;var memTotal,memAvailable,storageTotal,storageAvailable sql.NullInt64
-		if err:=rows.Scan(&id,&hostname,&status,&version,&lastSeen,&sites,&running,&cpu,&load,&memTotal,&memAvailable,&storageTotal,&storageAvailable,&temp,&metricAt);err!=nil{apiError(w,shared.ErrInternal("could not read monitoring data"));return}
-		var seen,metricsAt interface{};if lastSeen.Valid{seen=lastSeen.Time};if metricAt.Valid{metricsAt=metricAt.Time}
-		metrics:=map[string]interface{}{};if cpu.Valid{metrics["cpu_percent"]=cpu.Float64};if load.Valid{metrics["load_1m"]=load.Float64};if memTotal.Valid{metrics["memory_total_bytes"]=memTotal.Int64};if memAvailable.Valid{metrics["memory_available_bytes"]=memAvailable.Int64};if storageTotal.Valid{metrics["storage_total_bytes"]=storageTotal.Int64};if storageAvailable.Valid{metrics["storage_available_bytes"]=storageAvailable.Int64};if temp.Valid{metrics["temperature_celsius"]=temp.Float64};if metricsAt!=nil{metrics["captured_at"]=metricsAt}
+func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
+	u := UserFromContext(r.Context())
+	if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+	ownerID := u.ID
+	projectID := int64(0)
+	if raw := r.URL.Query().Get("project_id"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
+		resolved, accessErr := s.authorizeProjectOwner(r.Context(), parsed, u.ID, "project.read")
+		if accessErr != nil { apiError(w, accessErr); return }
+		projectID, ownerID = parsed, resolved
+	}
+	var totalDevices, onlineDevices, totalSites, runningSites, totalDB int
+	var rows *sql.Rows
+	var err error
+	if projectID > 0 {
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_devices pd JOIN devices d ON d.id=pd.device_id WHERE pd.project_id=? AND d.user_id=?`, projectID, ownerID).Scan(&totalDevices)
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_devices pd JOIN devices d ON d.id=pd.device_id WHERE pd.project_id=? AND d.user_id=? AND d.status='online'`, projectID, ownerID).Scan(&onlineDevices)
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites ps JOIN sites st ON st.device_id=ps.device_id AND st.site_id=ps.site_id WHERE ps.project_id=?`, projectID).Scan(&totalSites)
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites ps JOIN sites st ON st.device_id=ps.device_id AND st.site_id=ps.site_id WHERE ps.project_id=? AND st.status='running'`, projectID).Scan(&runningSites)
+		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.user_id=?`, projectID, ownerID).Scan(&totalDB)
+		rows, err = s.db.conn.QueryContext(r.Context(), `SELECT d.id,COALESCE(d.hostname,'Android host'),d.status,d.agent_version,d.last_seen,
+			(SELECT COUNT(*) FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=d.id),
+			(SELECT COUNT(*) FROM project_sites ps JOIN sites st ON st.device_id=ps.device_id AND st.site_id=ps.site_id WHERE ps.project_id=? AND ps.device_id=d.id AND st.status='running'),
+			m.cpu_percent,m.load_1m,m.memory_total_bytes,m.memory_available_bytes,m.storage_total_bytes,m.storage_available_bytes,m.temperature_celsius,m.captured_at
+			FROM project_devices pd JOIN devices d ON d.id=pd.device_id
+			LEFT JOIN device_metrics m ON m.id=(SELECT MAX(mx.id) FROM device_metrics mx WHERE mx.device_id=d.id)
+			WHERE pd.project_id=? AND d.user_id=? ORDER BY d.last_seen DESC`, projectID, projectID, projectID, ownerID)
+	} else {
+		_ = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM devices WHERE user_id=?", ownerID).Scan(&totalDevices)
+		_ = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM devices WHERE user_id=? AND status='online'", ownerID).Scan(&onlineDevices)
+		_ = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE d.user_id=?", ownerID).Scan(&totalSites)
+		_ = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE d.user_id=? AND st.status='running'", ownerID).Scan(&runningSites)
+		_ = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM database_servers WHERE user_id=?", ownerID).Scan(&totalDB)
+		rows, err = s.db.conn.QueryContext(r.Context(), `SELECT d.id,COALESCE(d.hostname,'Android host'),d.status,d.agent_version,d.last_seen,
+			(SELECT COUNT(*) FROM sites st WHERE st.device_id=d.id),
+			(SELECT COUNT(*) FROM sites st WHERE st.device_id=d.id AND st.status='running'),
+			m.cpu_percent,m.load_1m,m.memory_total_bytes,m.memory_available_bytes,m.storage_total_bytes,m.storage_available_bytes,m.temperature_celsius,m.captured_at
+			FROM devices d LEFT JOIN device_metrics m ON m.id=(SELECT MAX(mx.id) FROM device_metrics mx WHERE mx.device_id=d.id)
+			WHERE d.user_id=? ORDER BY d.last_seen DESC`, ownerID)
+	}
+	if err != nil { apiError(w, shared.ErrInternal("could not load monitoring data")); return }
+	defer rows.Close()
+	devices := make([]map[string]interface{}, 0)
+	for rows.Next() {
+		var id int64; var hostname, status, version string; var lastSeen, metricAt sql.NullTime; var sites, running int
+		var cpu, load, temp sql.NullFloat64; var memTotal, memAvailable, storageTotal, storageAvailable sql.NullInt64
+		if err := rows.Scan(&id,&hostname,&status,&version,&lastSeen,&sites,&running,&cpu,&load,&memTotal,&memAvailable,&storageTotal,&storageAvailable,&temp,&metricAt); err != nil { apiError(w, shared.ErrInternal("could not read monitoring data")); return }
+		var seen, metricsAt interface{}
+		if lastSeen.Valid { seen = lastSeen.Time }
+		if metricAt.Valid { metricsAt = metricAt.Time }
+		metrics := map[string]interface{}{}
+		if cpu.Valid { metrics["cpu_percent"] = cpu.Float64 }
+		if load.Valid { metrics["load_1m"] = load.Float64 }
+		if memTotal.Valid { metrics["memory_total_bytes"] = memTotal.Int64 }
+		if memAvailable.Valid { metrics["memory_available_bytes"] = memAvailable.Int64 }
+		if storageTotal.Valid { metrics["storage_total_bytes"] = storageTotal.Int64 }
+		if storageAvailable.Valid { metrics["storage_available_bytes"] = storageAvailable.Int64 }
+		if temp.Valid { metrics["temperature_celsius"] = temp.Float64 }
+		if metricsAt != nil { metrics["captured_at"] = metricsAt }
 		history, historyErr := s.db.ListDeviceMetricHistory(r.Context(), id, 20)
 		if historyErr != nil { history = []DeviceMetricPoint{} }
-		devices=append(devices,map[string]interface{}{"id":id,"hostname":hostname,"status":status,"agent_version":version,"last_seen":seen,"site_count":sites,"running_sites":running,"metrics":metrics,"history":history})
+		devices = append(devices, map[string]interface{}{"id":id,"hostname":hostname,"status":status,"agent_version":version,"last_seen":seen,"site_count":sites,"running_sites":running,"metrics":metrics,"history":history})
 	}
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"summary":map[string]int{"devices":totalDevices,"online_devices":onlineDevices,"sites":totalSites,"running_sites":runningSites,"database_servers":totalDB},"devices":devices})
-}
-
-type restoreDatabaseBackupInput struct {
-	BackupID int64 `json:"backup_id"`
-	Name string `json:"name"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	SiteID string `json:"site_id"`
+	if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read monitoring data")); return }
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"summary":map[string]int{"devices":totalDevices,"online_devices":onlineDevices,"sites":totalSites,"running_sites":runningSites,"database_servers":totalDB},"devices":devices})
 }
 
 func (s *Server) handleRestoreDatabaseBackup(w http.ResponseWriter,r *http.Request) {
