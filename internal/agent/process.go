@@ -319,7 +319,7 @@ func validManagedEnvironmentKey(key string) bool {
 		if !((r >= 'A' && r <= 'Z') || r == '_' || (i > 0 && r >= '0' && r <= '9')) { return false }
 	}
 	switch key {
-	case "DB_CONNECTION", "DB_HOST", "DB_PORT", "DB_SSLMODE", "DB_DATABASE", "DB_USERNAME", "DB_PASSWORD", "VELTRIX_DATABASES":
+	case "DB_CONNECTION", "DB_HOST", "DB_PORT", "DB_SSLMODE", "DB_SSL_CA", "DB_DATABASE", "DB_USERNAME", "DB_PASSWORD", "VELTRIX_DATABASES":
 		return true
 	case "PATH", "HOME", "PREFIX", "TMPDIR", "LD_PRELOAD", "LD_LIBRARY_PATH", "PORT", "HOST":
 		return false
