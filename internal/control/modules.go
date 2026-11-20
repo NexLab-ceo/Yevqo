@@ -547,7 +547,7 @@ func (s *Server) handleSettings(w http.ResponseWriter,r *http.Request) {
  u:=UserFromContext(r.Context())
  if r.Method==http.MethodGet{
   rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT setting_key,setting_value FROM user_settings WHERE user_id=?`,u.ID);if err!=nil{apiError(w,shared.ErrInternal("could not load settings"));return};defer rows.Close()
-  settings:=map[string]interface{}{};for rows.Next(){var k string;var v []byte;if rows.Scan(&k,&v)==nil{var parsed interface{};if json.Unmarshal(v,&parsed)==nil{settings[k]=parsed}}}
+  settings:=map[string]interface{}{};for rows.Next(){var k string;var v []byte;if rows.Scan(&k,&v)==nil&&k!="github_app_install_state"{var parsed interface{};if json.Unmarshal(v,&parsed)==nil{settings[k]=parsed}}}
   if _,ok:=settings["mode"];!ok{settings["mode"]="simple"};if _,ok:=settings["locale"];!ok{settings["locale"]="ru"};if _,ok:=settings["theme"];!ok{settings["theme"]="dark"}
   if _,ok:=settings["workspace_name"];!ok{settings["workspace_name"]="Personal workspace"}
   if _,ok:=settings["timezone"];!ok{settings["timezone"]="UTC"}
