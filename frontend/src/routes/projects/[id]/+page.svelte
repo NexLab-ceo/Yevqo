@@ -48,7 +48,38 @@
 <section class="panel"><div class="section-head"><div><h2>{ru?'Сайты':'Websites'}</h2><p>{ru?'Сайты, сгруппированные в проекте':'Websites grouped in this project'}</p></div>{#if project.can_manage}<div class="add"><select class="input" bind:value={selectedSite}><option value="">{ru?'Выбрать сайт':'Select website'}</option>{#each availableSites as item}<option value={item.device_id+':'+item.site.site_id}>{item.device_name||'Android host'} / {item.site.site_id}</option>{/each}</select><Button variant="primary" disabled={!selectedSite||busy} on:click={addSite}>{ru?'Добавить':'Add'}</Button></div>{/if}</div>
 {#if sites.length}<div class="resource-list">{#each sites as s}<div class="resource"><a class="resource-link" href={'/sites/'+s.device_id+'/'+encodeURIComponent(s.site_id)+'?project_id='+project.id}><span class="resource-icon">◉</span><span><strong>{s.site_id}</strong><small>{s.device_name}</small></span><span class="muted">{ru?'Открыть →':'Open →'}</span></a>{#if project.can_manage}<Button size="sm" variant="danger" disabled={busy} on:click={()=>removeSite(s.device_id,s.site_id)}>{ru?'Открепить':'Detach'}</Button>{/if}</div>{/each}</div>{:else}<div class="empty compact">{ru?'Сайты пока не добавлены.':'No websites have been added yet.'}</div>{/if}</section>
 {/if}
-{#if activeTab==='deployments'}<section class="panel"><div class="section-head"><div><h2>{ru?'Развёртывания':'Deployments'}</h2><p>{ru?'История подтверждённых операций проекта':'Confirmed project operation history'}</p></div><span>{deployments.length}</span></div>{#if deployments.length}<div class="resource-list">{#each deployments as item}<div class="resource"><span class="resource-icon">↗</span><span><strong>{item.action?.replaceAll('_',' ')||'Deployment'}</strong><small>{item.details?.site_id||item.device||'—'} · {item.details?.commit_hash||''}</small></span><span class="muted">{item.details?.ok===false?(ru?'Ошибка':'Failed'):(ru?'Успешно':'Succeeded')} · {item.created_at?formatDate(item.created_at):'—'}</span></div>{/each}</div>{:else}<div class="empty compact">{ru?'Развёртываний пока нет.':'No deployments yet.'}</div>{/if}</section>{/if}
+{#if activeTab==='deployments'}
+<section class="panel">
+ <div class="section-head"><div><h2>{ru?'Новые развёртывания':'New deployment'}</h2><p>{ru?'Запуск Git Deploy на выбранном сайте проекта':'Run a Git deployment on a project site'}</p></div></div>
+ {#if projectRepository && repositoryTargets.length && project.can_manage}
+ <div class="source-form">
+  <label>{ru?'Сайт / устройство':'Site / device'}<select class="input" bind:value={selectedTarget}><option value="">{ru?'Выбрать цель':'Select target'}</option>{#each repositoryTargets as target}<option value={target.device_id+':'+target.site_id}>{target.device_name} / {target.site_id}</option>{/each}</select></label>
+  <label>{ru?'Ветка':'Branch'}<select class="input" bind:value={deploymentBranch}><option value={projectRepository.branch}>{projectRepository.branch}</option>{#each repositoryBranches as branch}<option value={branch.name}>{branch.name}{branch.protected?' · protected':''}</option>{/each}</select></label>
+  <label>{ru?'Commit SHA (необязательно)':'Commit SHA (optional)'}<input class="input" bind:value={deploymentCommit} maxlength="64" placeholder={ru?'Последний commit выбранной ветки':'Latest commit on selected branch'}/></label>
+  <label class="consent-inline"><input type="checkbox" bind:checked={deployConsent}/>{ru?'Я разрешаю клонирование, сборку и выполнение кода репозитория на выбранном Android-устройстве.':'I authorize cloning, building and executing repository code on the selected Android device.'}</label>
+  <div class="source-actions"><Button size="sm" variant="primary" disabled={!selectedTarget||!deployConsent||deploymentBusy} loading={deploymentBusy} on:click={startDeployment}>{ru?'Запустить Deploy':'Start Deploy'}</Button><Button size="sm" on:click={loadDeploymentRuns}>{ru?'Обновить историю':'Refresh history'}</Button></div>
+ </div>
+ {:else if !projectRepository}
+ <div class="empty compact">{ru?'Сначала подключи GitHub-репозиторий во вкладке «Репозиторий».':'Connect a GitHub repository in the Source Repository tab first.'}</div>
+ {:else}
+ <div class="empty compact">{ru?'Сначала привяжи сайт к репозиторию во вкладке «Репозиторий».':'Link a project site to the repository in the Source Repository tab first.'}</div>
+ {/if}
+</section>
+<section class="panel">
+ <div class="section-head"><div><h2>{ru?'История Deploy':'Deployment history'}</h2><p>{ru?'Состояния Agent, прогресс, сообщения и действия':'Agent states, progress, messages and actions'}</p></div><span>{deploymentRuns.length}</span></div>
+ {#if deploymentRuns.length}
+ <div class="resource-list">{#each deploymentRuns as run}
+  <article class="deployment-row">
+   <div class="deployment-row-main"><div class="deployment-row-title"><strong>{run.site_id}</strong><span class:state-success={run.status==='succeeded'} class:state-failed={run.status==='failed'} class:state-running={!['succeeded','failed','cancelled'].includes(run.status)}>{run.status}</span><small>{run.source} · {run.branch||'—'} · {run.created_at?formatDate(run.created_at):'—'}</small></div>
+    {#if run.commit_sha}<code>{run.commit_sha}</code>{/if}<small>{run.message||'—'}</small>
+    {#if !['succeeded','failed','cancelled'].includes(run.status)}<div class="deployment-progress"><div style={'width:'+Math.max(0,Math.min(100,Number(run.progress||0)))+'%'}></div></div>{/if}
+   </div>
+   <div class="deployment-row-actions"><Button size="sm" on:click={()=>openRunDetails(run)}>{ru?'Логи':'Logs'}</Button>{#if !['succeeded','failed','cancelled'].includes(run.status)}<Button size="sm" variant="danger" on:click={()=>cancelDeploymentRun(run)}>{ru?'Отменить':'Cancel'}</Button>{:else}<Button size="sm" on:click={()=>redeployRun(run)}>{ru?'Повторить':'Redeploy'}</Button>{/if}</div>
+  </article>
+ {/each}</div>
+ {:else}<div class="empty compact">{ru?'Развёртываний пока нет.':'No deployments yet.'}</div>{/if}
+ {#if runDetails}<div class="deployment-log-panel"><div class="section-head"><div><h3>{ru?'Логи развёртывания':'Deployment logs'} #{runDetails.id}</h3><p>{runDetails.site_id} · {runDetails.status}</p></div><Button size="sm" on:click={()=>runDetails=null}>{ru?'Закрыть':'Close'}</Button></div><pre>{runDetails.output||runDetails.message||'No output recorded yet.'}</pre></div>{/if}
+</section>{/if}
 {#if activeTab==='activity'}<section class="panel"><div class="section-head"><div><h2>{ru?'Активность проекта':'Project activity'}</h2><p>{ru?'События, связанные с ресурсами проекта':'Events related to this project resources'}</p></div><span>{activity.length}</span></div>{#if activity.length}<div class="resource-list">{#each activity as item}<div class="resource"><span class="resource-icon">⌁</span><span><strong>{item.action?.replaceAll('_',' ')||'Event'}</strong><small>{item.device||'Control Plane'}</small></span><span class="muted">{item.created_at?formatDate(item.created_at):'—'}</span></div>{/each}</div>{:else}<div class="empty compact">{ru?'Событий пока нет.':'No activity yet.'}</div>{/if}</section>{/if}
 {#if activeTab==='source'}
 <section class="panel">
