@@ -25,3 +25,30 @@ func TestParsePayloadBuildEngineActions(t *testing.T) {
   }
  })}
 }
+
+
+func TestParsePayloadAgentControlActions(t *testing.T) {
+ cases := []struct {
+  action string
+  raw string
+  want any
+ }{
+  {"get_site_restart_policy", `{"site_id":"demo"}`, &shared.GetSiteRestartPolicy{}},
+  {"set_site_restart_policy", `{"site_id":"demo","policy":"on-failure"}`, &shared.SetSiteRestartPolicy{}},
+  {"cancel_deployment_job", `{"site_id":"demo","job_id":"job-123"}`, &shared.DeploymentJobAction{}},
+ }
+ for _, tc := range cases {
+  t.Run(tc.action, func(t *testing.T) {
+   got, err := parsePayload(tc.action, json.RawMessage(tc.raw))
+   if err != nil { t.Fatal(err) }
+   switch tc.want.(type) {
+   case *shared.GetSiteRestartPolicy:
+    if _, ok := got.(*shared.GetSiteRestartPolicy); !ok { t.Fatalf("payload type %T", got) }
+   case *shared.SetSiteRestartPolicy:
+    if _, ok := got.(*shared.SetSiteRestartPolicy); !ok { t.Fatalf("payload type %T", got) }
+   case *shared.DeploymentJobAction:
+    if _, ok := got.(*shared.DeploymentJobAction); !ok { t.Fatalf("payload type %T", got) }
+   }
+  })
+ }
+}
