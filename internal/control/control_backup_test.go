@@ -25,3 +25,11 @@ func TestMySQLClientDefaultsFileUsesRealLines(t *testing.T) {
 		}
 	}
 }
+
+func TestCNFEscapeProtectsQuotesAndBackslashes(t *testing.T) {
+	got := cnfEscape(`p\"ass`)
+	want := `"p\\\"ass"`
+	if got != want {
+		t.Fatalf("cnfEscape() = %q, want %q", got, want)
+	}
+}
