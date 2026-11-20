@@ -99,5 +99,6 @@ func (s *Server) abortBackupTransfer(conn *AgentConn,id,resourceType,site string
 }
 func (s *Server) failBackupTransfer(id,ownerID,actorID int64,reason string){
 	_,_ = s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='failed' WHERE id=? AND user_id=?`,id,ownerID)
+	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(actorID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"backup_transfer_failed",Details:map[string]interface{}{"ok":false,"backup_id":id,"error":reason}})
 	s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Backup transfer failed",reason)
 }
