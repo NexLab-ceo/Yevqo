@@ -10,7 +10,7 @@ import (
  "veltrix/internal/shared"
 )
 
-var safeDatabaseBackupFile = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.dump$`)
+var safeDatabaseBackupFile = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,180}\.(dump|sql)$`)
 
 func readDatabaseBackupChunk(req shared.ReadDatabaseBackupChunk)(shared.DatabaseBackupChunk,error){
  if req.ServerID<1||!safeDatabaseBackupFile.MatchString(req.FileName)||strings.Contains(req.FileName,"..")||req.Offset<0||req.Length<1||req.Length>256*1024{return shared.DatabaseBackupChunk{},fmt.Errorf("invalid backup chunk request")}
