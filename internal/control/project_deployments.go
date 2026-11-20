@@ -112,6 +112,11 @@ func (s *Server) handleProjectDeployments(w http.ResponseWriter,r *http.Request)
 			id,queueErr:=s.queueProjectDeployment(r.Context(),u.ID,ownerID,projectID,projectDeploymentRequest{DeviceID:deviceID,SiteID:siteID,Branch:branch,Commit:commit,AllowProjectCode:true},"redeploy")
 			if queueErr!=nil{apiError(w,queueErr);return}
 			writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"deployment_id":id,"status":"queued"});return
+		case "rollback":
+			if status!="succeeded"||!releaseCommitPattern.MatchString(commit){apiError(w,shared.ErrBadRequest("only a successful deployment with a valid commit can be rolled back to"));return}
+			id,queueErr:=s.queueProjectRollback(r.Context(),u.ID,ownerID,projectID,deviceID,siteID,branch,commit)
+			if queueErr!=nil{apiError(w,queueErr);return}
+			writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"deployment_id":id,"status":"queued"});return
 		default:http.NotFound(w,r);return
 		}
 	}
