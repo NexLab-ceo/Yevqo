@@ -292,7 +292,9 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		if err=tx.Commit();err!=nil{apiError(w,shared.ErrInternal("could not commit repository deployment target"));return}
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(userID),WorkspaceOwnerID:shared.PtrInt64(ownerID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"project_repository_site_connected",Details:map[string]interface{}{"project_id":projectID,"site_id":in.SiteID,"repository":fullName,"auto_deploy":in.AutoDeploy},IP:clientIP(r)})
 		if !in.AutoDeploy&&existingHookID>0{_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,existingHookID)}
-		resp:=map[string]interface{}{"ok":true,"device_id":in.DeviceID,"site_id":in.SiteID,"branch":branch,"auto_deploy_enabled":in.AutoDeploy,"webhook_path":fmt.Sprintf("/webhooks/github/%d/%s",in.DeviceID,in.SiteID),"webhook_registered":hookRegistered}
+		webhookPath:=fmt.Sprintf("/webhooks/github/%d/%s",in.DeviceID,in.SiteID)
+		resp:=map[string]interface{}{"ok":true,"device_id":in.DeviceID,"site_id":in.SiteID,"branch":branch,"auto_deploy_enabled":in.AutoDeploy,"webhook_path":webhookPath,"webhook_registered":hookRegistered}
+		if base,ok:=publicYevqoBaseURL();ok{resp["webhook_url"]=base+webhookPath}
 		if secret!=""&&!hookRegistered{resp["webhook_secret"]=secret;resp["webhook_secret_once"]=true}
 		writeJSON(w,http.StatusOK,resp)
 	case http.MethodDelete:
