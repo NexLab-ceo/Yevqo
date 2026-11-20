@@ -37,7 +37,7 @@ func mariaDumpCLI() (string, error) {
 }
 func mariaSocket(dataDir string) string { return filepath.Join(dataDir, "yevqo-mariadb.sock") }
 func mariaDataDirectory(prefix string, serverID int64, configured string) (string, error) {
-	if configured == "" { return "", fmt.Errorf("configured MariaDB data directory is required") }
+	if prefix == "" { return "", fmt.Errorf("Termux PREFIX is not set") }; if configured == "" { return "", fmt.Errorf("configured MariaDB data directory is required") }
 	return resolveTermuxPath(prefix, configured)
 }
 func mariaAdminArgs(dataDir string) []string {
@@ -88,7 +88,7 @@ func installMariaDBServer(req shared.InstallDatabaseServer) (*shared.DatabaseSer
 	}
 	if err := os.MkdirAll(filepath.Dir(dataDir), 0o700); err != nil { return nil, err }
 	args := []string{"--datadir=" + dataDir, "--auth-root-authentication-method=normal", "--skip-test-db"}
-	if current, e := user.Current(); e == nil && current.Username != "" { args = append(args, "--user=" + current.Username) }
+	
 	out, err := exec.CommandContext(ctx, installDB, args...).CombinedOutput()
 	if err != nil { return nil, fmt.Errorf("MariaDB system-table initialization failed: %s", trimOutput(string(out))) }
 	if req.SSLMode != "" && req.SSLMode != "disable" && req.SSLMode != "prefer" && req.SSLMode != "require" { return nil, fmt.Errorf("unsupported MariaDB SSL mode") }
