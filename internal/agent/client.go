@@ -220,6 +220,9 @@ func (c *Client) connect(ctx context.Context) error {
 		return fmt.Errorf("auth rejected: %s", respEnv.AuthResp.Message)
 	}
 
+	// The short deadline above is only for the authentication handshake.
+	// Restore the heartbeat deadline before the long-lived session starts.
+	_ = ws.SetReadDeadline(time.Now().Add(PongWait))
 	authenticated = true
 	log.Printf("authenticated as user %d", respEnv.AuthResp.UserId)
 	return nil
