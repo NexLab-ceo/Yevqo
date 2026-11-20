@@ -179,7 +179,7 @@ func provisionMariaDBDatabase(dataDir string, req shared.CreateDatabase) error {
 	userID := mariaQuoteIdentifier(req.Username) + "@'127.0.0.1'"
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second); defer cancel()
 	if err := runMariaSQL(ctx, dataDir, "", "CREATE DATABASE "+dbID+" CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"); err != nil { return err }
-	if err := runMariaSQL(ctx, dataDir, "", "CREATE USER "+userID+" IDENTIFIED BY "+mariaSQLLiteral(req.Password)+";"); err != nil {
+	createUserSQL := "CREATE USER "+userID+" IDENTIFIED BY "+mariaSQLLiteral(req.Password); if req.SSLMode == "require" { createUserSQL += " REQUIRE SSL" }; if err := runMariaSQL(ctx, dataDir, "", createUserSQL+";"); err != nil {
 		_ = runMariaSQL(ctx, dataDir, "", "DROP DATABASE IF EXISTS "+dbID+";")
 		return err
 	}
@@ -195,7 +195,7 @@ func testMariaDBConnection(req shared.TestDatabaseConnection) error {
 	cli, err := mariaCLI(); if err != nil { return err }
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second); defer cancel()
 	args := []string{"--protocol=TCP", "-h", "127.0.0.1", "-P", fmt.Sprint(req.Port), "-u", req.Username}
-	if req.SSLMode == "require" { args = append(args, "--ssl") } else if req.SSLMode == "disable" { args = append(args, "--skip-ssl") } else if req.SSLMode != "" && req.SSLMode != "prefer" { return fmt.Errorf("invalid MariaDB SSL mode") }
+	if req.SSLMode == "require" { cert, _, certErr := ensureMariaDBSSL(dataDir); if certErr != nil { return certErr }; args = append(args, "--ssl", "--ssl-ca="+cert, "--ssl-verify-server-cert") } else if req.SSLMode == "disable" { args = append(args, "--skip-ssl") } else if req.SSLMode != "" && req.SSLMode != "prefer" { return fmt.Errorf("invalid MariaDB SSL mode") }
 	args = append(args, req.Database, "-Nse", "SELECT 1")
 	cmd := exec.CommandContext(ctx, cli, args...)
 	cmd.Env = append(os.Environ(), "MYSQL_PWD="+req.Password)
@@ -211,7 +211,7 @@ func manageMariaDBRole(req shared.ManageDatabaseRole, action string) error {
 	prefix := os.Getenv("PREFIX"); dataDir, err := mariaDataDirectory(prefix, req.ServerID, req.DataDirectory); if err != nil { return err }
 	userHost := mariaQuoteIdentifier(req.Name) + "@'127.0.0.1'"
 	query := ""
-	switch action { case "create": query = "CREATE USER " + userHost + " IDENTIFIED BY " + mariaSQLLiteral(req.Password)
+	switch action { case "create": query = "CREATE USER " + userHost + " IDENTIFIED BY " + mariaSQLLiteral(req.Password); if req.SSLMode == "require" { query += " REQUIRE SSL" }
 	case "password": query = "ALTER USER " + userHost + " IDENTIFIED BY " + mariaSQLLiteral(req.Password)
 	case "drop": query = "DROP USER " + userHost }
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second); defer cancel()
