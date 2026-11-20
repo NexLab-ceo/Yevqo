@@ -32,12 +32,14 @@ yevqo-cli monitoring
 ## Site operations
 
 ```sh
-yevqo-cli deploy 12 my-site
+yevqo-cli deploy 12 my-site --allow-project-code
 yevqo-cli start 12 my-site
 yevqo-cli stop 12 my-site
 yevqo-cli restart 12 my-site
 yevqo-cli logs 12 my-site
 ```
+
+`deploy` requires the explicit `--allow-project-code` flag because it can execute project-controlled build and start commands. Without it, the CLI refuses to send the request.
 
 ## Backups
 

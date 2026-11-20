@@ -123,8 +123,10 @@ Before finishing every task:
 
 ### Progress history
 
+- 2026-11-20 — CLI deploy now refuses to run without the explicit `--allow-project-code` flag; the flag is passed to the Control Plane and covered by tests. Updated `docs/cli.md`. Go tests passed; full CI run 44740248528 / 44740248717 in progress (commit `36e02b1`).
+
 - 2026-11-20 — Expanded Infrastructure Summary with 7/30/90-day build and backup success/failure analytics and project-scoped filtering. Go tests and Android ARM64 cross-compilation passed; frontend/package CI was still running when the CLI hardening task started (implementation commit `ef18bb7`).
-- 2026-11-20 — CLI deploy now requires explicit `--allow-project-code` consent; tests verify the flag is required and transmitted. CI pending.
+- 2026-11-20 — CLI deploy now requires explicit `--allow-project-code` consent; tests verify the flag is required and transmitted. Go tests passed; full Android/frontend/package CI pending.
 
 - 2026-11-20 — Hardened preview creation/deletion against client cancellation, retained the 24-hour expiry cleanup worker, and added key/port/error tests. Go tests, Android ARM64 builds, frontend build and both package verifications passed (build run 44739751259; checks run 44739751260; commit `f4f77d6`).
 - 2026-11-20 — Added period-scoped build and backup analytics to Infrastructure Summary, including project filtering and success/failure counts. CI pending.
