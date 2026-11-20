@@ -68,7 +68,8 @@ func githubAppJWT(appID, privateKey string, now time.Time) (string, error) {
 	}
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
 	appIDValue, err := strconv.ParseInt(appID, 10, 64)
-	if err != nil || appIDValue < 1 { return "", fmt.Errorf("invalid GitHub App ID") }\n\tclaims, err := json.Marshal(map[string]interface{}{"iss": appIDValue, "iat": now.Add(-60*time.Second).Unix(), "exp": now.Add(8*time.Minute).Unix()})
+	if err != nil || appIDValue < 1 { return "", fmt.Errorf("invalid GitHub App ID") }
+	claims, err := json.Marshal(map[string]interface{}{"iss": appIDValue, "iat": now.Add(-60*time.Second).Unix(), "exp": now.Add(8*time.Minute).Unix()})
 	if err != nil { return "", err }
 	payload := base64.RawURLEncoding.EncodeToString(claims)
 	unsigned := header + "." + payload
