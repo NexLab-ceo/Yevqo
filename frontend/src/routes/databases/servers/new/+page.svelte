@@ -1,6 +1,7 @@
 <script>
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
+    import { page } from '$app/stores';
     import { listDevices, createDatabaseServer } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
 
@@ -85,6 +86,7 @@
             return;
         }
         const result = await createDatabaseServer({
+            ...( $page.url.searchParams.get('project_id') ? { project_id: Number($page.url.searchParams.get('project_id')) } : {}),
             device_id: Number(deviceId),
             name: serverName,
             engine,
