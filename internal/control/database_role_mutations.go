@@ -19,6 +19,7 @@ type databaseRoleMutationInput struct {
 func (s *Server) handleDatabaseServerRoleMutation(w http.ResponseWriter, r *http.Request, serverID int64) {
 	u := UserFromContext(r.Context())
 	var in databaseRoleMutationInput
+	ownerID,_,accessErr:=s.authorizeDatabaseServer(r.Context(),serverID,u.ID,"database.manage");if accessErr!=nil{apiError(w,accessErr);return}
 	if err := decodeJSON(r, &in); err != nil {
 		apiError(w, shared.ErrBadRequest("invalid role mutation JSON"))
 		return
@@ -44,7 +45,7 @@ func (s *Server) handleDatabaseServerRoleMutation(w http.ResponseWriter, r *http
 	var deviceID int64
 	var engine, status string
 	var port int
-	err := s.db.conn.QueryRowContext(r.Context(), `SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`, serverID, u.ID).Scan(&deviceID, &engine, &status, &port)
+	err := s.db.conn.QueryRowContext(r.Context(), `SELECT device_id,engine,status,port FROM database_servers WHERE id=? AND user_id=?`, serverID, ownerID).Scan(&deviceID, &engine, &status, &port)
 	if err == sql.ErrNoRows {
 		apiError(w, shared.ErrNotFound("database server not found"))
 		return
