@@ -195,6 +195,9 @@ export async function updateProject(id, name, description = '') { return request
 export async function deleteProject(id) { return request('DELETE', `/api/projects/${id}`); }
 export async function attachProjectDevice(projectId, deviceId) { return request('POST', `/api/projects/${projectId}/devices`, { device_id: deviceId }); }
 export async function attachProjectSite(projectId, deviceId, siteId) { return request('POST', `/api/projects/${projectId}/sites`, { device_id: deviceId, site_id: siteId }); }
+export async function detachProjectDevice(projectId, deviceId) { return request('DELETE', `/api/projects/${projectId}/devices`, { device_id: deviceId }); }
+export async function detachProjectSite(projectId, deviceId, siteId) { return request('DELETE', `/api/projects/${projectId}/sites`, { device_id: deviceId, site_id: siteId }); }
+export async function detachProjectDatabaseServer(projectId, serverId) { return request('DELETE', `/api/projects/${projectId}/databases`, { server_id: serverId }); }
 
 // === Database inventory ===
 export async function listDatabaseServers(projectId = '') { return request('GET', '/api/databases/servers' + (projectId ? `?project_id=${encodeURIComponent(projectId)}` : '')); }
