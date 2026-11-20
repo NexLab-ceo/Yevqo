@@ -149,7 +149,7 @@ func (s *Server) queueProjectDeployment(ctx context.Context,actorID,ownerID,proj
 }
 
 func (s *Server) runTrackedProjectDeployment(runID,ownerID,actorID,deviceID int64,conn *AgentConn,action *shared.SiteAction){
-	ctx,cancel:=context.WithTimeout(context.Background(),25*time.Minute);defer cancel()
+	ctx,cancel:=context.WithTimeout(context.Background(),3*time.Hour);defer cancel()
 	result,err:=conn.SendCommand(ctx,"deploy",action)
 	status,message:="succeeded","Deployment completed"
 	var started shared.StartSiteResult
