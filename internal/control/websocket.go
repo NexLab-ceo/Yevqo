@@ -152,7 +152,9 @@ func (c *AgentConn) readPump(srv *Server) {
 	}()
 
 	c.ws.SetReadLimit(wsMaxMessageSize)
-	_ = c.ws.SetReadDeadline(time.Now().Add(wsPongWait))
+	// Unauthenticated sockets get a short deadline; successful auth extends it
+	// to the normal heartbeat window.
+	_ = c.ws.SetReadDeadline(time.Now().Add(10 * time.Second))
 	c.ws.SetPongHandler(func(string) error {
 		_ = c.ws.SetReadDeadline(time.Now().Add(wsPongWait))
 		return nil
@@ -255,6 +257,7 @@ func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 	}
 
 	c.Device = device
+	_ = c.ws.SetReadDeadline(time.Now().Add(wsPongWait))
 	c.hub.Add(c)
 	if alertErr := srv.evaluateDeviceConnectivityAlert(ctx, device.UserID, device.ID, true); alertErr != nil { log.Printf("evaluate device online alert: %v", alertErr) }
 	if srv.logStreams != nil { srv.logStreams.publishAgentStatus(device.UserID, device.ID, "online") }
