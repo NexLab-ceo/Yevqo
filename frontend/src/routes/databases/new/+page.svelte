@@ -22,6 +22,8 @@
     $: validIdentifier = /^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/;
     $: canCreate = !!selectedServer && validIdentifier.test(name) && validIdentifier.test(username) && password.length >= 12;
 
+    function scopedQuery() { const q = new URLSearchParams(); const p = $page.url.searchParams.get('project_id'); const e = $page.url.searchParams.get('environment_id'); if (p) q.set('project_id', p); if (e) q.set('environment_id', e); const query = q.toString(); return query ? '?' + query : ''; }
+
     onMount(async () => {
         const projectId = $page.url.searchParams.get('project_id') || '';
         const environmentId = $page.url.searchParams.get('environment_id') || '';
@@ -66,7 +68,7 @@
             <h1>Create Database</h1>
             <p>Create an independent database inside an existing PostgreSQL server.</p>
         </div>
-        <button class="secondary" on:click={() => goto('/databases')}>Cancel</button>
+        <button class="secondary" on:click={() => goto('/databases'+scopedQuery())}>Cancel</button>
     </div>
 
     {#if loading}
@@ -75,7 +77,7 @@
         <div class="panel">
             <h2>No ready PostgreSQL server</h2>
             <p class="muted">Create or install a PostgreSQL Database Server first. Existing databases and server data will not be modified.</p>
-            <button class="primary" on:click={() => goto('/databases/servers/new'+($page.url.searchParams.get('project_id')?'?project_id='+encodeURIComponent($page.url.searchParams.get('project_id')):''))}>Add Database Server</button>
+            <button class="primary" on:click={() => goto('/databases/servers/new'+scopedQuery())}>Add Database Server</button>
         </div>
     {:else}
         <form class="panel" on:submit|preventDefault={submit}>
