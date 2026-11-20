@@ -2,6 +2,10 @@ package control
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,6 +24,7 @@ type integrationConnectInput struct {
 	AppID string `json:"app_id"`
 	InstallationID string `json:"installation_id"`
 	PrivateKey string `json:"private_key"`
+	State string `json:"state"`
 }
 
 type providerAccount struct {
@@ -94,7 +99,25 @@ func verifyProviderToken(ctx context.Context, provider, token string) (providerA
 
 
  // handleGitHubAppConfig exposes only the public installation slug; credentials stay server-side.
- func (s *Server) handleGitHubAppConfig(w http.ResponseWriter, r *http.Request) {
+ 
+ // handleGitHubAppState creates a short-lived, one-time installation state bound to the authenticated account.
+ func (s *Server) handleGitHubAppState(w http.ResponseWriter, r *http.Request) {
+  if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+  u := UserFromContext(r.Context())
+  if strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_SLUG")) == "" || strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_ID")) == "" || strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_PRIVATE_KEY")) == "" {
+   writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{"ok":false,"error":"GitHub App is not configured on this Control Plane."}); return
+  }
+  raw := make([]byte, 32)
+  if _, err := rand.Read(raw); err != nil { apiError(w, shared.ErrInternal("could not create GitHub App installation state")); return }
+  state := hex.EncodeToString(raw)
+  digest := sha256.Sum256([]byte(state))
+  value, _ := json.Marshal(map[string]interface{}{"hash":hex.EncodeToString(digest[:]),"expires_at":time.Now().Add(10*time.Minute).Unix()})
+  _, err := s.db.conn.ExecContext(r.Context(), `INSERT INTO user_settings(user_id,setting_key,setting_value) VALUES(?,?,?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)`, u.ID, "github_app_install_state", value)
+  if err != nil { apiError(w, shared.ErrInternal("could not save GitHub App installation state")); return }
+  writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"state":state})
+ }
+
+func (s *Server) handleGitHubAppConfig(w http.ResponseWriter, r *http.Request) {
   if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
   slug := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_SLUG"))
   appID := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_ID"))
@@ -129,6 +152,18 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 		in.Provider=strings.ToLower(strings.TrimSpace(in.Provider))
 		in.Token=strings.TrimSpace(in.Token)
 		if in.Provider == "github_app" {
+			// A browser installation callback must present a short-lived, single-use state.
+			if in.State != "" {
+				if len(in.State) != 64 { apiError(w, shared.ErrBadRequest("invalid GitHub App installation state")); return }
+				digest := sha256.Sum256([]byte(in.State))
+				var stored []byte
+				if err := s.db.conn.QueryRowContext(r.Context(), `SELECT setting_value FROM user_settings WHERE user_id=? AND setting_key='github_app_install_state'`, u.ID).Scan(&stored); err != nil { apiError(w, shared.ErrBadRequest("GitHub App installation state expired; start installation again")); return }
+				var stateRecord struct { Hash string `json:"hash"`; ExpiresAt int64 `json:"expires_at"` }
+				if json.Unmarshal(stored, &stateRecord) != nil || stateRecord.ExpiresAt < time.Now().Unix() { _,_ = s.db.conn.ExecContext(r.Context(), `DELETE FROM user_settings WHERE user_id=? AND setting_key='github_app_install_state'`, u.ID); apiError(w, shared.ErrBadRequest("GitHub App installation state expired; start installation again")); return }
+				want, err := hex.DecodeString(stateRecord.Hash)
+				if err != nil || subtle.ConstantTimeCompare(digest[:], want) != 1 { apiError(w, shared.ErrBadRequest("GitHub App installation state did not match this session")); return }
+				if _, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM user_settings WHERE user_id=? AND setting_key='github_app_install_state'`, u.ID); err != nil { apiError(w, shared.ErrInternal("could not consume GitHub App installation state")); return }
+			}
 			appID := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_ID"))
 			privateKey := strings.ReplaceAll(os.Getenv("YEVQO_GITHUB_APP_PRIVATE_KEY"), "\\n", "\n")
 			// Backward-compatible manual setup is retained for existing installations.
