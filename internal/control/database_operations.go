@@ -139,6 +139,7 @@ func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Reques
 		if deviceID < 1 || siteID == "" { apiError(w, shared.ErrBadRequest("device_id and site_id are required")); return }
 		ownerID, accessErr := s.authorizeDeviceOwner(r.Context(), deviceID, u.ID, "device.read")
 		if accessErr != nil { apiError(w, accessErr); return }
+		if err := s.authorizeWorkspace(r.Context(), ownerID, u.ID, "database.read"); err != nil { apiError(w, err); return }
 		rows, err := s.db.conn.QueryContext(r.Context(), `SELECT c.id,c.database_id,d.name,ds.port,dc.username
 			FROM site_database_connections c JOIN db_instances d ON d.id=c.database_id
 			JOIN database_servers ds ON ds.id=d.server_id JOIN database_credentials dc ON dc.database_id=d.id
