@@ -9,7 +9,7 @@
  async function load(){
   projectId=$page.params.id;environmentId=$page.params.environment_id;
   const projectResult=await getProject(projectId);projectCanManage=projectResult.ok&&!!projectResult.data?.project?.can_manage;
-  const [p,e,s,all,db,envDb]=await Promise.all([getProject(projectId),listProjectEnvironments(projectId),listEnvironmentSites(projectId,environmentId),listSites(projectId),listDatabaseServers(projectId),listEnvironmentDatabases(projectId,environmentId)]);
+  const [e,s,all,db,envDb]=await Promise.all([listProjectEnvironments(projectId),listEnvironmentSites(projectId,environmentId),listSites(projectId),listDatabaseServers(projectId),listEnvironmentDatabases(projectId,environmentId)]);
   if(!e.ok){notify(e.error||'Не удалось загрузить окружения','error');goto('/projects/'+projectId);return}
   environment=(e.data.environments||[]).find(x=>String(x.id)===String(environmentId))||null;
   if(environment){editName=environment.name;editDescription=environment.description||'';}
