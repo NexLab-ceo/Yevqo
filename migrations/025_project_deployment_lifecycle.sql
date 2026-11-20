@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS project_repository_sites (
     previous_git_branch VARCHAR(255) NOT NULL DEFAULT 'main',
     previous_webhook_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     previous_webhook_secret_enc LONGBLOB NULL,
+    github_webhook_id BIGINT UNSIGNED NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (project_id, device_id, site_id),
