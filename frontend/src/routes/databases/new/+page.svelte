@@ -24,7 +24,8 @@
 
     onMount(async () => {
         const projectId = $page.url.searchParams.get('project_id') || '';
-        const [serverResult, siteResult] = await Promise.all([listDatabaseServers(projectId), listSites(projectId)]);
+        const environmentId = $page.url.searchParams.get('environment_id') || '';
+        const [serverResult, siteResult] = await Promise.all([listDatabaseServers(projectId, environmentId), listSites(projectId)]);
         if (serverResult.ok) {
             servers = serverResult.data?.servers || [];
             const first = servers.find((server) => server.engine === 'postgresql' && server.status === 'ready');
@@ -41,6 +42,7 @@
         const payload = {
             server_id: Number(serverId), name, username, password,
             ...($page.url.searchParams.get('project_id') ? { project_id: Number($page.url.searchParams.get('project_id')) } : {}),
+            ...($page.url.searchParams.get('environment_id') ? { environment_id: Number($page.url.searchParams.get('environment_id')) } : {}),
             ...(selected ? { site_device_id: Number(selected.device_id), site_id: selected.site.site_id } : {})
         };
         const result = await createDatabase(payload);
@@ -48,7 +50,7 @@
         if (!result.ok) { error = result.error || 'Не удалось создать базу данных'; return; }
         password = '';
         notify('Database and application role created', 'success');
-        goto('/databases'+($page.url.searchParams.get('project_id')?'?project_id='+encodeURIComponent($page.url.searchParams.get('project_id')):''));
+        goto('/databases'+($page.url.searchParams.get('project_id')?'?project_id='+encodeURIComponent($page.url.searchParams.get('project_id')):'' )+($page.url.searchParams.get('environment_id')?'&environment_id='+encodeURIComponent($page.url.searchParams.get('environment_id')):''));
     }
 </script>
 
