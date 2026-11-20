@@ -32,6 +32,8 @@
     let statsError = '';
     let downloadingBackupID = '';
 
+    function scopedQuery() { const q = new URLSearchParams(); const p = $route.url.searchParams.get('project_id'); const e = $route.url.searchParams.get('environment_id'); if (p) q.set('project_id', p); if (e) q.set('environment_id', e); return q.size ? '?' + q.toString() : ''; }
+
     $: deviceSites = database ? sites.filter((entry) => Number(entry.device_id) === Number(database.device_id)) : [];
     $: availableSites = deviceSites.filter((entry) => !connections.some((link) => link.site_id === entry.site?.site_id));
 
@@ -110,7 +112,7 @@
             database = result.data?.database;
             restoreName = (database.name + '_restored').slice(0,63);
             restoreUsername = ((database.username || 'app_user') + '_restored').slice(0,63);
-            const [linkResult, siteResult, backupResult] = await Promise.all([listDatabaseConnections(database.id), listSites(), listBackups()]);
+            const [linkResult, siteResult, backupResult] = await Promise.all([listDatabaseConnections(database.id), listSites($route.url.searchParams.get('project_id')||''), listBackups()]);
             if (linkResult.ok) connections = linkResult.data?.connections || [];
             if (siteResult.ok) sites = siteResult.data?.sites || [];
             if (backupResult.ok) databaseBackups = (backupResult.data?.backups || []).filter((item) => item.resource_type === 'database' && item.resource_id === String(database.id));
@@ -122,7 +124,7 @@
 <svelte:head><title>{database ? database.name + ' · Database · VELTRIX Dock' : 'Database · VELTRIX Dock'}</title></svelte:head>
 
 <div class="page">
-    <div class="breadcrumbs"><button on:click={() => goto('/databases')}>Databases</button><span>/</span><span>{database?.name || 'Database details'}</span></div>
+    <div class="breadcrumbs"><button on:click={() => goto('/databases'+scopedQuery())}>Databases</button><span>/</span><span>{database?.name || 'Database details'}</span></div>
     {#if loading}
         <div class="empty">Loading database details…</div>
     {:else if error}
