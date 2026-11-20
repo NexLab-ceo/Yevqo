@@ -121,6 +121,16 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 		if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
 		in.RepositoryURL = strings.TrimSpace(in.RepositoryURL)
 		in.Branch = strings.TrimSpace(in.Branch)
+		var mappedProjectID int64;var mappedRepositoryURL,mappedRepositoryName,mappedBranch string
+		mapErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT prs.project_id,pr.clone_url,pr.full_name,prs.deploy_branch FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id WHERE prs.device_id=? AND prs.site_id=? LIMIT 1`,deviceID,siteID).Scan(&mappedProjectID,&mappedRepositoryURL,&mappedRepositoryName,&mappedBranch)
+		if mapErr==nil {
+			if err:=s.authorizeWorkspace(r.Context(),dev.UserID,user.ID,"project.manage");err!=nil{apiError(w,err);return}
+			if in.RepositoryURL!=""{owner,name,_,parseErr:=parseGitHubRepositoryName(in.RepositoryURL);expectedOwner,expectedName,_,expectedErr:=parseGitHubRepositoryName(mappedRepositoryName);if parseErr!=nil||expectedErr!=nil||!strings.EqualFold(owner,expectedOwner)||!strings.EqualFold(name,expectedName){apiError(w,shared.ErrBadRequest("the Git repository is managed by this project's Source Repository settings"));return}}
+			in.RepositoryURL=mappedRepositoryURL
+			if in.Branch==""{in.Branch=mappedBranch}
+			if in.GitHubToken!=""{apiError(w,shared.ErrBadRequest("project-linked repositories use the GitHub App installation; do not store a personal token on the site"));return}
+			if in.Branch!=mappedBranch{token,fullName,_,_,tokenErr:=s.projectRepositoryToken(r.Context(),dev.UserID,mappedProjectID);if tokenErr!=nil{apiError(w,shared.ErrForbidden("project GitHub App installation is unavailable"));return};owner,name,_,_:=parseGitHubRepositoryName(fullName);branchInfo,branchErr:=s.fetchGitHubBranch(r.Context(),token,owner,name,in.Branch);if branchErr!=nil{apiError(w,shared.ErrBadRequest("selected branch is not available in the connected repository"));return};_,_=s.db.conn.ExecContext(r.Context(),`UPDATE project_repository_sites SET deploy_branch=? WHERE project_id=? AND device_id=? AND site_id=?`,in.Branch,mappedProjectID,deviceID,siteID);_,_=s.db.conn.ExecContext(r.Context(),`UPDATE project_repositories SET last_commit_sha=? WHERE project_id=?`,branchInfo.Commit.SHA,mappedProjectID)}
+		} else if mapErr!=sql.ErrNoRows { apiError(w,shared.ErrInternal("could not inspect project repository mapping"));return }
 		if in.Branch == "" { in.Branch = "main" }
 		if in.RepositoryURL != "" && !validateGitRepository(in.RepositoryURL) {
 			apiError(w, shared.ErrBadRequest("repository URL must be a valid HTTPS or SSH Git URL")); return
