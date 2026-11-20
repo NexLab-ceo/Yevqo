@@ -96,3 +96,16 @@ func TestP2MigrationIsAdditiveAndContainsPlatformTables(t *testing.T) {
 		}
 	}
 }
+
+func TestProjectEnvironmentDatabaseInstancesMigrationIsAdditiveAndScoped(t *testing.T) {
+	path := filepath.Join("..", "..", "migrations", "024_project_environment_database_instances.sql")
+	content, err := os.ReadFile(path)
+	if err != nil { t.Fatalf("read project environment database instances migration: %v", err) }
+	statements := splitSQL(string(content))
+	if len(statements) != 3 { t.Fatalf("migration has %d statements, want 3", len(statements)) }
+	normalized := strings.ToLower(strings.Join(statements, "\n"))
+	for _, required := range []string{"alter table project_environments","add unique key uq_project_environments_project_id_id (project_id, id)","create table if not exists project_environment_databases","primary key (project_id, database_id)","foreign key (project_id, environment_id)","references project_environments (project_id, id)","foreign key (database_id)","having count(distinct eds.environment_id) = 1"} {
+		if !strings.Contains(normalized, required) { t.Errorf("migration is missing %q", required) }
+	}
+	for _, forbidden := range []string{"drop table","truncate table","delete from","drop column"} { if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) } }
+}

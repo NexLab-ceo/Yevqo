@@ -195,6 +195,9 @@ export async function detachEnvironmentSite(projectId, environmentId, deviceId, 
 export async function listEnvironmentDatabases(projectId, environmentId) { return request('GET', `/api/projects/${projectId}/environments/${environmentId}/databases`); }
 export async function attachEnvironmentDatabase(projectId, environmentId, serverId) { return request('POST', `/api/projects/${projectId}/environments/${environmentId}/databases`, { server_id: serverId }); }
 export async function detachEnvironmentDatabase(projectId, environmentId, serverId) { return request('DELETE', `/api/projects/${projectId}/environments/${environmentId}/databases`, { server_id: serverId }); }
+export async function listEnvironmentDatabaseInstances(projectId, environmentId) { return request('GET', `/api/projects/${projectId}/environments/${environmentId}/database-instances`); }
+export async function attachEnvironmentDatabaseInstance(projectId, environmentId, databaseId) { return request('POST', `/api/projects/${projectId}/environments/${environmentId}/database-instances`, { database_id: databaseId }); }
+export async function detachEnvironmentDatabaseInstance(projectId, environmentId, databaseId) { return request('DELETE', `/api/projects/${projectId}/environments/${environmentId}/database-instances`, { database_id: databaseId }); }
 export async function attachProjectDatabaseServer(projectId, serverId) { return request('POST', `/api/projects/${projectId}/databases`, { server_id: serverId }); }
 export async function updateProject(id, name, description = '') { return request('PATCH', `/api/projects/${id}`, { name, description }); }
 export async function deleteProject(id) { return request('DELETE', `/api/projects/${id}`); }

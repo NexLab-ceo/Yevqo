@@ -467,7 +467,7 @@ func (s *Server) handleDatabases(w http.ResponseWriter, r *http.Request) {
 			WHERE d.user_id=? AND ds.user_id=?`
 		args := []interface{}{ownerID, ownerID}
 		if projectID > 0 { query += ` AND EXISTS (SELECT 1 FROM project_database_servers pds WHERE pds.project_id=? AND pds.database_server_id=ds.id)`; args = append(args, projectID) }
-		if environmentID > 0 { query += ` AND EXISTS (SELECT 1 FROM project_environment_database_servers eds WHERE eds.project_id=? AND eds.environment_id=? AND eds.database_server_id=ds.id)`; args = append(args, projectID, environmentID) }
+		if environmentID > 0 { query += ` AND EXISTS (SELECT 1 FROM project_environment_databases edb WHERE edb.project_id=? AND edb.environment_id=? AND edb.database_id=d.id)`; args = append(args, projectID, environmentID) }
 		query += " ORDER BY d.created_at DESC"
 		rows, err := s.db.conn.QueryContext(r.Context(), query, args...)
 		if err != nil { apiError(w, shared.ErrInternal("could not load databases")); return }

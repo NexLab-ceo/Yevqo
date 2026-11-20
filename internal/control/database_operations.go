@@ -84,6 +84,9 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 	tx,err:=s.db.conn.BeginTx(ctx,nil);if err!=nil { apiError(w,shared.ErrInternal("database created but metadata transaction could not start"));return }
 	_,err=tx.ExecContext(ctx,`INSERT INTO database_credentials(database_id,username,ciphertext,nonce,key_version) VALUES(?,?,?,?,1)`,databaseID,in.Username,ciphertext,nonce)
 	if err==nil { _,err=tx.ExecContext(ctx,`UPDATE db_instances SET status='ready' WHERE id=? AND user_id=?`,databaseID,ownerID) }
+	if err==nil && in.ProjectID>0 && in.EnvironmentID>0 {
+		_,err=tx.ExecContext(ctx,`INSERT INTO project_environment_databases(project_id,environment_id,database_id) VALUES(?,?,?)`,in.ProjectID,in.EnvironmentID,databaseID)
+	}
 	if err==nil && in.SiteID!="" { _,err=tx.ExecContext(ctx,`INSERT INTO site_database_connections(user_id,device_id,site_id,database_id) VALUES(?,?,?,?)`,ownerID,in.SiteDeviceID,in.SiteID,databaseID) }
 	if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("database created but credential metadata could not be saved; do not retry blindly"));return }
 	if err=tx.Commit();err!=nil { apiError(w,shared.ErrInternal("database created but metadata commit failed; inspect database inventory before retrying"));return }

@@ -2,14 +2,14 @@
  import {onMount} from 'svelte';
  import {page} from '$app/stores';
  import {goto} from '$app/navigation';
- import {getProject,listProjectEnvironments,listEnvironmentSites,listSites,attachEnvironmentSite,detachEnvironmentSite,listDatabaseServers,listEnvironmentDatabases,attachEnvironmentDatabase,detachEnvironmentDatabase,updateProjectEnvironment,deleteProjectEnvironment} from '$lib/api.js';
+ import {getProject,listProjectEnvironments,listEnvironmentSites,listSites,attachEnvironmentSite,detachEnvironmentSite,listDatabaseServers,listEnvironmentDatabases,attachEnvironmentDatabase,detachEnvironmentDatabase,listDatabases,listEnvironmentDatabaseInstances,attachEnvironmentDatabaseInstance,detachEnvironmentDatabaseInstance,updateProjectEnvironment,deleteProjectEnvironment} from '$lib/api.js';
  import {notify} from '$lib/stores.js';
  import Button from '$lib/components/Button.svelte';
- let projectId='',environmentId='',environment=null,items=[],available=[],dbItems=[],dbAvailable=[],selected='',selectedDatabase='',loading=true,busy=false,editName='',editDescription='',projectCanManage=false;
+ let projectId='',environmentId='',environment=null,items=[],available=[],dbItems=[],dbAvailable=[],databaseInstances=[],dbInstanceAvailable=[],selected='',selectedDatabase='',selectedDatabaseInstance='',loading=true,busy=false,editName='',editDescription='',projectCanManage=false;
  async function load(){
   projectId=$page.params.id;environmentId=$page.params.environment_id;
   const projectResult=await getProject(projectId);projectCanManage=projectResult.ok&&!!projectResult.data?.project?.can_manage;
-  const [e,s,all,db,envDb]=await Promise.all([listProjectEnvironments(projectId),listEnvironmentSites(projectId,environmentId),listSites(projectId),listDatabaseServers(projectId),listEnvironmentDatabases(projectId,environmentId)]);
+  const [e,s,all,db,envDb,allDatabases,envDbInstances]=await Promise.all([listProjectEnvironments(projectId),listEnvironmentSites(projectId,environmentId),listSites(projectId),listDatabaseServers(projectId),listEnvironmentDatabases(projectId,environmentId),listDatabases(projectId),listEnvironmentDatabaseInstances(projectId,environmentId)]);
   if(!e.ok){notify(e.error||'Не удалось загрузить окружения','error');goto('/projects/'+projectId);return}
   environment=(e.data.environments||[]).find(x=>String(x.id)===String(environmentId))||null;
   if(environment){editName=environment.name;editDescription=environment.description||'';}
@@ -19,6 +19,9 @@
   available=all.ok?(all.data.sites||[]).filter(x=>!linked.has(x.device_id+':'+x.site.site_id)):[];
   dbItems=envDb.ok?envDb.data.database_servers||[]:[];
   const linkedDB=new Set(dbItems.map(x=>x.id));dbAvailable=db.ok?(db.data.servers||[]).filter(x=>!linkedDB.has(x.id)):[];
+  databaseInstances=envDbInstances.ok?envDbInstances.data.databases||[]:[];
+  const assignedDatabaseIds=new Set(databaseInstances.map(x=>x.id));
+  dbInstanceAvailable=allDatabases.ok?(allDatabases.data.databases||[]).filter(x=>!assignedDatabaseIds.has(x.id)):[];
   loading=false;
  }
  onMount(load);
@@ -29,6 +32,8 @@
  async function attach(){if(!selected||busy)return;const [device,site]=selected.split(':');busy=true;const r=await attachEnvironmentSite(projectId,environmentId,Number(device),site);busy=false;if(r.ok){notify('Application добавлено в окружение','success');selected='';await load()}else notify(r.error||'Не удалось добавить сайт','error')}
  async function attachDatabase(){if(!selectedDatabase||busy)return;busy=true;const r=await attachEnvironmentDatabase(projectId,environmentId,Number(selectedDatabase));busy=false;if(r.ok){notify('Database Server добавлен в окружение','success');selectedDatabase='';await load()}else notify(r.error||'Не удалось добавить Database Server','error')}
  async function detachDatabase(item){if(busy||environment?.is_protected)return;if(!confirm('Убрать Database Server из окружения? Сам сервер и базы останутся без изменений.'))return;busy=true;const r=await detachEnvironmentDatabase(projectId,environmentId,item.id);busy=false;if(r.ok){notify('Database Server убран из окружения','success');await load()}else notify(r.error||'Не удалось убрать Database Server','error')}
+ async function attachDatabaseInstance(){if(!selectedDatabaseInstance||busy)return;busy=true;const r=await attachEnvironmentDatabaseInstance(projectId,environmentId,Number(selectedDatabaseInstance));busy=false;if(r.ok){notify('Database добавлена в окружение','success');selectedDatabaseInstance='';await load()}else notify(r.error||'Не удалось добавить базу в окружение','error')}
+ async function detachDatabaseInstance(item){if(busy||environment?.is_protected)return;if(!confirm('Убрать базу из окружения? Сама база и её данные останутся.'))return;busy=true;const r=await detachEnvironmentDatabaseInstance(projectId,environmentId,item.id);busy=false;if(r.ok){notify('База убрана из окружения','success');await load()}else notify(r.error||'Не удалось убрать базу','error')}
  async function detach(item){if(busy||environment?.is_protected)return;if(!confirm('Убрать приложение из окружения? Сам сайт и его файлы останутся.'))return;busy=true;const r=await detachEnvironmentSite(projectId,environmentId,item.device_id,item.site_id);busy=false;if(r.ok){notify('Приложение удалено из окружения','success');await load()}else notify(r.error||'Не удалось удалить привязку','error')}
 </script>
 {#if loading}<div class="empty">Загрузка окружения…</div>{:else if environment}
@@ -37,7 +42,10 @@
 <section class="panel"><div class="section-head"><div><h2>Applications</h2><p>Сайты, назначенные в это окружение</p></div>{#if projectCanManage}<div class="add"><select class="input" bind:value={selected}><option value="">Выбрать приложение проекта</option>{#each available as item}<option value={item.device_id+':'+item.site.site_id}>{item.site.site_id} · {item.device_name}</option>{/each}</select><Button variant="primary" disabled={!selected||busy} on:click={attach}>Добавить</Button></div>{/if}</div>
 {#if items.length}<div class="resource-list">{#each items as item}<div class="resource-row"><a class="resource" href={'/sites/'+item.device_id+'/'+encodeURIComponent(item.site_id)}><span class="resource-icon">◉</span><span><strong>{item.site_id}</strong><small>{item.device_name}</small></span><span class="open">Открыть →</span></a>{#if projectCanManage && !environment.is_protected}<Button variant="danger" disabled={busy} on:click={()=>detach(item)}>Убрать</Button>{/if}</div>{/each}</div>{:else}<div class="empty compact">В этом окружении пока нет приложений.</div>{/if}</section>
 <section class="panel database-panel"><div class="section-head"><div><h2>Database Servers</h2><p>Серверы баз данных, назначенные в это окружение</p></div>{#if projectCanManage}<div class="add"><select class="input" bind:value={selectedDatabase}><option value="">Выбрать Database Server</option>{#each dbAvailable as db}<option value={db.id}>{db.name} · {db.engine}</option>{/each}</select><Button variant="primary" disabled={!selectedDatabase||busy} on:click={attachDatabase}>Добавить</Button></div>{/if}</div>
-{#if dbItems.length}<div class="resource-list">{#each dbItems as db}<div class="resource-row"><a class="resource" href={'/databases?project_id='+projectId+'&environment_id='+environmentId}><span class="resource-icon">DB</span><span><strong>{db.name}</strong><small>{db.engine} · Device #{db.device_id} · {db.status}</small></span><span class="open">Открыть →</span></a>{#if projectCanManage && !environment.is_protected}<Button variant="danger" disabled={busy} on:click={()=>detachDatabase(db)}>Убрать</Button>{/if}</div>{/each}</div>{:else}<div class="empty compact">В окружение пока не добавлены Database Servers.</div>{/if}</section>
+{#if dbItems.length}<div class="resource-list">{#each dbItems as db}<div class="resource-row"><a class="resource" href={'/databases?project_id='+projectId+'&environment_id='+environmentId}><span class="resource-icon">DB</span><span><strong>{db.name}</strong><small>{db.engine} · Device #{db.device_id} · {db.status}</small></span><span class="open">Открыть →</span></a>{#if projectCanManage && !environment.is_protected}<Button variant="danger" disabled={busy} on:click={()=>detachDatabase(db)}>Убрать</Button>{/if}</div>{/each}</div>{:else}<div class="empty compact">В окружение пока не добавлены Database Servers.</div>{/if}
+<section class="panel database-panel"><div class="section-head"><div><h2>Databases</h2><p>Отдельные базы данных, назначенные в это окружение</p></div>{#if projectCanManage}<div class="add"><select class="input" bind:value={selectedDatabaseInstance}><option value="">Выбрать базу проекта</option>{#each dbInstanceAvailable as item}<option value={item.id}>{item.name} · {item.server_name}</option>{/each}</select><Button variant="primary" disabled={!selectedDatabaseInstance||busy} on:click={attachDatabaseInstance}>Добавить</Button></div>{/if}</div>
+{#if databaseInstances.length}<div class="resource-list">{#each databaseInstances as item}<div class="resource-row"><a class="resource" href={'/databases/'+item.id+'?project_id='+projectId+'&environment_id='+environmentId}><span class="resource-icon">DB</span><span><strong>{item.name}</strong><small>{item.server_name} · {item.engine} · Device #{item.device_id} · {item.status}</small></span><span class="open">Открыть →</span></a>{#if projectCanManage && !environment.is_protected}<Button variant="danger" disabled={busy} on:click={()=>detachDatabaseInstance(item)}>Убрать</Button>{/if}</div>{/each}</div>{:else}<div class="empty compact">В окружение пока не добавлены отдельные базы данных.</div>{/if}</section>
+</section>
 
 {/if}
 <style>
