@@ -1129,7 +1129,7 @@ func (m *ProcessManager) ListSiteReleases(siteID, runtime string) ([]shared.Site
 
 // RollbackSiteRelease switches to an existing immutable release without
 // rebuilding it. If activation fails, the previously running process is restored.
-func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime string, port int, startCommand string) (int, error) {
+func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime string, port int, startCommand string, extraEnv map[string]string) (int, error) {
 	m.operationMu.Lock()
 	defer m.operationMu.Unlock()
 	if !validSiteID(siteID) { return 0, fmt.Errorf("invalid site id") }
@@ -1177,7 +1177,7 @@ func (m *ProcessManager) RollbackSiteRelease(siteID, commit, rootDir, runtime st
 	runPath := filepath.Join("sites", siteID, ".yevqo", "releases", commit)
 	if rootDir != "." { runPath = filepath.Join(runPath, rootDir) }
 	tx := deploymentTransaction{Version:1, SiteID:siteID, State:"activating", CandidateCommit:commit, HadPrevious:hadPrevious, Previous:previous}
-	pid, startErr := m.activateBlueGreenRelease(context.Background(), tx, runPath, port, runtime, nil, startCommand, "", 15*time.Second)
+	pid, startErr := m.activateBlueGreenRelease(context.Background(), tx, runPath, port, runtime, extraEnv, startCommand, "", 15*time.Second)
 	if startErr != nil { return 0, fmt.Errorf("could not activate release %s: %w", commit, startErr) }
 	return pid, nil
 }

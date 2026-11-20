@@ -188,7 +188,7 @@ func TestRollbackRejectsReleaseSymlinkEscape(t *testing.T) {
 	commit:=strings.Repeat("b",40)
 	if err:=os.Symlink(outside,filepath.Join(releases,commit));err!=nil{t.Skipf("symlinks unavailable: %v",err)}
 	manager:=&ProcessManager{DataRoot:root}
-	if _, err := manager.RollbackSiteRelease("demo", commit, ".", "nodejs", 3000, ""); err == nil { t.Fatal("expected release symlink escape to be rejected") }
+	if _, err := manager.RollbackSiteRelease("demo", commit, ".", "nodejs", 3000, "", nil); err == nil { t.Fatal("expected release symlink escape to be rejected") }
 }
 
 func TestSafeSiteDirectoryRejectsInternalSiteSymlink(t *testing.T) {

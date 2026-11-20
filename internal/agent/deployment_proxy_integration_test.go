@@ -102,7 +102,7 @@ func TestBlueGreenDeploymentKeepsStablePortAndSwitchesRelease(t *testing.T) {
 	}
 	readBody("release-two")
 	if verifyProcessRecord(firstRecord) { t.Fatal("previous release process was not stopped after traffic switch") }
-	rollbackPID, err := manager.RollbackSiteRelease(siteID, firstCommit, ".", "static", publicPort, "python3 serve.py")
+	rollbackPID, err := manager.RollbackSiteRelease(siteID, firstCommit, ".", "static", publicPort, "python3 serve.py", nil)
 	if err != nil { t.Fatalf("rollback to previous immutable release: %v", err) }
 	rolledBack, ok := registry.Get(siteID)
 	if !ok || rolledBack.PID != rollbackPID || rolledBack.BackendPort == 0 { t.Fatalf("rollback did not preserve blue-green process identity: %#v", rolledBack) }

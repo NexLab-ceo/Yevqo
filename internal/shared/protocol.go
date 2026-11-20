@@ -321,6 +321,7 @@ type RollbackSiteRelease struct {
 	RootDir string `json:"root_dir,omitempty"`
 	Runtime string `json:"runtime"`
 	Port uint32 `json:"port"`
+	Env map[string]string `json:"env,omitempty"`
 }
 type SiteReleasesResult struct {
 	Releases []SiteRelease `json:"releases"`
