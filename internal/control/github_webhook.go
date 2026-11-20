@@ -111,6 +111,7 @@ func (s *Server) handleGitHubWebhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil { http.Error(w, "could not record webhook delivery", http.StatusInternalServerError); return }
 	if n, _ := res.RowsAffected(); n == 0 { w.WriteHeader(http.StatusAccepted); return }
 	runID := s.createWebhookDeploymentRun(r.Context(), userID, deviceID, parts[1], branch, event.After, delivery)
+	_, _ = s.db.conn.ExecContext(r.Context(), `UPDATE project_repositories pr JOIN project_repository_sites prs ON prs.project_id=pr.project_id SET pr.last_commit_sha=? WHERE prs.device_id=? AND prs.site_id=?`, event.After, deviceID, parts[1])
 	action := &shared.SiteAction{SiteId: parts[1], Path: sitePath, Port: uint32(port), Runtime: runtime, GitURL: gitCfg.GitURL, GitBranch: branch, GitCommit: event.After, BuildCommand: gitCfg.BuildCommand, RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, HealthCheckPath: gitCfg.HealthCheckPath, StartCommand: gitCfg.StartCommand, AllowProjectCode: true, Env: env}
 	_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(userID), DeviceID: shared.PtrInt64(deviceID), Action: "github_webhook_accepted", Details: map[string]interface{}{"site_id": parts[1], "commit": event.After, "delivery": delivery}, IP: clientIP(r)})
 	writeJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "accepted": true, "commit": event.After})
