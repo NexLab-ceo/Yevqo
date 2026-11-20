@@ -66,6 +66,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		for _, env := range []struct{name,slug,description string; protected bool}{{"Production","production","Live production workloads",true},{"Development","development","Development and integration workloads",false},{"Staging","staging","Pre-production validation workloads",false}} {
 			if _,envErr:=s.db.conn.ExecContext(r.Context(),`INSERT INTO project_environments(project_id,name,slug,description,is_protected) VALUES(?,?,?,?,?)`,id,env.name,env.slug,env.description,env.protected);envErr!=nil { _,_=s.db.conn.ExecContext(r.Context(),`DELETE FROM projects WHERE id=? AND user_id=?`,id,ownerID);apiError(w,shared.ErrInternal("could not initialize project environments"));return }
 		}
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_created",Details:map[string]interface{}{"project_id":id,"name":in.Name},IP:clientIP(r)})
 		writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"owner_user_id":ownerID,"name":in.Name,"slug":slug,"description":in.Description}})
 	default: http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
@@ -95,6 +96,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 		}
 		if err!=nil { _=tx.Rollback();apiError(w,shared.ErrInternal("could not attach database server"));return }
 		if err=tx.Commit();err!=nil { apiError(w,shared.ErrInternal("could not commit database server attachment"));return }
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_database_attached",Details:map[string]interface{}{"project_id":id,"database_server_id":in.ServerID,"device_id":deviceID},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
 	}
 	if len(parts)==2 && r.Method==http.MethodDelete && (parts[1]=="devices" || parts[1]=="sites" || parts[1]=="databases") {
@@ -140,6 +142,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 			n,_:=res.RowsAffected();if n==0 { _=tx.Rollback();apiError(w,shared.ErrNotFound("project device attachment not found"));return }
 		}
 		if err:=tx.Commit();err!=nil { apiError(w,shared.ErrInternal("could not commit resource detach"));return }
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_resource_detached",Details:map[string]interface{}{"project_id":id,"resource_type":parts[1],"device_id":in.DeviceID,"site_id":in.SiteID,"database_server_id":in.ServerID},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
 	}
 	if len(parts)==2 && r.Method==http.MethodPost && (parts[1]=="devices" || parts[1]=="sites") {
@@ -162,6 +165,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 			if err=tx.Commit();err!=nil { apiError(w,shared.ErrInternal("could not commit project resource attachment"));return }
 		}
 		if err!=nil { apiError(w,shared.ErrInternal("could not attach resource"));return }
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_resource_attached",Details:map[string]interface{}{"project_id":id,"resource_type":parts[1],"device_id":in.DeviceID,"site_id":in.SiteID},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true});return
 	}
 	switch r.Method {
@@ -183,11 +187,11 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 		var in projectInput;if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 		in.Name=strings.TrimSpace(in.Name);if len(in.Name)<2||len(in.Name)>80{apiError(w,shared.ErrBadRequest("project name must be 2–80 characters"));return}
 		_,err:=s.db.conn.ExecContext(r.Context(),`UPDATE projects SET name=?,slug=?,description=? WHERE id=? AND user_id=?`,in.Name,projectSlug(in.Name),strings.TrimSpace(in.Description),id,ownerID)
-		if err!=nil{apiError(w,shared.ErrBadRequest("project name is already in use"));return};writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
+		if err!=nil{apiError(w,shared.ErrBadRequest("project name is already in use"));return};_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_updated",Details:map[string]interface{}{"project_id":id,"name":in.Name},IP:clientIP(r)});writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	case http.MethodDelete:
 		// Удаляется только группировка. Устройства, сайты и их данные остаются нетронутыми.
 		_,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM projects WHERE id=? AND user_id=?`,id,ownerID)
-		if err!=nil{apiError(w,shared.ErrInternal("could not delete project"));return};writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
+		if err!=nil{apiError(w,shared.ErrInternal("could not delete project"));return};_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_deleted",Details:map[string]interface{}{"project_id":id,"name":name},IP:clientIP(r)});writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	default: http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
 }
