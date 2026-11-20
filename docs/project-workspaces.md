@@ -33,7 +33,7 @@ Environment application assignments must refer to applications already attached 
 
 Database-server inventory and lifecycle, database inventory and creation, database roles/privileges, site connection links, backup inventory, backup creation, restore, transfer, chunk download, and schedules are scoped to the workspace owner and role.
 
-The managed database engine lifecycle is currently PostgreSQL-focused. Do not assume that MySQL/MariaDB server installation, restore, or migration is available merely because those engine names appear in configuration or UI.
+Environment scoping is enforced for database inventory and runtime credential injection. Creating a site/database link while selecting an environment requires the site and database server to be assigned to that same project environment. This is application-level scoping only; processes still run under the same Termux OS user and are not isolated by containers or OS users.\n\nThe managed database engine lifecycle is currently PostgreSQL-focused. Do not assume that MySQL/MariaDB server installation, restore, or migration is available merely because those engine names appear in configuration or UI.
 
 ## Migrations
 
