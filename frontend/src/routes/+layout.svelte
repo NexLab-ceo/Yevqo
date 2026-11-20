@@ -8,7 +8,7 @@
  import {locale} from '$lib/i18n.js';
  let loading=true,mobileNavOpen=false,modeSaving=false;
  const globalGroups=[
-  {label:'',items:[['Обзор','/','◉'],['Проекты','/projects','▦'],['Развёртывания','/deployments','↗'],['Журналы','/logs','⌘']]},
+  {label:'',items:[['Обзор','/overview','◉'],['Проекты','/projects','▦'],['Развёртывания','/deployments','↗'],['Журналы','/logs','⌘']]},
   {label:'УПРАВЛЕНИЕ',items:[['Устройства','/devices','▣'],['Настройки','/settings','⚙']]}
  ];
  $: pathParts=$page.url.pathname.split('/');
