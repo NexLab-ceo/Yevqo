@@ -61,7 +61,7 @@ func mariaSQLLiteral(v string) string { return "'" + strings.ReplaceAll(v, "'", 
 func mariaQuoteIdentifier(v string) string { return "`" + strings.ReplaceAll(v, "`", "``") + "`" }
 
 func installMariaDBServer(req shared.InstallDatabaseServer) (*shared.DatabaseServerInstallResult, error) {
-	if req.Port < 1024 || req.Port > 65535 || req.MaxConnections < 1 || req.MaxConnections > 1000 { return nil, fmt.Errorf("invalid MariaDB port or connection limit") }
+	if req.Port < 1024 || req.Port > 65535 || req.MaxConnections < 1 || req.MaxConnections > 1000 { return nil, fmt.Errorf("invalid MariaDB port or connection limit") }; if req.SSLMode != "" && req.SSLMode != "disable" && req.SSLMode != "prefer" && req.SSLMode != "require" { return nil, fmt.Errorf("unsupported MariaDB SSL mode") }
 	prefix := os.Getenv("PREFIX"); if prefix == "" { return nil, fmt.Errorf("Termux PREFIX is not set; run the Agent inside Termux") }
 	dataDir, err := resolveTermuxPath(prefix, req.DataDirectory); if err != nil { return nil, err }
 	if l, err := netListenLocal(req.Port); err != nil { return nil, err } else { _ = l }
@@ -90,7 +90,6 @@ func installMariaDBServer(req shared.InstallDatabaseServer) (*shared.DatabaseSer
 	
 	out, err := exec.CommandContext(ctx, installDB, args...).CombinedOutput()
 	if err != nil { return nil, fmt.Errorf("MariaDB system-table initialization failed: %s", trimOutput(string(out))) }
-	if req.SSLMode != "" && req.SSLMode != "disable" && req.SSLMode != "prefer" && req.SSLMode != "require" { return nil, fmt.Errorf("unsupported MariaDB SSL mode") }
 	if err := startMariaDB(dataDir, req.Port, req.MaxConnections, req.SSLMode); err != nil { return nil, err }
 	cli, err := mariaCLI(); if err != nil { return nil, err }
 	versionOut, _ := exec.CommandContext(ctx, cli, "--version").CombinedOutput()
@@ -183,8 +182,9 @@ func testMariaDBConnection(req shared.TestDatabaseConnection) error {
 	if req.DatabaseID < 1 || !mariaIdentifier.MatchString(req.Database) || !mariaIdentifier.MatchString(req.Username) || req.Port < 1024 || req.Port > 65535 || len(req.Password) < 12 || len(req.Password) > 256 { return fmt.Errorf("invalid MariaDB connection request") }
 	cli, err := mariaCLI(); if err != nil { return err }
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second); defer cancel()
-	args := []string{"--protocol=TCP", "-h", "127.0.0.1", "-P", fmt.Sprint(req.Port), "-u", req.Username, req.Database, "-Nse", "SELECT 1"}
+	args := []string{"--protocol=TCP", "-h", "127.0.0.1", "-P", fmt.Sprint(req.Port), "-u", req.Username}
 	if req.SSLMode == "require" { args = append(args, "--ssl") } else if req.SSLMode == "disable" { args = append(args, "--skip-ssl") } else if req.SSLMode != "" && req.SSLMode != "prefer" { return fmt.Errorf("invalid MariaDB SSL mode") }
+	args = append(args, req.Database, "-Nse", "SELECT 1")
 	cmd := exec.CommandContext(ctx, cli, args...)
 	cmd.Env = append(os.Environ(), "MYSQL_PWD="+req.Password)
 	out, err := cmd.Output(); if err != nil { if ctx.Err() != nil { return fmt.Errorf("MariaDB connection test timed out") }; return fmt.Errorf("MariaDB connection test failed") }
