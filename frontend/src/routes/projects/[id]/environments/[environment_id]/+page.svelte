@@ -21,7 +21,8 @@
   const linkedDB=new Set(dbItems.map(x=>x.id));dbAvailable=db.ok?(db.data.servers||[]).filter(x=>!linkedDB.has(x.id)):[];
   databaseInstances=envDbInstances.ok?envDbInstances.data.databases||[]:[];
   const assignedDatabaseIds=new Set(databaseInstances.map(x=>x.id));
-  dbInstanceAvailable=allDatabases.ok?(allDatabases.data.databases||[]).filter(x=>!assignedDatabaseIds.has(x.id)):[];
+  const environmentServerIds=new Set(dbItems.map(x=>x.id));
+  dbInstanceAvailable=allDatabases.ok?(allDatabases.data.databases||[]).filter(x=>environmentServerIds.has(x.server_id)&&!assignedDatabaseIds.has(x.id)):[];
   loading=false;
  }
  onMount(load);
@@ -43,9 +44,9 @@
 {#if items.length}<div class="resource-list">{#each items as item}<div class="resource-row"><a class="resource" href={'/sites/'+item.device_id+'/'+encodeURIComponent(item.site_id)}><span class="resource-icon">◉</span><span><strong>{item.site_id}</strong><small>{item.device_name}</small></span><span class="open">Открыть →</span></a>{#if projectCanManage && !environment.is_protected}<Button variant="danger" disabled={busy} on:click={()=>detach(item)}>Убрать</Button>{/if}</div>{/each}</div>{:else}<div class="empty compact">В этом окружении пока нет приложений.</div>{/if}</section>
 <section class="panel database-panel"><div class="section-head"><div><h2>Database Servers</h2><p>Серверы баз данных, назначенные в это окружение</p></div>{#if projectCanManage}<div class="add"><select class="input" bind:value={selectedDatabase}><option value="">Выбрать Database Server</option>{#each dbAvailable as db}<option value={db.id}>{db.name} · {db.engine}</option>{/each}</select><Button variant="primary" disabled={!selectedDatabase||busy} on:click={attachDatabase}>Добавить</Button></div>{/if}</div>
 {#if dbItems.length}<div class="resource-list">{#each dbItems as db}<div class="resource-row"><a class="resource" href={'/databases?project_id='+projectId+'&environment_id='+environmentId}><span class="resource-icon">DB</span><span><strong>{db.name}</strong><small>{db.engine} · Device #{db.device_id} · {db.status}</small></span><span class="open">Открыть →</span></a>{#if projectCanManage && !environment.is_protected}<Button variant="danger" disabled={busy} on:click={()=>detachDatabase(db)}>Убрать</Button>{/if}</div>{/each}</div>{:else}<div class="empty compact">В окружение пока не добавлены Database Servers.</div>{/if}
+</section>
 <section class="panel database-panel"><div class="section-head"><div><h2>Databases</h2><p>Отдельные базы данных, назначенные в это окружение</p></div>{#if projectCanManage}<div class="add"><select class="input" bind:value={selectedDatabaseInstance}><option value="">Выбрать базу проекта</option>{#each dbInstanceAvailable as item}<option value={item.id}>{item.name} · {item.server_name}</option>{/each}</select><Button variant="primary" disabled={!selectedDatabaseInstance||busy} on:click={attachDatabaseInstance}>Добавить</Button></div>{/if}</div>
 {#if databaseInstances.length}<div class="resource-list">{#each databaseInstances as item}<div class="resource-row"><a class="resource" href={'/databases/'+item.id+'?project_id='+projectId+'&environment_id='+environmentId}><span class="resource-icon">DB</span><span><strong>{item.name}</strong><small>{item.server_name} · {item.engine} · Device #{item.device_id} · {item.status}</small></span><span class="open">Открыть →</span></a>{#if projectCanManage && !environment.is_protected}<Button variant="danger" disabled={busy} on:click={()=>detachDatabaseInstance(item)}>Убрать</Button>{/if}</div>{/each}</div>{:else}<div class="empty compact">В окружение пока не добавлены отдельные базы данных.</div>{/if}</section>
-</section>
 
 {/if}
 <style>

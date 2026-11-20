@@ -223,6 +223,9 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if len(parts) == 4 && parts[3] == "databases" {
+		if r.Method == http.MethodGet {
+			if err := s.authorizeWorkspace(r.Context(), ownerID, u.ID, "database.read"); err != nil { apiError(w, err); return }
+		}
 		environmentID, parseErr := strconv.ParseInt(parts[2], 10, 64)
 		if parseErr != nil || environmentID < 1 { apiError(w, shared.ErrBadRequest("invalid environment id")); return }
 		var protected bool
@@ -277,6 +280,9 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 	}
 
 	if len(parts) == 4 && parts[3] == "database-instances" {
+		if r.Method == http.MethodGet {
+			if err := s.authorizeWorkspace(r.Context(), ownerID, u.ID, "database.read"); err != nil { apiError(w, err); return }
+		}
 		environmentID, parseErr := strconv.ParseInt(parts[2], 10, 64)
 		if parseErr != nil || environmentID < 1 { apiError(w, shared.ErrBadRequest("invalid environment id")); return }
 		var protected bool

@@ -104,7 +104,7 @@ func TestProjectEnvironmentDatabaseInstancesMigrationIsAdditiveAndScoped(t *test
 	statements := splitSQL(string(content))
 	if len(statements) != 3 { t.Fatalf("migration has %d statements, want 3", len(statements)) }
 	normalized := strings.ToLower(strings.Join(statements, "\n"))
-	for _, required := range []string{"alter table project_environments","add unique key uq_project_environments_project_id_id (project_id, id)","create table if not exists project_environment_databases","primary key (project_id, database_id)","foreign key (project_id, environment_id)","references project_environments (project_id, id)","foreign key (database_id)","having count(distinct eds.environment_id) = 1"} {
+	for _, required := range []string{"alter table project_environments","add unique key uq_project_environments_project_id_id (project_id, id)","create table if not exists project_environment_databases","primary key (project_id, database_id)","foreign key (project_id, environment_id)","references project_environments(project_id, id)","foreign key (database_id)","having count(distinct eds.environment_id) = 1"} {
 		if !strings.Contains(normalized, required) { t.Errorf("migration is missing %q", required) }
 	}
 	for _, forbidden := range []string{"drop table","truncate table","delete from","drop column"} { if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) } }
