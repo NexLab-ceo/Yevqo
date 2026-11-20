@@ -15,7 +15,10 @@ import (
 
 type integrationConnectInput struct {
 	Provider string `json:"provider"`
-	Token    string `json:"token"`
+	Token string `json:"token"`
+	AppID string `json:"app_id"`
+	InstallationID string `json:"installation_id"`
+	PrivateKey string `json:"private_key"`
 }
 
 type providerAccount struct {
@@ -157,16 +160,18 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 	if err!=nil { apiError(w,shared.ErrInternal("could not decrypt provider credentials"));return }
 	ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
 	token := string(rawCredential)
-	if provider=="github_app" {
+	isGitHubApp := provider=="github_app"
+	if isGitHubApp {
 		var credentials githubAppCredentials
 		if err:=json.Unmarshal(rawCredential,&credentials);err!=nil { apiError(w,shared.ErrInternal("stored GitHub App credentials are invalid"));return }
 		token,_,err=githubAppInstallationToken(ctx,credentials)
 		if err!=nil { apiError(w,shared.ErrBadRequest("GitHub App installation token could not be refreshed"));return }
-		provider="github"
 	}
 	var repos []providerRepository
-	if provider=="github" {
-		resp,err:=providerRequest(ctx,provider,string(token),"https://api.github.com/user/repos?per_page=100&sort=updated")
+	if provider=="github" || isGitHubApp {
+		endpoint := "https://api.github.com/user/repos?per_page=100&sort=updated"
+		if isGitHubApp { endpoint = "https://api.github.com/installation/repositories?per_page=100" }
+		resp,err:=providerRequest(ctx,"github",string(token),endpoint)
 		if err!=nil { apiError(w,shared.ErrInternal("GitHub API is unavailable"));return }
 		var values []struct { ID int64 `json:"id"`; Name string `json:"name"`; FullName string `json:"full_name"`; CloneURL string `json:"clone_url"`; DefaultBranch string `json:"default_branch"`; Private bool `json:"private"`; HTMLURL string `json:"html_url"` }
 		if err:=readProviderJSON(resp,&values);err!=nil { apiError(w,shared.ErrBadRequest("GitHub rejected repository access"));return }
