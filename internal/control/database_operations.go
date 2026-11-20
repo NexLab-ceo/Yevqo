@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -44,8 +45,8 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 	if in.ProjectID < 0 { apiError(w,shared.ErrBadRequest("invalid project id"));return }
 	ownerID,deviceID,err:=s.authorizeDatabaseServer(r.Context(),in.ServerID,u.ID,"database.manage")
 	if err!=nil { apiError(w,err);return }
-	var engine,status string;var port int
-	err=s.db.conn.QueryRowContext(r.Context(),`SELECT engine,status,port FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,ownerID).Scan(&engine,&status,&port)
+	var engine,status,sslMode string;var port int
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT engine,status,port,ssl_mode FROM database_servers WHERE id=? AND user_id=?`,in.ServerID,ownerID).Scan(&engine,&status,&port,&sslMode)
 	if err!=nil { apiError(w,shared.ErrInternal("could not load database server"));return }
 	if in.ProjectID > 0 {
 		if err:=s.authorizeProjectAction(r.Context(),in.ProjectID,u.ID,"database.manage");err!=nil { apiError(w,err);return }
@@ -172,7 +173,9 @@ func (s *Server) siteDatabaseEnvironment(ctx context.Context, userID, deviceID i
 	if len(all)==0{return nil,nil}
 	encoded,err:=json.Marshal(all);if err!=nil{return nil,err}
 	first:=all[0]
-	env := map[string]string{"DB_CONNECTION":databaseConnectionDriver(first.Engine),"DB_HOST":first.Host,"DB_PORT":strconv.Itoa(first.Port),"DB_SSLMODE":first.SSLMode,"DB_DATABASE":first.Name,"DB_USERNAME":first.Username,"DB_PASSWORD":first.Password,"VELTRIX_DATABASES":string(encoded)}\n\tif first.Engine == "mariadb" || first.Engine == "mysql" { env["DB_SSL_CA"] = filepath.Join(first.DataDirectory, "server.crt") }\n\treturn env,nil
+	env := map[string]string{"DB_CONNECTION":databaseConnectionDriver(first.Engine),"DB_HOST":first.Host,"DB_PORT":strconv.Itoa(first.Port),"DB_SSLMODE":first.SSLMode,"DB_DATABASE":first.Name,"DB_USERNAME":first.Username,"DB_PASSWORD":first.Password,"VELTRIX_DATABASES":string(encoded)}
+	if first.Engine == "mariadb" || first.Engine == "mysql" { env["DB_SSL_CA"] = filepath.Join(first.DataDirectory, "server.crt") }
+	return env,nil
 }
 
 func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Request) {
