@@ -43,7 +43,7 @@ func (s *Server) handleDatabaseServerRoleMutation(w http.ResponseWriter, r *http
 		return
 	}
 	var deviceID int64
-	var engine, status string
+	var engine, status, dataDir string
 	var port int
 	err := s.db.conn.QueryRowContext(r.Context(), `SELECT device_id,engine,status,port,data_directory FROM database_servers WHERE id=? AND user_id=?`, serverID, ownerID).Scan(&deviceID, &engine, &status, &port, &dataDir)
 	if err == sql.ErrNoRows {
@@ -54,8 +54,8 @@ func (s *Server) handleDatabaseServerRoleMutation(w http.ResponseWriter, r *http
 		apiError(w, shared.ErrInternal("could not load database server"))
 		return
 	}
-	if engine != "postgresql" || status != "ready" {
-		apiError(w, shared.ErrBadRequest("a ready PostgreSQL server is required"))
+	if (engine != "postgresql" && engine != "mariadb" && engine != "mysql") || status != "ready" {
+		apiError(w, shared.ErrBadRequest("a supported ready database server is required"))
 		return
 	}
 	conn, online := s.hub.Get(deviceID)
