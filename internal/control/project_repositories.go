@@ -18,7 +18,27 @@ import (
 	"veltrix/internal/shared"
 )
 
-var githubRepositoryPart = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,100}$`)
+var githubRepositoryPart = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}package control
+
+import (
+	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"veltrix/internal/shared"
+)
+
+var githubRepositoryPart = )
 
 type projectRepositoryInput struct {
 	IntegrationID int64  `json:"integration_id"`
