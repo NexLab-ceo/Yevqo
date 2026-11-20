@@ -127,7 +127,7 @@
             <h1>Install Database Server</h1>
             <p>Настройте отдельный сервер баз данных на Android-устройстве.</p>
         </div>
-        <button class="btn btn-ghost" on:click={() => goto('/databases'+($page.url.searchParams.get('project_id')?'?project_id='+encodeURIComponent($page.url.searchParams.get('project_id')):''))}>Закрыть</button>
+        <button class="btn btn-ghost" on:click={() => goto('/databases'+($page.url.searchParams.get('project_id')?'?project_id='+encodeURIComponent($page.url.searchParams.get('project_id')):'' )+($page.url.searchParams.get('environment_id')?'&environment_id='+encodeURIComponent($page.url.searchParams.get('environment_id')):''))}>Закрыть</button>
     </div>
 
     <div class="wizard-shell">
@@ -157,7 +157,7 @@
                     <div class="notice warning"><strong>Безопасно сохранено.</strong> На Android-устройстве ничего не устанавливалось и существующие данные не изменялись.</div>
                     <div class="summary-actions">
                         <button class="btn btn-secondary" on:click={() => { completed = false; step = 3; }}>Изменить настройки</button>
-                        <button class="btn btn-primary" on:click={() => goto('/databases'+($page.url.searchParams.get('project_id')?'?project_id='+encodeURIComponent($page.url.searchParams.get('project_id')):''))}>Вернуться в Databases</button>
+                        <button class="btn btn-primary" on:click={() => goto('/databases'+($page.url.searchParams.get('project_id')?'?project_id='+encodeURIComponent($page.url.searchParams.get('project_id')):'' )+($page.url.searchParams.get('environment_id')?'&environment_id='+encodeURIComponent($page.url.searchParams.get('environment_id')):''))}>Вернуться в Databases</button>
                     </div>
                 </div>
             {:else}
