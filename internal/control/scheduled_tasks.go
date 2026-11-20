@@ -115,7 +115,7 @@ func (s *Server) queueScheduledTask(item dueScheduledTask){
 	conn,online:=s.hub.Get(item.DeviceID)
 	if !online{
 		_,_ = s.db.conn.ExecContext(ctx,`UPDATE scheduled_tasks SET next_run_at=DATE_ADD(UTC_TIMESTAMP(),INTERVAL 15 MINUTE),last_status='failed',last_error='device offline; retry in 15 minutes' WHERE id=?`,item.ID)
-		_,_ = s.db.conn.ExecContext(ctx,`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,item.UserID,"error","Scheduled task delayed: "+item.Name,"The device is offline. Yevqo will retry in 15 minutes.")
+		if s.notificationPreferenceEnabled(ctx,item.UserID,"device_events") { _,_ = s.db.conn.ExecContext(ctx,`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,item.UserID,"error","Scheduled task delayed: "+item.Name,"The device is offline. Yevqo will retry in 15 minutes.") }
 		return
 	}
 	go s.executeScheduledTask(item,conn)
@@ -133,6 +133,6 @@ func (s *Server) executeScheduledTask(item dueScheduledTask,conn *AgentConn){
 	_,_ = s.db.conn.ExecContext(context.Background(),`UPDATE scheduled_tasks SET last_status=?,last_output=?,last_error=? WHERE id=?`,status,output,nullableString(reason),item.ID)
 	notificationType:="success";title:="Scheduled task completed: "+item.Name;body:=fmt.Sprintf("Task for %s completed successfully.",item.SiteID)
 	if status=="failed"{notificationType="error";title="Scheduled task failed: "+item.Name;body=reason;if body==""{body="The scheduled command failed."}}
-	_,_ = s.db.conn.ExecContext(context.Background(),`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,item.UserID,notificationType,title,truncateNotification(body))
+	if s.notificationPreferenceEnabled(context.Background(),item.UserID,"system") { _,_ = s.db.conn.ExecContext(context.Background(),`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,item.UserID,notificationType,title,truncateNotification(body)) }
 	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(item.UserID),DeviceID:shared.PtrInt64(item.DeviceID),Action:"scheduled_task_"+status,Details:map[string]interface{}{"task_id":item.ID,"site_id":item.SiteID,"output_bytes":len(output)}})
 }
