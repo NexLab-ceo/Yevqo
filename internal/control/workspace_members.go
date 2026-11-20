@@ -88,7 +88,7 @@ func (s *Server) handleWorkspaceMembers(w http.ResponseWriter, r *http.Request) 
 		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO workspace_members(owner_user_id,member_user_id,role,status,invited_email) VALUES(?,?,?,'invited',?)`,ownerID,memberID,in.Role,in.Email)
 		if err!=nil{apiError(w,shared.ErrInternal("could not create workspace invitation"));return}
 		_,_=s.db.conn.ExecContext(r.Context(),`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,memberID,"info","Workspace invitation","You have been invited to a NexLab workspace as "+strings.Title(in.Role)+". Accept it in Team & Permissions.")
-		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),Action:"workspace_member_invited",Details:map[string]interface{}{"workspace_owner_id":ownerID,"member_user_id":memberID,"role":in.Role},IP:clientIP(r)})
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"workspace_member_invited",Details:map[string]interface{}{"workspace_owner_id":ownerID,"member_user_id":memberID,"role":in.Role},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"message":"invitation sent"})
 	default:
 		http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
@@ -111,14 +111,14 @@ func (s *Server) handleWorkspaceMemberByID(w http.ResponseWriter,r *http.Request
 		result,err:=s.db.conn.ExecContext(r.Context(),`UPDATE workspace_members SET role=? WHERE id=? AND owner_user_id=? AND status='active'`,in.Role,id,ownerID)
 		if err!=nil{apiError(w,shared.ErrInternal("could not update workspace member role"));return}
 		affected,_:=result.RowsAffected();if affected==0{apiError(w,shared.ErrNotFound("active workspace member not found"));return}
-		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),Action:"workspace_member_role_updated",Details:map[string]interface{}{"workspace_owner_id":ownerID,"membership_id":id,"role":in.Role},IP:clientIP(r)})
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"workspace_member_role_updated",Details:map[string]interface{}{"workspace_owner_id":ownerID,"membership_id":id,"role":in.Role},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"role":in.Role});return
 	}
 	result,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM workspace_members WHERE id=? AND owner_user_id=?`,id,ownerID)
 	if err!=nil{apiError(w,shared.ErrInternal("could not remove workspace member"));return}
 	affected,_:=result.RowsAffected()
 	if affected==0{apiError(w,shared.ErrNotFound("workspace member not found"));return}
-	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),Action:"workspace_member_removed",Details:map[string]interface{}{"workspace_owner_id":ownerID,"membership_id":id},IP:clientIP(r)})
+	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"workspace_member_removed",Details:map[string]interface{}{"workspace_owner_id":ownerID,"membership_id":id},IP:clientIP(r)})
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 }
 
