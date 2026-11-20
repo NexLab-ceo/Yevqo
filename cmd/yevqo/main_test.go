@@ -106,3 +106,46 @@ func TestCLIDeployRequiresExplicitProjectCodeConsent(t *testing.T) {
 		t.Fatalf("deploy without consent: exit=%d called=%v stderr=%q",code,called,stderr.String())
 	}
 }
+
+func TestCLIProjectAndEnvironmentLifecycleCommands(t *testing.T) {
+	cases:=[]struct{
+		name string
+		args []string
+		method,path string
+		body map[string]any
+	}{
+		{"create-project",[]string{"create-project","Website","Main project"},http.MethodPost,"/api/projects",map[string]any{"name":"Website","description":"Main project"}},
+		{"update-project",[]string{"update-project","7","Website v2","Updated"},http.MethodPatch,"/api/projects/7",map[string]any{"name":"Website v2","description":"Updated"}},
+		{"delete-project",[]string{"delete-project","7","--confirm"},http.MethodDelete,"/api/projects/7",nil},
+		{"create-environment",[]string{"create-environment","7","QA","Quality assurance"},http.MethodPost,"/api/projects/7/environments",map[string]any{"name":"QA","description":"Quality assurance"}},
+		{"update-environment",[]string{"update-environment","7","3","QA v2","Updated"},http.MethodPatch,"/api/projects/7/environments/3",map[string]any{"name":"QA v2","description":"Updated"}},
+		{"delete-environment",[]string{"delete-environment","7","3","--confirm"},http.MethodDelete,"/api/projects/7/environments/3",nil},
+	}
+	for _,tc:=range cases { t.Run(tc.name,func(t *testing.T){
+		called:=false
+		server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+			called=true
+			if r.Method!=tc.method || r.URL.Path!=tc.path { t.Fatalf("request=%s %s, want %s %s",r.Method,r.URL.Path,tc.method,tc.path) }
+			if cookie,err:=r.Cookie("veltrix_session");err!=nil||cookie.Value!="test-session"{t.Fatalf("session cookie missing: %v",err)}
+			if tc.body!=nil { var got map[string]any;if err:=json.NewDecoder(r.Body).Decode(&got);err!=nil{t.Fatal(err)};for k,v:=range tc.body{if got[k]!=v{t.Fatalf("%s=%#v, want %#v",k,got[k],v)}} }
+			w.Header().Set("Content-Type","application/json");_,_=w.Write([]byte(`{"ok":true}`))
+		}))
+		defer server.Close()
+		var stdout,stderr strings.Builder
+		args:=append([]string{"--server",server.URL,"--session","test-session"},tc.args...)
+		if code:=run(args,func(string)string{return ""},&stdout,&stderr);code!=0{t.Fatalf("exit=%d stderr=%s",code,stderr.String())}
+		if !called{t.Fatal("Control Plane was not called")}
+	})}
+}
+
+func TestCLIDestructiveLifecycleCommandsRequireConfirmation(t *testing.T) {
+	for _,args:=range [][]string{{"delete-project","7"},{"delete-environment","7","3"}} {
+		called:=false
+		server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){called=true}))
+		var stdout,stderr strings.Builder
+		all:=append([]string{"--server",server.URL,"--session","test-session"},args...)
+		code:=run(all,func(string)string{return ""},&stdout,&stderr)
+		server.Close()
+		if code!=2||called||!strings.Contains(stderr.String(),"--confirm"){t.Fatalf("args=%v exit=%d called=%v stderr=%q",args,code,called,stderr.String())}
+	}
+}

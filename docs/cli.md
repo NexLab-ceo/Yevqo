@@ -29,6 +29,19 @@ yevqo-cli deployments
 yevqo-cli monitoring
 ```
 
+## Project and environment lifecycle
+
+```sh
+yevqo-cli create-project Website "Main website project"
+yevqo-cli update-project 12 Website "Updated description"
+yevqo-cli delete-project 12 --confirm
+yevqo-cli create-environment 12 QA "Quality assurance"
+yevqo-cli update-environment 12 4 QA "Updated description"
+yevqo-cli delete-environment 12 4 --confirm
+```
+
+Delete commands require `--confirm`. Project deletion removes only the project grouping; it does not delete sites, databases, or their data. Environment deletion removes the environment and its assignments; Production remains protected by the Control Plane.
+
 ## Site operations
 
 ```sh

@@ -61,12 +61,16 @@ func (c *apiClient) get(path string) ([]byte, error) {
 	return data,nil
 }
 
-func (c *apiClient) post(path string, body any) (apiResponse, error) {
-	encoded, err := json.Marshal(body)
+func (c *apiClient) mutate(method, path string, body any) (apiResponse, error) {
+	var reader io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil { return apiResponse{}, err }
+		reader = bytes.NewReader(encoded)
+	}
+	req, err := http.NewRequest(method, c.baseURL+path, reader)
 	if err != nil { return apiResponse{}, err }
-	req, err := http.NewRequest(http.MethodPost, c.baseURL+path, bytes.NewReader(encoded))
-	if err != nil { return apiResponse{}, err }
-	req.Header.Set("Content-Type", "application/json")
+	if body != nil { req.Header.Set("Content-Type", "application/json") }
 	req.AddCookie(&http.Cookie{Name:"veltrix_session", Value:c.session, Path:"/"})
 	resp, err := c.httpClient.Do(req)
 	if err != nil { return apiResponse{}, fmt.Errorf("request Control Plane: %w", err) }
@@ -79,8 +83,28 @@ func (c *apiClient) post(path string, body any) (apiResponse, error) {
 		if result.Error == "" { result.Error = fmt.Sprintf("HTTP %d", resp.StatusCode) }
 		return result, errors.New(result.Error)
 	}
-	if !result.OK { message:=result.Message; if message=="" { message=result.Error }; if message=="" { message="operation failed" }; return result, errors.New(message) }
+	if !result.OK {
+		message := result.Message
+		if message == "" { message = result.Error }
+		if message == "" { message = "operation failed" }
+		return result, errors.New(message)
+	}
 	return result, nil
+}
+
+func (c *apiClient) post(path string, body any) (apiResponse, error) { return c.mutate(http.MethodPost,path,body) }
+func (c *apiClient) patch(path string, body any) (apiResponse, error) { return c.mutate(http.MethodPatch,path,body) }
+func (c *apiClient) delete(path string) (apiResponse, error) { return c.mutate(http.MethodDelete,path,nil) }
+
+func printMutationResult(result apiResponse, stdout io.Writer, fallback string) {
+	if result.Message != "" { fmt.Fprintln(stdout,result.Message); return }
+	fmt.Fprintln(stdout,fallback)
+}
+
+func positiveCLIID(raw string) error {
+	id,err:=strconv.ParseInt(raw,10,64)
+	if err!=nil || id<1 { return errors.New("invalid positive resource id") }
+	return nil
 }
 
 func run(args []string, getenv func(string) string, stdout, stderr io.Writer) int {
@@ -114,6 +138,45 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		var pretty bytes.Buffer
 		if json.Indent(&pretty,data,"","  ")==nil { _,_=io.Copy(stdout,&pretty);fmt.Fprintln(stdout); } else { fmt.Fprintln(stdout,string(data)) }
 		return 0
+	}
+	if command=="create-project" {
+		if len(rest)<2 || len(rest)>3 { fmt.Fprintln(stderr,"expected project name and optional description");return 2 }
+		description:="";if len(rest)==3{description=rest[2]}
+		result,err:=client.post("/api/projects",map[string]any{"name":rest[1],"description":description})
+		if err!=nil{fmt.Fprintln(stderr,err);return 1};printMutationResult(result,stdout,"project created");return 0
+	}
+	if command=="update-project" {
+		if len(rest)!=4 { fmt.Fprintln(stderr,"expected project-id, name and description");return 2 }
+		if idErr:=positiveCLIID(rest[1]);idErr!=nil{fmt.Fprintln(stderr,idErr);return 2}
+		result,err:=client.patch("/api/projects/"+url.PathEscape(rest[1]),map[string]any{"name":rest[2],"description":rest[3]})
+		if err!=nil{fmt.Fprintln(stderr,err);return 1};printMutationResult(result,stdout,"project updated");return 0
+	}
+	if command=="delete-project" {
+		if len(rest)!=3 || rest[2]!="--confirm" { fmt.Fprintln(stderr,"deleting a project requires --confirm");return 2 }
+		if idErr:=positiveCLIID(rest[1]);idErr!=nil{fmt.Fprintln(stderr,idErr);return 2}
+		result,err:=client.delete("/api/projects/"+url.PathEscape(rest[1]))
+		if err!=nil{fmt.Fprintln(stderr,err);return 1};printMutationResult(result,stdout,"project grouping deleted; app data was not removed");return 0
+	}
+	if command=="create-environment" {
+		if len(rest)<3 || len(rest)>4 { fmt.Fprintln(stderr,"expected project-id, environment name and optional description");return 2 }
+		if idErr:=positiveCLIID(rest[1]);idErr!=nil{fmt.Fprintln(stderr,idErr);return 2}
+		description:="";if len(rest)==4{description=rest[3]}
+		result,err:=client.post("/api/projects/"+url.PathEscape(rest[1])+"/environments",map[string]any{"name":rest[2],"description":description})
+		if err!=nil{fmt.Fprintln(stderr,err);return 1};printMutationResult(result,stdout,"environment created");return 0
+	}
+	if command=="update-environment" {
+		if len(rest)!=5 { fmt.Fprintln(stderr,"expected project-id, environment-id, name and description");return 2 }
+		if err:=positiveCLIID(rest[1]);err!=nil{fmt.Fprintln(stderr,err);return 2};if err:=positiveCLIID(rest[2]);err!=nil{fmt.Fprintln(stderr,err);return 2}
+		path:="/api/projects/"+url.PathEscape(rest[1])+"/environments/"+url.PathEscape(rest[2])
+		result,err:=client.patch(path,map[string]any{"name":rest[3],"description":rest[4]})
+		if err!=nil{fmt.Fprintln(stderr,err);return 1};printMutationResult(result,stdout,"environment updated");return 0
+	}
+	if command=="delete-environment" {
+		if len(rest)!=4 || rest[3]!="--confirm" { fmt.Fprintln(stderr,"deleting an environment requires --confirm");return 2 }
+		if err:=positiveCLIID(rest[1]);err!=nil{fmt.Fprintln(stderr,err);return 2};if err:=positiveCLIID(rest[2]);err!=nil{fmt.Fprintln(stderr,err);return 2}
+		path:="/api/projects/"+url.PathEscape(rest[1])+"/environments/"+url.PathEscape(rest[2])
+		result,err:=client.delete(path)
+		if err!=nil{fmt.Fprintln(stderr,err);return 1};printMutationResult(result,stdout,"environment assignments removed; app data was not deleted");return 0
 	}
 	if command=="project"||command=="environments" {
 		if len(rest)!=2 { fmt.Fprintln(stderr,"expected a project id");return 2 }
