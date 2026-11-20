@@ -363,48 +363,69 @@ func (s *Server) handleReports(w http.ResponseWriter,r *http.Request) {
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"report":map[string]interface{}{"generated_at":time.Now().UTC(),"devices":devices,"sites":sites,"running_sites":running,"database_servers":dbServers}})
 }
 
-func (s *Server) handleBackups(w http.ResponseWriter,r *http.Request) {
-	u:=UserFromContext(r.Context())
-	if r.Method==http.MethodPost {
-		var in struct {
-			DeviceID int64 `json:"device_id"`
-			SiteID string `json:"site_id"`
-			DatabaseID int64 `json:"database_id"`
-		}
-		if err:=decodeJSON(r,&in);err!=nil { apiError(w,shared.ErrBadRequest("invalid backup request"));return }
-		if in.DatabaseID>0 {
-			var deviceID int64;var serverID int64;var database,engine,databaseStatus,serverStatus string;var port int
-			err:=s.db.conn.QueryRowContext(r.Context(),`SELECT ds.device_id,ds.id,d.name,ds.engine,d.status,ds.status,ds.port
+func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
+	u := UserFromContext(r.Context())
+	if r.Method == http.MethodPost {
+		var in struct { DeviceID int64 `json:"device_id"`; SiteID string `json:"site_id"`; DatabaseID int64 `json:"database_id"` }
+		if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid backup request")); return }
+		if in.DatabaseID > 0 {
+			ownerID, serverID, deviceID, accessErr := s.authorizeDatabaseInstance(r.Context(), in.DatabaseID, u.ID, "database.manage")
+			if accessErr != nil { apiError(w, accessErr); return }
+			var database, engine, databaseStatus, serverStatus string
+			var port int
+			err := s.db.conn.QueryRowContext(r.Context(), `SELECT d.name,ds.engine,d.status,ds.status,ds.port
 				FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id
-				WHERE d.id=? AND d.user_id=?`,in.DatabaseID,u.ID).Scan(&deviceID,&serverID,&database,&engine,&databaseStatus,&serverStatus,&port)
-			if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("database not found"));return }
-			if err!=nil { apiError(w,shared.ErrInternal("could not load database backup target"));return }
-			if engine!="postgresql" || databaseStatus!="ready" || serverStatus!="ready" { apiError(w,shared.ErrBadRequest("database and PostgreSQL server must be ready"));return }
-			conn,online:=s.hub.Get(deviceID);if !online { apiError(w,shared.ErrBadRequest("device is offline"));return }
-			res,err:=s.db.conn.ExecContext(r.Context(),`INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,?,0,'queued')`,u.ID,deviceID,serverID,"database",fmt.Sprint(in.DatabaseID),fmt.Sprintf("pending-%d.dump",in.DatabaseID))
-			if err!=nil { apiError(w,shared.ErrInternal("could not queue database backup"));return }
-			backupID,_:=res.LastInsertId()
-			go s.runDatabaseBackup(backupID,u.ID,deviceID,conn,&shared.CreateDatabaseBackup{DatabaseID:in.DatabaseID,ServerID:serverID,Database:database,Port:uint32(port)})
-			writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"backup":map[string]interface{}{"id":backupID,"device_id":deviceID,"resource_type":"database","resource_id":fmt.Sprint(in.DatabaseID),"file_name":fmt.Sprintf("pending-%d.dump",in.DatabaseID),"size_bytes":0,"status":"queued"}})
+				WHERE d.id=? AND d.user_id=?`, in.DatabaseID, ownerID).Scan(&database, &engine, &databaseStatus, &serverStatus, &port)
+			if err != nil { apiError(w, shared.ErrInternal("could not load database backup target")); return }
+			if engine != "postgresql" || databaseStatus != "ready" || serverStatus != "ready" { apiError(w, shared.ErrBadRequest("database and PostgreSQL server must be ready")); return }
+			conn, online := s.hub.Get(deviceID)
+			if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
+			res, err := s.db.conn.ExecContext(r.Context(), `INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,?,0,'queued')`, ownerID, deviceID, serverID, "database", fmt.Sprint(in.DatabaseID), fmt.Sprintf("pending-%d.dump", in.DatabaseID))
+			if err != nil { apiError(w, shared.ErrInternal("could not queue database backup")); return }
+			backupID, _ := res.LastInsertId()
+			go s.runDatabaseBackup(backupID, ownerID, deviceID, conn, &shared.CreateDatabaseBackup{DatabaseID: in.DatabaseID, ServerID: serverID, Database: database, Port: uint32(port)})
+			writeJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "backup": map[string]interface{}{"id": backupID, "device_id": deviceID, "resource_type": "database", "resource_id": fmt.Sprint(in.DatabaseID), "file_name": fmt.Sprintf("pending-%d.dump", in.DatabaseID), "size_bytes": 0, "status": "queued"}})
 			return
 		}
-		if in.DeviceID<1||!validBackupSiteID(in.SiteID){apiError(w,shared.ErrBadRequest("invalid device or site"));return}
+		if in.DeviceID < 1 || !validBackupSiteID(in.SiteID) { apiError(w, shared.ErrBadRequest("invalid device or site")); return }
+		ownerID, accessErr := s.authorizeDeviceOwner(r.Context(), in.DeviceID, u.ID, "backup.manage")
+		if accessErr != nil { apiError(w, accessErr); return }
 		var count int
-		if err:=s.db.conn.QueryRowContext(r.Context(),"SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?",in.DeviceID,in.SiteID,u.ID).Scan(&count);err!=nil||count!=1{apiError(w,shared.ErrNotFound("site not found"));return}
-		conn,online:=s.hub.Get(in.DeviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
-		resourceID:=fmt.Sprintf("%d:%s",in.DeviceID,in.SiteID)
-		pendingName:=fmt.Sprintf("pending-%s.tar.gz",in.SiteID)
-		res,err:=s.db.conn.ExecContext(r.Context(),"INSERT INTO backups(user_id,device_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,0,'queued')",u.ID,in.DeviceID,"site",resourceID,pendingName)
-		if err!=nil{apiError(w,shared.ErrInternal("could not queue website backup"));return}
-		id,_:=res.LastInsertId()
-		go s.runSiteBackup(id,u.ID,in.DeviceID,conn,&shared.CreateSiteBackup{SiteId:in.SiteID})
-		writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"backup":map[string]interface{}{"id":id,"device_id":in.DeviceID,"resource_type":"site","resource_id":resourceID,"file_name":pendingName,"size_bytes":0,"status":"queued"}});return
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`, in.DeviceID, in.SiteID, ownerID).Scan(&count); err != nil || count != 1 {
+			apiError(w, shared.ErrNotFound("site not found")); return
+		}
+		conn, online := s.hub.Get(in.DeviceID)
+		if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
+		resourceID := fmt.Sprintf("%d:%s", in.DeviceID, in.SiteID)
+		pendingName := fmt.Sprintf("pending-%s.tar.gz", in.SiteID)
+		res, err := s.db.conn.ExecContext(r.Context(), "INSERT INTO backups(user_id,device_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,0,'queued')", ownerID, in.DeviceID, "site", resourceID, pendingName)
+		if err != nil { apiError(w, shared.ErrInternal("could not queue website backup")); return }
+		id, _ := res.LastInsertId()
+		go s.runSiteBackup(id, ownerID, in.DeviceID, conn, &shared.CreateSiteBackup{SiteId: in.SiteID})
+		writeJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "backup": map[string]interface{}{"id": id, "device_id": in.DeviceID, "resource_type": "site", "resource_id": resourceID, "file_name": pendingName, "size_bytes": 0, "status": "queued"}})
+		return
 	}
-	if r.Method!=http.MethodGet{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
-	rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT id,device_id,resource_type,resource_id,file_name,size_bytes,status,created_at FROM backups WHERE user_id=? ORDER BY id DESC LIMIT 100`,u.ID)
-	if err!=nil{apiError(w,shared.ErrInternal("could not load backups"));return};defer rows.Close()
-	out:=make([]map[string]interface{},0);for rows.Next(){var id,deviceID,size int64;var typ,resource,file,status string;var created time.Time;if err:=rows.Scan(&id,&deviceID,&typ,&resource,&file,&size,&status,&created);err!=nil{apiError(w,shared.ErrInternal("could not read backups"));return};out=append(out,map[string]interface{}{"id":id,"device_id":deviceID,"resource_type":typ,"resource_id":resource,"file_name":file,"size_bytes":size,"status":status,"created_at":created})}
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"backups":out})
+	if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+	owners, err := s.db.WorkspaceOwnerIDs(r.Context(), u.ID)
+	if err != nil { apiError(w, err); return }
+	out := make([]map[string]interface{}, 0)
+	for _, ownerID := range owners {
+		role, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
+		if roleErr != nil { apiError(w, roleErr); return }
+		if !allowed || !CanWorkspaceAction(role, "backup.read") { continue }
+		rows, queryErr := s.db.conn.QueryContext(r.Context(), `SELECT id,device_id,resource_type,resource_id,file_name,size_bytes,status,created_at FROM backups WHERE user_id=? ORDER BY id DESC LIMIT 100`, ownerID)
+		if queryErr != nil { apiError(w, shared.ErrInternal("could not load backups")); return }
+		for rows.Next() {
+			var id, deviceID, size int64
+			var typ, resource, file, status string
+			var created time.Time
+			if err := rows.Scan(&id, &deviceID, &typ, &resource, &file, &size, &status, &created); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read backups")); return }
+			out = append(out, map[string]interface{}{"id": id, "device_id": deviceID, "resource_type": typ, "resource_id": resource, "file_name": file, "size_bytes": size, "status": status, "created_at": created})
+		}
+		if err := rows.Err(); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read backups")); return }
+		rows.Close()
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "backups": out})
 }
 
 func (s *Server) runSiteBackup(backupID,userID,deviceID int64,conn *AgentConn,req *shared.CreateSiteBackup) {
