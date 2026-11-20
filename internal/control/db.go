@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -530,6 +531,8 @@ func (db *DB) Log(ctx context.Context, entry *shared.LogEntry) error {
 		}
 		outcome := "success"
 		if ok, exists := entry.Details["ok"].(bool); exists && !ok { outcome = "failure" }
+		action := strings.ToLower(entry.Action)
+		if strings.Contains(action, "failed") || strings.Contains(action, "error") || strings.Contains(action, "denied") { outcome = "failure" }
 		_, auditErr := db.conn.ExecContext(ctx, `
 			INSERT INTO audit_logs (workspace_owner_id, actor_user_id, target_type, target_id, action, outcome, ip, details)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
