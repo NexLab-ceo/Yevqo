@@ -34,6 +34,6 @@ func (s *Server) handleRestoreSiteBackup(w http.ResponseWriter,r *http.Request){
 	if !result.Ok{apiError(w,shared.ErrBadRequest(result.Message));return}
 	_,_ = s.db.conn.ExecContext(r.Context(),`UPDATE sites SET status='stopped',pid=0 WHERE device_id=? AND site_id=?`,deviceID,parts[1])
 	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(deviceID),Action:"site_backup_restored",Details:map[string]interface{}{"backup_id":in.BackupID,"site_id":parts[1]}})
-	_,_ = s.db.conn.ExecContext(r.Context(),`INSERT INTO notifications(user_id,type,title,body) VALUES(?,?,?,?)`,u.ID,"success","Website backup restored",fmt.Sprintf("Backup %s was restored to website %s. The site is stopped; start it after checking the restored files.",fileName,parts[1]))
+	s.notifyWorkspaceEvent(r.Context(),ownerID,u.ID,"success","Website backup restored",fmt.Sprintf("Backup %s was restored to website %s. The site is stopped; start it after checking the restored files.",fileName,parts[1]))
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"site_id":parts[1],"status":"stopped","message":"Backup restored. The website is stopped and can be started after verification."})
 }
