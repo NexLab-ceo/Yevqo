@@ -136,7 +136,7 @@ func (h *CommandHandler) handleInstallDatabaseServer(cmd *shared.Command) *share
 	if err != nil { return errorResult(cmd.Id, err.Error()) }
 	payload, err := shared.Marshal(result)
 	if err != nil { return errorResult(cmd.Id, "could not encode install result") }
-	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL is installed and running",Payload:payload}
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:req.Engine+" is installed and running",Payload:payload}
 }
 
 func (h *CommandHandler) handlePruneBackups(cmd *shared.Command) *shared.Result {
@@ -471,31 +471,31 @@ func deploymentErrorResult(cmdID string, err error) *shared.Result {
 func (h *CommandHandler) handleCreateDatabase(cmd *shared.Command) *shared.Result {
 	var req shared.CreateDatabase
 	if err := shared.Unmarshal(cmd.Payload, &req); err != nil { return errorResult(cmd.Id, "invalid create_database payload") }
-	if err := createPostgresDatabase(req); err != nil { return errorResult(cmd.Id, err.Error()) }
-	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL database and application role created"}
+	var err error; if req.Engine == "mariadb" || req.Engine == "mysql" { err = createMariaDBDatabase(req) } else { err = createPostgresDatabase(req) }; if err != nil { return errorResult(cmd.Id, err.Error()) }
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:req.Engine+" database and application user created"}
 }
 
 func (h *CommandHandler) handleCreateDatabaseBackup(cmd *shared.Command) *shared.Result {
 	var req shared.CreateDatabaseBackup
 	if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid create_database_backup payload")}
-	result,err:=createDatabaseBackup(h.cfg.DataRoot,req)
+	var result *shared.DatabaseBackupResult; var err error; if req.Engine == "mariadb" || req.Engine == "mysql" { result,err=createMariaDBBackup(req) } else { result,err=createDatabaseBackup(h.cfg.DataRoot,req) }
 	if err!=nil{return errorResult(cmd.Id,err.Error())}
 	payload,err:=shared.Marshal(result);if err!=nil{return errorResult(cmd.Id,"could not encode database backup result")}
-	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL database backup completed",Payload:payload}
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:req.Engine+" database backup completed",Payload:payload}
 }
 
 func (h *CommandHandler) handleRestoreDatabaseBackup(cmd *shared.Command) *shared.Result {
 	var req shared.RestoreDatabaseBackup
 	if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid restore_database_backup payload")}
-	if err:=restorePostgresDatabase(req);err!=nil{return errorResult(cmd.Id,err.Error())}
-	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL backup restored into a new database"}
+	var err error; if req.Database.Engine == "mariadb" || req.Database.Engine == "mysql" { err=restoreMariaDBBackup(req) } else { err=restorePostgresDatabase(req) }; if err!=nil{return errorResult(cmd.Id,err.Error())}
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:req.Database.Engine+" backup restored into a new database"}
 }
 
 func (h *CommandHandler) handleTestDatabaseConnection(cmd *shared.Command) *shared.Result {
 	var req shared.TestDatabaseConnection
 	if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid test_database_connection payload")}
-	if err:=testPostgresConnection(req);err!=nil{return errorResult(cmd.Id,err.Error())}
-	return &shared.Result{Id:cmd.Id,Ok:true,Message:"PostgreSQL connection test succeeded"}
+	var err error; if req.Engine == "mariadb" || req.Engine == "mysql" { err=testMariaDBConnection(req) } else { err=testPostgresConnection(req) }; if err!=nil{return errorResult(cmd.Id,err.Error())}
+	return &shared.Result{Id:cmd.Id,Ok:true,Message:req.Engine+" connection test succeeded"}
 }
 
 
@@ -504,10 +504,10 @@ func (h *CommandHandler) handleManageDatabaseRole(cmd *shared.Command, action st
 	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
 		return errorResult(cmd.Id, "invalid PostgreSQL role payload")
 	}
-	if err := managePostgresRole(req, action); err != nil {
+	var err error; if req.Engine == "mariadb" || req.Engine == "mysql" { err=manageMariaDBRole(req,action) } else { err=managePostgresRole(req,action) }; if err != nil {
 		return errorResult(cmd.Id, err.Error())
 	}
-	return &shared.Result{Id: cmd.Id, Ok: true, Message: "PostgreSQL role " + action + " completed"}
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: req.Engine+" user " + action + " completed"}
 }
 
 func (h *CommandHandler) handleListDatabaseRoles(cmd *shared.Command) *shared.Result {
@@ -515,7 +515,7 @@ func (h *CommandHandler) handleListDatabaseRoles(cmd *shared.Command) *shared.Re
 	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
 		return errorResult(cmd.Id, "invalid list_database_roles payload")
 	}
-	roles, err := listPostgresRoles(req)
+	var roles []shared.DatabaseRole; var err error; if req.Engine == "mariadb" || req.Engine == "mysql" { roles,err=listMariaDBRoles(req) } else { roles,err=listPostgresRoles(req) }
 	if err != nil {
 		return errorResult(cmd.Id, err.Error())
 	}
@@ -532,10 +532,10 @@ func (h *CommandHandler) handleDatabaseServerAction(cmd *shared.Command, action 
 	if err := shared.Unmarshal(cmd.Payload, &req); err != nil {
 		return errorResult(cmd.Id, "invalid database server action payload")
 	}
-	if err := managePostgresServer(req, action); err != nil {
+	var err error; if req.Engine == "mariadb" || req.Engine == "mysql" { err=manageMariaDBServer(req,action) } else { err=managePostgresServer(req,action) }; if err != nil {
 		return errorResult(cmd.Id, err.Error())
 	}
-	return &shared.Result{Id: cmd.Id, Ok: true, Message: "PostgreSQL server " + action + " completed"}
+	return &shared.Result{Id: cmd.Id, Ok: true, Message: req.Engine+" server " + action + " completed"}
 }
 
  
