@@ -45,7 +45,7 @@ func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
 		for rows.Next() {
 			var id int64; var name,slug,description string; var created,updated time.Time; var devices,sites int
 			if err:=rows.Scan(&id,&name,&slug,&description,&created,&updated,&devices,&sites);err!=nil { apiError(w,shared.ErrInternal("could not read projects"));return }
-			out=append(out,map[string]interface{}{"id":id,"name":name,"slug":slug,"description":description,"created_at":created,"updated_at":updated,"device_count":devices,"site_count":sites})
+			out=append(out,map[string]interface{}{"id":id,"owner_user_id":ownerID,"name":name,"slug":slug,"description":description,"created_at":created,"updated_at":updated,"device_count":devices,"site_count":sites})
 		}
 		if err:=rows.Err();err!=nil { apiError(w,shared.ErrInternal("could not read projects"));return }
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"projects":out})
@@ -241,7 +241,7 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 				var port int
 				var created time.Time
 				if err := rows.Scan(&id,&deviceID,&name,&engine,&version,&port,&dir,&network,&status,&created); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read database servers")); return }
-				out = append(out, map[string]interface{}{"id":id,"device_id":deviceID,"name":name,"engine":engine,"version":version,"port":port,"data_directory":dir,"network_access":network,"status":status,"created_at":created})
+				out = append(out, map[string]interface{}{"id":id,"device_id":deviceID,"workspace_owner_id":ownerID,"name":name,"engine":engine,"version":version,"port":port,"data_directory":dir,"network_access":network,"status":status,"created_at":created})
 			}
 			if err := rows.Err(); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read database servers")); return }
 			rows.Close()
