@@ -107,3 +107,41 @@ html,body{font-size:14px}
  .page-container .hero-content{padding:20px}
  .page-container .hero-panel{min-height:180px}
 }
+
+
+/* YEVQO Control Panel — canonical product design tokens and shell. */
+:root{--bg-base:#080A09;--bg-sidebar:#0B0F0C;--bg-card:#101611;--bg-elevated:#141C15;--bg-hover:#1B261C;--bg-input:#101611;--border:#2C392D;--border-hover:#78C85A;--text-main:#E9EEE8;--text-muted:#929D91;--text-dim:#69766B;--accent:#A5EC79;--accent-hover:#78C85A;--accent-soft:#18251A;--accent-fg:#080A09;--info:#70A9E8;--danger:#EF6464;--success:#78C85A;--warning:#E9B85C;--radius:10px}
+.app-shell{background:var(--bg-base)!important;color:var(--text-main)}
+.sidebar{width:240px!important;flex-basis:240px!important;background:var(--bg-sidebar)!important;border-color:var(--border)!important}
+.brand-mark{background:var(--accent)!important;color:#080A09!important;box-shadow:none!important;border-radius:8px!important}
+.brand-copy strong{color:var(--text-main)!important;letter-spacing:.13em}
+.workspace-switcher{background:var(--bg-card)!important;border-color:var(--border)!important;border-radius:9px!important}
+.workspace-avatar,.account-avatar{background:var(--bg-elevated)!important;color:var(--accent)!important}
+.nav-label{color:var(--text-dim)!important;letter-spacing:.12em!important}
+.nav-item{color:var(--text-muted)!important;border-radius:8px!important;min-height:35px!important}
+.nav-item:hover{background:var(--bg-hover)!important;color:var(--text-main)!important}
+.nav-item.active{background:#A5EC7918!important;color:var(--accent)!important;border-color:#A5EC7933!important;box-shadow:inset 2px 0 var(--accent)!important}
+.nav-item.active .nav-icon{color:var(--accent)!important}
+.sidebar-bottom{border-color:var(--border)!important}
+.account-row{border-color:var(--border)!important}
+.topbar{background:#080A09E8!important;border-color:var(--border)!important}
+.breadcrumbs span,.connection-state{color:var(--text-muted)!important}
+.breadcrumbs strong{color:var(--text-main)!important}
+.connection-state i{background:var(--accent)!important;box-shadow:0 0 8px #A5EC7966!important}
+.theme-switch,.mode-switch,.icon-action{background:var(--bg-card)!important;border-color:var(--border)!important;color:var(--text-main)!important}
+.profile-action{background:var(--bg-elevated)!important;color:var(--accent)!important;border:1px solid var(--border)!important}
+.main-area,.page-scroll{background:var(--bg-base)!important}
+.page-container .card,.page-container .device-card,.page-container .panel,.page-container .metric-card,.page-container .quick-panel,.page-container .sites-table-wrap,.page-container .hero-panel{background:var(--bg-card)!important;border-color:var(--border)!important;border-radius:10px!important;box-shadow:none!important}
+.page-container .hero-panel{background:var(--bg-card)!important}
+.page-container .hero-panel .hero-orb,.page-container .hero-panel .hero-graphic{display:none!important}
+.page-container .hero-kicker,.page-container .eyebrow{color:var(--accent)!important}
+.page-container .quick-icon,.page-container .device-symbol,.page-container .empty-symbol{background:var(--bg-elevated)!important;color:var(--accent)!important}
+.page-container .btn-primary{background:var(--accent)!important;border-color:var(--accent)!important;color:#080A09!important}
+.page-container .btn-primary:hover{background:var(--accent-hover)!important;border-color:var(--accent-hover)!important}
+.page-container .btn{border-radius:8px!important}
+.page-container .input,.page-container input,.page-container select,.page-container textarea{background:var(--bg-input)!important;color:var(--text-main)!important;border-color:var(--border)!important}
+.page-container .empty{background:var(--bg-card)!important;border-color:var(--border)!important}
+.page-container table th,.page-container table td{border-color:var(--border)!important}
+.page-container table th{color:var(--text-muted)!important}
+@media(max-width:900px){.sidebar{width:220px!important;flex-basis:220px!important}}
+@media(max-width:700px){.sidebar{width:260px!important;flex-basis:260px!important;background:var(--bg-sidebar)!important}.topbar{padding:0 14px!important}}
