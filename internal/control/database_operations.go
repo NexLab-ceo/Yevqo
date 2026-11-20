@@ -194,7 +194,7 @@ func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Reques
 			out := make([]map[string]interface{}, 0)
 			for rows.Next() {
 				var id, deviceID int64
-				var siteID, name, username string
+				var siteID, name, username, engine string
 				var port int
 				if err := rows.Scan(&id, &deviceID, &siteID, &name, &username, &port, &engine); err != nil { apiError(w, shared.ErrInternal("could not read database links")); return }
 				out = append(out, map[string]interface{}{"id": id, "device_id": deviceID, "site_id": siteID, "database": name, "engine": engine, "username": username, "host": "127.0.0.1", "port": port})
