@@ -210,6 +210,7 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		projectID := int64(0)
+		environmentID := int64(0)
 		var owners []int64
 		if raw := r.URL.Query().Get("project_id"); raw != "" {
 			parsed, parseErr := strconv.ParseInt(raw, 10, 64)
@@ -227,11 +228,19 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 				if allowed && CanWorkspaceAction(role, "database.read") { owners = append(owners, ownerID) }
 			}
 		}
+		if raw := r.URL.Query().Get("environment_id"); raw != "" {
+			parsed, parseErr := strconv.ParseInt(raw, 10, 64)
+			if parseErr != nil || parsed < 1 || projectID < 1 { apiError(w, shared.ErrBadRequest("environment_id requires a valid project_id")); return }
+			var exists int
+			if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_environments WHERE id=? AND project_id=?`, parsed, projectID).Scan(&exists); err != nil || exists != 1 { apiError(w, shared.ErrNotFound("environment not found")); return }
+			environmentID = parsed
+		}
 		out := make([]map[string]interface{}, 0)
 		for _, ownerID := range owners {
 			query := `SELECT id,device_id,name,engine,version,port,data_directory,network_access,status,created_at FROM database_servers WHERE user_id=?`
 			args := []interface{}{ownerID}
 			if projectID > 0 { query += ` AND id IN (SELECT pds.database_server_id FROM project_database_servers pds WHERE pds.project_id=?)`; args = append(args, projectID) }
+			if environmentID > 0 { query += ` AND id IN (SELECT eds.database_server_id FROM project_environment_database_servers eds WHERE eds.project_id=? AND eds.environment_id=?)`; args = append(args, projectID, environmentID) }
 			query += " ORDER BY created_at DESC"
 			rows, err := s.db.conn.QueryContext(r.Context(), query, args...)
 			if err != nil { apiError(w, shared.ErrInternal("could not load database servers")); return }
@@ -401,6 +410,7 @@ func (s *Server) handleDatabases(w http.ResponseWriter, r *http.Request) {
 	u := UserFromContext(r.Context())
 	if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
 	projectID := int64(0)
+	environmentID := int64(0)
 	var owners []int64
 	if raw := r.URL.Query().Get("project_id"); raw != "" {
 		parsed, parseErr := strconv.ParseInt(raw, 10, 64)
@@ -418,6 +428,13 @@ func (s *Server) handleDatabases(w http.ResponseWriter, r *http.Request) {
 			if allowed && CanWorkspaceAction(role, "database.read") { owners = append(owners, ownerID) }
 		}
 	}
+	if raw := r.URL.Query().Get("environment_id"); raw != "" {
+		parsed, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil || parsed < 1 || projectID < 1 { apiError(w, shared.ErrBadRequest("environment_id requires a valid project_id")); return }
+		var exists int
+		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_environments WHERE id=? AND project_id=?`, parsed, projectID).Scan(&exists); err != nil || exists != 1 { apiError(w, shared.ErrNotFound("environment not found")); return }
+		environmentID = parsed
+	}
 	out := make([]map[string]interface{}, 0)
 	for _, ownerID := range owners {
 		query := `SELECT d.id,d.server_id,d.name,d.status,d.created_at,ds.name,ds.engine,ds.device_id
@@ -425,6 +442,7 @@ func (s *Server) handleDatabases(w http.ResponseWriter, r *http.Request) {
 			WHERE d.user_id=? AND ds.user_id=?`
 		args := []interface{}{ownerID, ownerID}
 		if projectID > 0 { query += ` AND EXISTS (SELECT 1 FROM project_database_servers pds WHERE pds.project_id=? AND pds.database_server_id=ds.id)`; args = append(args, projectID) }
+		if environmentID > 0 { query += ` AND EXISTS (SELECT 1 FROM project_environment_database_servers eds WHERE eds.project_id=? AND eds.environment_id=? AND eds.database_server_id=ds.id)`; args = append(args, projectID, environmentID) }
 		query += " ORDER BY d.created_at DESC"
 		rows, err := s.db.conn.QueryContext(r.Context(), query, args...)
 		if err != nil { apiError(w, shared.ErrInternal("could not load databases")); return }
