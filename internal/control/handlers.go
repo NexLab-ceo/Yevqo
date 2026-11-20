@@ -451,6 +451,8 @@ func (s *Server) handleDeleteDevice(w http.ResponseWriter, r *http.Request, dev 
 		apiError(w, err)
 		return
 	}
+	actor:=UserFromContext(r.Context())
+	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(actor.ID),WorkspaceOwnerID:shared.PtrInt64(dev.UserID),Action:"device_unpaired",Details:map[string]interface{}{"device_id":dev.ID,"hostname":dev.Hostname},IP:clientIP(r)})
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 }
 

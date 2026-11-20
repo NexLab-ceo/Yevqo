@@ -77,7 +77,8 @@ func (s *Server) handleCloudflareConfig(w http.ResponseWriter,r *http.Request){
 	case http.MethodGet:
 		var accountID,zoneID,zoneName string
 		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT account_id,zone_id,zone_name FROM cloudflare_accounts WHERE user_id=?`,u.ID).Scan(&accountID,&zoneID,&zoneName)
-		if err==sql.ErrNoRows{writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":false});return};if err!=nil{apiError(w,shared.ErrInternal("could not load Cloudflare configuration"));return}
+		if err==sql.ErrNoRows{_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(u.ID),Action:"cloudflare_account_disconnected",Details:map[string]interface{}{},IP:clientIP(r)})
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":false});return};if err!=nil{apiError(w,shared.ErrInternal("could not load Cloudflare configuration"));return}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":true,"account_id":accountID,"zone_id":zoneID,"zone_name":zoneName})
 	case http.MethodPost:
 		var in struct{Token string `json:"token"`;ZoneID string `json:"zone_id"`}
@@ -92,6 +93,7 @@ func (s *Server) handleCloudflareConfig(w http.ResponseWriter,r *http.Request){
 		nonce,ciphertext,err:=encryptCredential(s.credentialKey,[]byte(in.Token));if err!=nil{apiError(w,shared.ErrInternal("could not encrypt Cloudflare token"));return}
 		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO cloudflare_accounts(user_id,account_id,zone_id,zone_name,token_nonce,token_ciphertext,last_verified_at) VALUES(?,?,?,?,?,?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE account_id=VALUES(account_id),zone_id=VALUES(zone_id),zone_name=VALUES(zone_name),token_nonce=VALUES(token_nonce),token_ciphertext=VALUES(token_ciphertext),last_verified_at=VALUES(last_verified_at)`,u.ID,zone.Account.ID,in.ZoneID,zone.Name,nonce,ciphertext)
 		if err!=nil{apiError(w,shared.ErrInternal("could not save Cloudflare configuration"));return}
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(u.ID),Action:"cloudflare_account_connected",Details:map[string]interface{}{"zone_id":zone.ID,"zone_name":zone.Name},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":true,"account_id":zone.Account.ID,"zone_id":zone.ID,"zone_name":zone.Name})
 	case http.MethodDelete:
 		var routes int
