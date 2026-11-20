@@ -162,7 +162,7 @@ func (s *Server) handleDatabaseByID(w http.ResponseWriter,r *http.Request) {
 	raw:=strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/databases/"),"/")
 	id,err:=strconv.ParseInt(raw,10,64)
 	if err!=nil||id<1 { apiError(w,shared.ErrBadRequest("invalid database id"));return }
-	ownerID,_,_,accessErr:=s.authorizeDatabaseInstance(r.Context(),id,ownerID,"database.read");if accessErr!=nil{apiError(w,accessErr);return}
+	ownerID,_,_,accessErr:=s.authorizeDatabaseInstance(r.Context(),id,u.ID,"database.read");if accessErr!=nil{apiError(w,accessErr);return}
 	var databaseID,serverID,deviceID int64
 	var name,status,serverName,engine,sslMode string
 	var username sql.NullString
@@ -192,7 +192,7 @@ func (s *Server) handleDatabaseConnectionTest(w http.ResponseWriter,r *http.Requ
 	u:=UserFromContext(r.Context())
 	raw:=strings.TrimSuffix(strings.TrimPrefix(r.URL.Path,"/api/databases/"),"/test")
 	id,err:=strconv.ParseInt(strings.Trim(raw,"/"),10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid database id"));return}
-	ownerID,_,_,accessErr:=s.authorizeDatabaseInstance(r.Context(),id,ownerID,"database.read");if accessErr!=nil{apiError(w,accessErr);return}
+	ownerID,_,_,accessErr:=s.authorizeDatabaseInstance(r.Context(),id,u.ID,"database.read");if accessErr!=nil{apiError(w,accessErr);return}
 	var name,serverStatus,databaseStatus,sslMode string;var deviceID int64;var port int;var username sql.NullString;var ciphertext,nonce []byte
 	err=s.db.conn.QueryRowContext(r.Context(),`SELECT d.name,ds.device_id,ds.port,ds.ssl_mode,ds.status,d.status,dc.username,dc.ciphertext,dc.nonce
 		FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id
