@@ -603,6 +603,14 @@ func (s *Server) handleSites(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"sites":all})
 }
 
+var domainPattern = regexp.MustCompile("(?i)^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$")
+var releaseCommitPattern = regexp.MustCompile("^(?:[a-f0-9]{40}|[a-f0-9]{64})$")
+
+func nullableString(v string) interface{} {
+	if v == "" { return nil }
+	return v
+}
+
 func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
 	if user == nil {
