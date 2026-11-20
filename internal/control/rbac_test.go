@@ -21,6 +21,8 @@ func TestCanWorkspaceActionRoleMatrix(t *testing.T) {
 		{"Admin","database.read",true},
 		{"Admin","database.manage",true},
 		{"Developer","workspace.manage",false},
+		{"Developer","project.manage",false},
+		{"Admin","project.manage",true},
 		{"Admin","workspace.manage",true},
 		{"Developer","manage_members",false},
 		{"viewer","device.read",false},
