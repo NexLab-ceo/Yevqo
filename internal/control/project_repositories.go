@@ -264,7 +264,7 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
 		token,repoName,_,_,tokenErr:=s.projectRepositoryToken(ctx,ownerID,projectID);if tokenErr!=nil{apiError(w,shared.ErrForbidden("GitHub App installation is unavailable"));return}
 		owner,name,_,parseErr:=parseGitHubRepositoryName(repoName);if parseErr!=nil{apiError(w,shared.ErrBadRequest("invalid connected repository"));return}
-		if _,branchErr:=s.fetchGitHubBranch(ctx,token,owner,name,branch);branchErr!=nil{apiError(w,shared.ErrBadRequest("deployment branch is not available in the repository"));return}
+		branchInfo,branchErr:=s.fetchGitHubBranch(ctx,token,owner,name,branch);if branchErr!=nil{apiError(w,shared.ErrBadRequest("deployment branch is not available in the repository"));return}
 		var previousURL sql.NullString;var previousBranch string;var previousWebhookEnabled bool;var previousWebhookSecret []byte;var existingHookID int64
 		previousErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc,COALESCE(github_webhook_id,0) FROM project_repository_sites WHERE project_id=? AND device_id=? AND site_id=?`,projectID,in.DeviceID,in.SiteID).Scan(&previousURL,&previousBranch,&previousWebhookEnabled,&previousWebhookSecret,&existingHookID)
 		var currentWebhookSecret []byte
@@ -293,6 +293,7 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		}
 		if err!=nil{_=tx.Rollback();if hookID>0&&in.AutoDeploy{_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,hookID)};apiError(w,shared.ErrInternal("could not save repository deployment target"));return}
 		if err=tx.Commit();err!=nil{if hookID>0&&in.AutoDeploy{_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,hookID)};apiError(w,shared.ErrInternal("could not commit repository deployment target"));return}
+		_,_=s.db.conn.ExecContext(r.Context(),`UPDATE project_repositories SET last_commit_sha=? WHERE project_id=?`,branchInfo.Commit.SHA,projectID)
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(userID),WorkspaceOwnerID:shared.PtrInt64(ownerID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"project_repository_site_connected",Details:map[string]interface{}{"project_id":projectID,"site_id":in.SiteID,"repository":fullName,"auto_deploy":in.AutoDeploy},IP:clientIP(r)})
 		if !in.AutoDeploy&&existingHookID>0{_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,existingHookID)}
 		webhookPath:=fmt.Sprintf("/webhooks/github/%d/%s",in.DeviceID,in.SiteID)
