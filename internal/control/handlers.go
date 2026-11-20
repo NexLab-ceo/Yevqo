@@ -425,6 +425,19 @@ func (s *Server) handleGetDevice(w http.ResponseWriter, r *http.Request, dev *sh
 }
 
 func (s *Server) handleDeleteDevice(w http.ResponseWriter, r *http.Request, dev *shared.Device) {
+	// Remove remote Cloudflare routes before unpairing the device so a failed
+	// cleanup cannot leave a public hostname pointing at a deleted Agent.
+	rows, err := s.db.conn.QueryContext(r.Context(), `SELECT site_id FROM site_cloudflare_routes WHERE user_id=? AND device_id=?`, dev.UserID, dev.ID)
+	if err != nil { apiError(w, shared.ErrInternal("could not inspect managed Cloudflare routes")); return }
+	var routeSiteIDs []string
+	for rows.Next() { var siteID string; if err := rows.Scan(&siteID); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read managed Cloudflare routes")); return }; routeSiteIDs = append(routeSiteIDs,siteID) }
+	if err := rows.Err(); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read managed Cloudflare routes")); return }
+	rows.Close()
+	for _, siteID := range routeSiteIDs {
+		if _, _, err := s.removeCloudflareRouteForSite(r.Context(),dev.UserID,dev.ID,siteID); err != nil {
+			apiError(w,shared.ErrBadRequest("remove managed Cloudflare routes before unpairing this device: "+err.Error())); return
+		}
+	}
 	// Unpairing must also terminate the live Agent socket. Otherwise a deleted
 	// phone could keep receiving commands until its connection drops naturally.
 	if conn, online := s.hub.Get(dev.ID); online {

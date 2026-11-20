@@ -34,6 +34,6 @@ Stopping a website process does not stop its tunnel connector; the connector rem
 2. The API token needs **Account: Cloudflare Tunnel — Edit** (API permission `Cloudflare Tunnel Write`), **Zone: DNS — Edit**, and **Zone — Read**.
 3. Save the site's Cloudflare Tunnel token so the Agent starts `cloudflared`.
 4. Enter the Tunnel ID and select **Configure public route**. Yevqo updates the remotely managed ingress configuration to `http://127.0.0.1:<site-port>` and creates the matching proxied CNAME.
-5. Remove the managed route before changing the hostname or disconnecting the Cloudflare API integration.
+5. Remove the managed route before changing the hostname or disconnecting the Cloudflare API integration. Deleting a site or unpairing its device also removes its managed routes first; the operation is blocked if Cloudflare cleanup fails.
 
 Existing unrelated ingress rules are preserved. Only the matching Yevqo-managed hostname and CNAME are removed when you remove a route. Workspace members must ask the workspace owner to configure Cloudflare.
