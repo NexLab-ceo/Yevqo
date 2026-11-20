@@ -151,3 +151,14 @@ html,body{font-size:14px}
 .app-shell[data-compact="true"] .page-container .nav-item{min-height:30px!important;padding-top:5px!important;padding-bottom:5px!important}
 .app-shell[data-compact="true"] .page-container .card,.app-shell[data-compact="true"] .page-container .panel{padding:12px!important}
 @media(prefers-color-scheme:light){.app-shell[data-theme="system"]{--bg-base:#F5F7F4;--bg-sidebar:#EDF1EB;--bg-card:#FFFFFF;--bg-elevated:#EEF3EB;--bg-hover:#E4EDE0;--bg-input:#FFFFFF;--border:#D7E0D3;--text-main:#182018;--text-muted:#586657;--text-dim:#758273;--accent:#4D8D31;--accent-hover:#3C7427;--accent-soft:#E5F1DF;color:var(--text-main)}.app-shell[data-theme="system"] .sidebar,.app-shell[data-theme="system"] .topbar{background:var(--bg-sidebar)!important}.app-shell[data-theme="system"] .main-area,.app-shell[data-theme="system"] .page-scroll{background:var(--bg-base)!important}.app-shell[data-theme="system"] .nav-item,.app-shell[data-theme="system"] .breadcrumbs strong{color:var(--text-main)!important}}
+
+/* Final surface normalization for existing feature pages. */
+.page-container .device-list,.page-container .log-table,.page-container .history,.page-container .project-list,.page-container .notification-list,.page-container .audit-list,.page-container .activity-list{background:var(--bg-card)!important;border-color:var(--border)!important}
+.page-container .device-row,.page-container .log-row,.page-container .entry,.page-container .project-row,.page-container .notification,.page-container .audit-row,.page-container .activity-row{border-color:var(--border)!important;color:var(--text-main)}
+.page-container .device-row:hover,.page-container .log-row:hover,.page-container .project-row:hover{background:var(--bg-hover)!important}
+.page-container .project-icon,.page-container .device-icon,.page-container .log-mark,.page-container .entry-icon,.page-container .audit-mark{background:var(--bg-elevated)!important;color:var(--accent)!important}
+.page-container .project-copy small,.page-container .device-os small,.page-container .source,.page-container .log-row time,.page-container .audit-row small,.page-container .activity-row small{color:var(--text-muted)!important}
+.page-container .project-main,.page-container .device-row,.page-container .log-row{color:var(--text-main)!important}
+.page-container .filters button.active,.page-container .view-switch button.active{background:var(--bg-elevated)!important;color:var(--accent)!important}
+.page-container .settings-nav,.page-container .settings-panel,.page-container .connect-card,.page-container .github-card,.page-container .permission-card,.page-container .setup-card{background:var(--bg-card)!important;border-color:var(--border)!important}
+.page-container .settings-nav button.active,.page-container .choice-grid button.chosen{background:var(--bg-elevated)!important;border-color:var(--accent)!important;color:var(--text-main)!important}
