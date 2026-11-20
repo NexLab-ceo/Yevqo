@@ -228,18 +228,18 @@ func (s *Server) handleProjectRepositoryChecks(w http.ResponseWriter,r *http.Req
 func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Request,userID,projectID,ownerID int64){
 	switch r.Method{
 	case http.MethodGet:
-		rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT prs.device_id,prs.site_id,prs.auto_deploy_enabled,COALESCE(d.hostname,''),COALESCE(st.github_webhook_enabled,FALSE),COALESCE(st.git_branch,'') FROM project_repository_sites prs JOIN devices d ON d.id=prs.device_id JOIN sites st ON st.device_id=prs.device_id AND st.site_id=prs.site_id WHERE prs.project_id=? ORDER BY d.hostname,prs.site_id`,projectID)
+		rows,err:=s.db.conn.QueryContext(r.Context(),`SELECT prs.device_id,prs.site_id,prs.auto_deploy_enabled,COALESCE(d.hostname,''),COALESCE(st.github_webhook_enabled,FALSE),prs.deploy_branch FROM project_repository_sites prs JOIN devices d ON d.id=prs.device_id JOIN sites st ON st.device_id=prs.device_id AND st.site_id=prs.site_id WHERE prs.project_id=? ORDER BY d.hostname,prs.site_id`,projectID)
 		if err!=nil{apiError(w,shared.ErrInternal("could not load repository deployment targets"));return};defer rows.Close()
 		out:=make([]map[string]interface{},0);for rows.Next(){var did int64;var sid,host,branch string;var auto,webhook bool;if err:=rows.Scan(&did,&sid,&auto,&host,&webhook,&branch);err!=nil{apiError(w,shared.ErrInternal("could not read repository deployment targets"));return};out=append(out,map[string]interface{}{"device_id":did,"site_id":sid,"device_name":host,"branch":branch,"auto_deploy_enabled":auto,"webhook_enabled":webhook})}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"targets":out})
 	case http.MethodPost:
-		var in struct{DeviceID int64 `json:"device_id"`;SiteID string `json:"site_id"`;AutoDeploy bool `json:"auto_deploy_enabled"`;AllowProjectCode bool `json:"allow_project_code"`}
+		var in struct{DeviceID int64 `json:"device_id"`;SiteID string `json:"site_id"`;Branch string `json:"branch"`;AutoDeploy bool `json:"auto_deploy_enabled"`;AllowProjectCode bool `json:"allow_project_code"`}
 		if err:=decodeJSON(r,&in);err!=nil||in.DeviceID<1||!validLogSiteID(in.SiteID){apiError(w,shared.ErrBadRequest("valid device_id and site_id are required"));return}
 		var fullName,cloneURL,branch string
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT full_name,clone_url,deploy_branch FROM project_repositories WHERE project_id=?`,projectID).Scan(&fullName,&cloneURL,&branch);err!=nil{apiError(w,shared.ErrBadRequest("connect a GitHub repository first"));return}
 		var linked int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM project_sites ps JOIN devices d ON d.id=ps.device_id JOIN sites st ON st.device_id=ps.device_id AND st.site_id=ps.site_id WHERE ps.project_id=? AND ps.device_id=? AND ps.site_id=? AND d.user_id=?`,projectID,in.DeviceID,in.SiteID,ownerID).Scan(&linked);err!=nil||linked!=1{apiError(w,shared.ErrBadRequest("site must already be attached to this project"));return}
-		if in.AutoDeploy&&!in.AllowProjectCode{apiError(w,shared.ErrForbidden("explicit consent to automatically execute repository code is required"));return}
+		if strings.TrimSpace(in.Branch)!="" { branch=strings.TrimSpace(in.Branch) }; if !gitBranchPattern.MatchString(branch)||strings.Contains(branch,"..")||strings.Contains(branch,"@{")||strings.HasSuffix(branch,"/")||strings.HasSuffix(branch,"."){apiError(w,shared.ErrBadRequest("invalid deployment branch"));return}; if in.AutoDeploy&&!in.AllowProjectCode{apiError(w,shared.ErrForbidden("explicit consent to automatically execute repository code is required"));return}
 		var secret string;var encrypted interface{}
 		if in.AutoDeploy{
 			raw:=make([]byte,32);if _,err:=rand.Read(raw);err!=nil{apiError(w,shared.ErrInternal("could not create webhook secret"));return}
@@ -247,7 +247,7 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		}
 		tx,err:=s.db.conn.BeginTx(r.Context(),nil);if err!=nil{apiError(w,shared.ErrInternal("could not start repository target transaction"));return}
 		if _,err=tx.ExecContext(r.Context(),`UPDATE sites SET git_url=?,git_branch=?,github_webhook_secret_enc=?,github_webhook_enabled=?,github_webhook_updated_at=NOW() WHERE device_id=? AND site_id=?`,cloneURL,branch,encrypted,in.AutoDeploy,in.DeviceID,in.SiteID);err==nil{
-			_,err=tx.ExecContext(r.Context(),`INSERT INTO project_repository_sites(project_id,device_id,site_id,auto_deploy_enabled) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE auto_deploy_enabled=VALUES(auto_deploy_enabled)`,projectID,in.DeviceID,in.SiteID,in.AutoDeploy)
+			_,err=tx.ExecContext(r.Context(),`INSERT INTO project_repository_sites(project_id,device_id,site_id,auto_deploy_enabled,deploy_branch) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE auto_deploy_enabled=VALUES(auto_deploy_enabled),deploy_branch=VALUES(deploy_branch)`,projectID,in.DeviceID,in.SiteID,in.AutoDeploy,branch)
 		}
 		if err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not save repository deployment target"));return}
 		if err=tx.Commit();err!=nil{apiError(w,shared.ErrInternal("could not commit repository deployment target"));return}
