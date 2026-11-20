@@ -20,8 +20,10 @@
  async function redeployRun(run){const r=await redeployProjectDeployment(project.id,run.id);if(r.ok){notify(ru?'Повторный Deploy поставлен в очередь':'Redeploy queued','success');await loadDeploymentRuns()}else notify(r.error||'Could not redeploy','error')}
  async function openRunDetails(run){const r=await getProjectDeploymentRun(project.id,run.id);if(r.ok)runDetails=r.data.deployment;else notify(r.error||'Could not load deployment logs','error')}
  async function copyWebhookValue(value){try{await navigator.clipboard.writeText(value);notify(ru?'Скопировано':'Copied','success')}catch{notify(ru?'Не удалось скопировать':'Copy failed','error')}}
-\n async function disconnectRepository(){if(!confirm(ru?'Отключить репозиторий от проекта?':'Disconnect repository from this project?'))return;sourceBusy=true;const r=await disconnectProjectRepository(project.id);sourceBusy=false;if(r.ok){projectRepository=null;selectedRepository='';selectedBranch='';notify(ru?'Репозиторий отключён':'Repository disconnected','success')}else sourceError=r.error||'Could not disconnect repository'}
-\n onMount(load);
+
+ async function disconnectRepository(){if(!confirm(ru?'Отключить репозиторий от проекта?':'Disconnect repository from this project?'))return;sourceBusy=true;const r=await disconnectProjectRepository(project.id);sourceBusy=false;if(r.ok){projectRepository=null;selectedRepository='';selectedBranch='';notify(ru?'Репозиторий отключён':'Repository disconnected','success')}else sourceError=r.error||'Could not disconnect repository'}
+
+ onMount(load);
  $: available=devices.filter(d=>d.workspace_owner_id===project?.owner_user_id&&!assigned.some(a=>a.id===d.id));
  $: availableDatabaseServers=databaseServers.filter(db=>db.workspace_owner_id===project?.owner_user_id&&!assignedDatabases.some(a=>a.id===db.id));
  $: availableSites=sitesAvailable.filter(item=>item.workspace_owner_id===project?.owner_user_id&&!sites.some(s=>s.device_id===item.device_id&&s.site_id===item.site.site_id));
