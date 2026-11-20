@@ -36,6 +36,10 @@ func mariaDumpCLI() (string, error) {
 	return "", fmt.Errorf("mariadb-dump is not installed")
 }
 func mariaSocket(dataDir string) string { return filepath.Join(dataDir, "yevqo-mariadb.sock") }
+func mariaDataDirectory(prefix string, serverID int64, configured string) (string, error) {
+	if configured == "" { return "", fmt.Errorf("configured MariaDB data directory is required") }
+	return resolveTermuxPath(prefix, configured)
+}
 func mariaAdminArgs(dataDir string) []string {
 	current, _ := user.Current()
 	name := "root"; if current != nil && current.Username != "" { name = current.Username }
@@ -149,7 +153,7 @@ func manageMariaDBServer(req shared.DatabaseServerAction, action string) error {
 func createMariaDBDatabase(req shared.CreateDatabase) error {
 	if req.DatabaseID < 1 || req.ServerID < 1 || req.Port < 1024 || req.Port > 65535 || !mariaIdentifier.MatchString(req.Database) || !mariaIdentifier.MatchString(req.Username) || len(req.Password) < 12 || len(req.Password) > 256 || strings.IndexByte(req.Password, 0) >= 0 { return fmt.Errorf("invalid MariaDB database request") }
 	prefix := os.Getenv("PREFIX"); if prefix == "" { return fmt.Errorf("Termux PREFIX is not set") }
-	dataDir := filepath.Join(prefix, "var", "lib", "yevqo-mariadb", fmt.Sprint(req.ServerID))
+	dataDir, err := mariaDataDirectory(prefix, req.ServerID, req.DataDirectory); if err != nil { return err }
 	// The server's configured data directory is supplied by Control Plane through the protocol in a later field; use the standard private path only for legacy requests.
 	sqlText := "CREATE DATABASE " + mariaQuoteIdentifier(req.Database) + " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\nCREATE USER " + mariaQuoteIdentifier(req.Username) + "@'127.0.0.1' IDENTIFIED BY " + mariaSQLLiteral(req.Password) + ";\nGRANT ALL PRIVILEGES ON " + mariaQuoteIdentifier(req.Database) + ".* TO " + mariaQuoteIdentifier(req.Username) + "@'127.0.0.1';"
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second); defer cancel()
@@ -171,7 +175,7 @@ func manageMariaDBRole(req shared.ManageDatabaseRole, action string) error {
 	if req.ServerID < 1 || req.Port < 1024 || req.Port > 65535 || !mariaIdentifier.MatchString(req.Name) || req.Name == "root" { return fmt.Errorf("invalid MariaDB user request") }
 	if action != "create" && action != "drop" && action != "password" { return fmt.Errorf("unsupported MariaDB user action") }
 	if (action == "create" || action == "password") && (len(req.Password) < 12 || len(req.Password) > 256) { return fmt.Errorf("user password must be 12–256 characters") }
-	prefix := os.Getenv("PREFIX"); dataDir := filepath.Join(prefix, "var", "lib", "yevqo-mariadb", fmt.Sprint(req.ServerID))
+	prefix := os.Getenv("PREFIX"); dataDir, err := mariaDataDirectory(prefix, req.ServerID, req.DataDirectory); if err != nil { return nil, err }
 	userHost := mariaQuoteIdentifier(req.Name) + "@'127.0.0.1'"
 	query := ""
 	switch action { case "create": query = "CREATE USER " + userHost + " IDENTIFIED BY " + mariaSQLLiteral(req.Password)
@@ -183,7 +187,7 @@ func manageMariaDBRole(req shared.ManageDatabaseRole, action string) error {
 
 func listMariaDBRoles(req shared.ListDatabaseRoles) ([]shared.DatabaseRole, error) {
 	if req.ServerID < 1 || req.Port < 1024 || req.Port > 65535 { return nil, fmt.Errorf("invalid MariaDB user inventory request") }
-	prefix := os.Getenv("PREFIX"); dataDir := filepath.Join(prefix, "var", "lib", "yevqo-mariadb", fmt.Sprint(req.ServerID))
+	prefix := os.Getenv("PREFIX"); dataDir, err := mariaDataDirectory(prefix, req.ServerID, req.DataDirectory); if err != nil { return nil, err }
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second); defer cancel()
 	cli, err := mariaCLI(); if err != nil { return nil, err }
 	query := "SELECT JSON_ARRAYAGG(JSON_OBJECT('name',User,'can_login',true,'is_superuser',false,'is_replication',false,'bypass_rls',false,'inherit',true,'connection_limit',0)) FROM mysql.user WHERE User NOT IN ('root','mariadb.sys','mysql');"
@@ -201,7 +205,7 @@ func manageMariaDBPrivilege(req shared.ManageDatabasePrivilege) error {
 	allowed := map[string]bool{"SELECT":true,"INSERT":true,"UPDATE":true,"DELETE":true,"CREATE":true,"DROP":true,"INDEX":true,"ALTER":true,"REFERENCES":true,"EXECUTE":true,"TRIGGER":true}
 	if !allowed[req.Privilege] { return fmt.Errorf("unsupported MariaDB privilege") }
 	if req.Scope != "" && req.Scope != "database" { return fmt.Errorf("MariaDB privilege scope must be database") }
-	prefix := os.Getenv("PREFIX"); dataDir := filepath.Join(prefix, "var", "lib", "yevqo-mariadb", fmt.Sprint(req.ServerID))
+	prefix := os.Getenv("PREFIX"); dataDir, err := mariaDataDirectory(prefix, req.ServerID, req.DataDirectory); if err != nil { return err }
 	statement := "GRANT " + req.Privilege + " ON " + mariaQuoteIdentifier(req.Database) + ".* TO " + mariaQuoteIdentifier(req.Role) + "@'127.0.0.1'"
 	if req.Action == "revoke" { statement = "REVOKE " + req.Privilege + " ON " + mariaQuoteIdentifier(req.Database) + ".* FROM " + mariaQuoteIdentifier(req.Role) + "@'127.0.0.1'" }
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second); defer cancel()
@@ -210,7 +214,7 @@ func manageMariaDBPrivilege(req shared.ManageDatabasePrivilege) error {
 
 func collectMariaDBStats(req shared.GetDatabaseStats) (shared.DatabaseStats, error) {
 	if req.ServerID < 1 || req.Port < 1024 || req.Port > 65535 || !mariaIdentifier.MatchString(req.Database) { return shared.DatabaseStats{}, fmt.Errorf("invalid MariaDB stats request") }
-	prefix := os.Getenv("PREFIX"); dataDir := filepath.Join(prefix, "var", "lib", "yevqo-mariadb", fmt.Sprint(req.ServerID))
+	prefix := os.Getenv("PREFIX"); dataDir, err := mariaDataDirectory(prefix, req.ServerID, req.DataDirectory); if err != nil { return shared.DatabaseStats{}, err }
 	cli, err := mariaCLI(); if err != nil { return shared.DatabaseStats{}, err }
 	query := "SELECT JSON_OBJECT('size_bytes',COALESCE(SUM(data_length+index_length),0),'active_connections',(SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB=DATABASE()),'max_connections',@@max_connections,'transactions_committed',0,'transactions_rolled_back',0,'deadlocks',0) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE();"
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second); defer cancel()
@@ -224,7 +228,7 @@ func collectMariaDBStats(req shared.GetDatabaseStats) (shared.DatabaseStats, err
 func createMariaDBBackup(req shared.CreateDatabaseBackup) (*shared.DatabaseBackupResult, error) {
 	if req.DatabaseID < 1 || req.ServerID < 1 || req.Port < 1024 || req.Port > 65535 || !mariaIdentifier.MatchString(req.Database) { return nil, fmt.Errorf("invalid MariaDB backup request") }
 	prefix := os.Getenv("PREFIX"); if prefix == "" { return nil, fmt.Errorf("Termux PREFIX is not set") }
-	dataDir := filepath.Join(prefix, "var", "lib", "yevqo-mariadb", fmt.Sprint(req.ServerID))
+	dataDir, err := mariaDataDirectory(prefix, req.ServerID, req.DataDirectory); if err != nil { return nil, err }
 	dump, err := mariaDumpCLI(); if err != nil { return nil, err }
 	backupDir := filepath.Join(prefix, "var", "lib", "veltrix-agent", "backups", "databases", fmt.Sprint(req.ServerID))
 	if err := os.MkdirAll(backupDir, 0o700); err != nil { return nil, err }
@@ -256,7 +260,7 @@ func restoreMariaDBBackup(req shared.RestoreDatabaseBackup) error {
 	info, err := os.Lstat(full); if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() { return fmt.Errorf("MariaDB backup file not found or unsafe") }
 	root, err := filepath.EvalSymlinks(prefix); if err != nil { return err }; realDir, err := filepath.EvalSymlinks(backupDir); if err != nil { return err }
 	rel, err := filepath.Rel(root, realDir); if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) { return fmt.Errorf("backup directory escapes private storage") }
-	dataDir := filepath.Join(prefix, "var", "lib", "yevqo-mariadb", fmt.Sprint(req.Database.ServerID))
+	dataDir, err := mariaDataDirectory(prefix, req.Database.ServerID, req.Database.DataDirectory); if err != nil { return err }
 	createSQL := "CREATE DATABASE " + mariaQuoteIdentifier(req.Database.Database) + " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER " + mariaQuoteIdentifier(req.Database.Username) + "@'127.0.0.1' IDENTIFIED BY " + mariaSQLLiteral(req.Database.Password) + "; GRANT ALL PRIVILEGES ON " + mariaQuoteIdentifier(req.Database.Database) + ".* TO " + mariaQuoteIdentifier(req.Database.Username) + "@'127.0.0.1';"
 	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Minute); defer cancel()
 	if err := runMariaSQL(ctx, dataDir, "", createSQL); err != nil { return err }
