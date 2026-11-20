@@ -90,20 +90,20 @@ func (s *Server) deleteGitHubPushWebhook(ctx context.Context, token, owner, repo
 func (s *Server) deleteProjectRepositorySiteHook(ctx context.Context, ownerID, projectID, deviceID int64, siteID string) {
 	var hookID int64
 	var fullName string
-	var integrationID int64
-	err:=s.db.conn.QueryRowContext(ctx,`SELECT COALESCE(prs.github_webhook_id,0),pr.full_name,pr.integration_id FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id WHERE prs.project_id=? AND prs.device_id=? AND prs.site_id=?`,projectID,deviceID,siteID).Scan(&hookID,&fullName,&integrationID)
+	var integrationID,integrationUserID int64
+	err:=s.db.conn.QueryRowContext(ctx,`SELECT COALESCE(prs.github_webhook_id,0),pr.full_name,pr.integration_id,i.user_id FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id JOIN integrations i ON i.id=pr.integration_id WHERE prs.project_id=? AND prs.device_id=? AND prs.site_id=?`,projectID,deviceID,siteID).Scan(&hookID,&fullName,&integrationID,&integrationUserID)
 	if err!=nil||hookID<1{return}
 	owner,name,_,err:=parseGitHubRepositoryName(fullName);if err!=nil{return}
-	token,err:=s.githubAppTokenForIntegration(ctx,ownerID,integrationID,owner);if err!=nil{return}
+	token,err:=s.githubAppTokenForIntegration(ctx,integrationUserID,integrationID,owner);if err!=nil{return}
 	_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,hookID)
 }
 
 func (s *Server) deleteProjectRepositoryHooks(ctx context.Context, ownerID, projectID int64) {
-	rows,err:=s.db.conn.QueryContext(ctx,`SELECT prs.device_id,prs.site_id,COALESCE(prs.github_webhook_id,0),pr.full_name,pr.integration_id FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id WHERE prs.project_id=?`,projectID)
+	rows,err:=s.db.conn.QueryContext(ctx,`SELECT prs.device_id,prs.site_id,COALESCE(prs.github_webhook_id,0),pr.full_name,pr.integration_id,i.user_id FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id JOIN integrations i ON i.id=pr.integration_id WHERE prs.project_id=?`,projectID)
 	if err!=nil{return}
-	type item struct{deviceID int64;siteID string;hookID int64;fullName string;integrationID int64}
+	type item struct{deviceID int64;siteID string;hookID int64;fullName string;integrationID int64;integrationUserID int64}
 	items:=make([]item,0)
-	for rows.Next(){var v item;if rows.Scan(&v.deviceID,&v.siteID,&v.hookID,&v.fullName,&v.integrationID)==nil&&v.hookID>0{items=append(items,v)}}
+	for rows.Next(){var v item;if rows.Scan(&v.deviceID,&v.siteID,&v.hookID,&v.fullName,&v.integrationID,&v.integrationUserID)==nil&&v.hookID>0{items=append(items,v)}}
 	rows.Close()
-	for _,v:=range items{owner,name,_,parseErr:=parseGitHubRepositoryName(v.fullName);if parseErr!=nil{continue};token,tokenErr:=s.githubAppTokenForIntegration(ctx,ownerID,v.integrationID,owner);if tokenErr!=nil{continue};_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,v.hookID)}
+	for _,v:=range items{owner,name,_,parseErr:=parseGitHubRepositoryName(v.fullName);if parseErr!=nil{continue};token,tokenErr:=s.githubAppTokenForIntegration(ctx,v.integrationUserID,v.integrationID,owner);if tokenErr!=nil{continue};_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,v.hookID)}
 }
