@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -254,7 +253,7 @@ func createMariaDBBackup(req shared.CreateDatabaseBackup) (*shared.DatabaseBacku
 }
 
 func restoreMariaDBBackup(req shared.RestoreDatabaseBackup) error {
-	if req.BackupServerID < 1 || req.Database.ServerID < 1 || req.Database.Port < 1024 || req.Database.Port > 65535 || !mariaIdentifier.MatchString(req.Database.Database) || !mariaIdentifier.MatchString(req.Database.Username) || !mariaBackupFilePattern.MatchString(req.BackupFileName) || filepath.Base(req.BackupFileName) != req.BackupFileName { return fmt.Errorf("invalid MariaDB restore request") }
+	if req.BackupServerID < 1 || req.Database.ServerID < 1 || req.Database.Port < 1024 || req.Database.Port > 65535 || !mariaIdentifier.MatchString(req.Database.Database) || !mariaIdentifier.MatchString(req.Database.Username) || len(req.Database.Password) < 12 || len(req.Database.Password) > 256 || !mariaBackupFilePattern.MatchString(req.BackupFileName) || filepath.Base(req.BackupFileName) != req.BackupFileName { return fmt.Errorf("invalid MariaDB restore request") }
 	prefix := os.Getenv("PREFIX"); if prefix == "" { return fmt.Errorf("Termux PREFIX is not set") }
 	backupDir := filepath.Join(prefix, "var", "lib", "veltrix-agent", "backups", "databases", fmt.Sprint(req.BackupServerID))
 	full := filepath.Join(backupDir, req.BackupFileName)
@@ -267,9 +266,11 @@ func restoreMariaDBBackup(req shared.RestoreDatabaseBackup) error {
 	if err := runMariaSQL(ctx, dataDir, "", createSQL); err != nil { return err }
 	cli, err := mariaCLI(); if err != nil { _ = runMariaSQL(context.Background(), dataDir, "", "DROP DATABASE "+mariaQuoteIdentifier(req.Database.Database)+"; DROP USER "+mariaQuoteIdentifier(req.Database.Username)+"@'127.0.0.1';"); return err }
 	f, err := os.Open(full); if err != nil { return err }
-	cmd := exec.CommandContext(ctx, cli, append(mariaAdminArgs(dataDir), req.Database.Database)...); cmd.Stdin = f
+	reader, writer := io.Pipe()
+	go func() { rewriteErr := rewriteMariaDBDump(f, writer, req.Database.Database); _ = writer.CloseWithError(rewriteErr); _ = f.Close() }()
+	cmd := exec.CommandContext(ctx, cli, append(mariaAdminArgs(dataDir), req.Database.Database)...); cmd.Stdin = reader
 	var stderr bytes.Buffer; cmd.Stderr = &stderr
-	err = cmd.Run(); _ = f.Close()
+	err = cmd.Run(); _ = reader.Close()
 	if err != nil {
 		cleanupCtx, cancelCleanup := context.WithTimeout(context.Background(), 30*time.Second)
 		_ = runMariaSQL(cleanupCtx, dataDir, "", "DROP DATABASE IF EXISTS "+mariaQuoteIdentifier(req.Database.Database)+"; DROP USER IF EXISTS "+mariaQuoteIdentifier(req.Database.Username)+"@'127.0.0.1';")
@@ -280,3 +281,18 @@ func restoreMariaDBBackup(req shared.RestoreDatabaseBackup) error {
 }
 
 var mariaBackupFilePattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}-[0-9]+-[0-9]{8}T[0-9]{6}\.[0-9]{6}Z\.sql$`)
+
+func rewriteMariaDBDump(source io.Reader, destination io.Writer, targetDatabase string) error {
+	if !mariaIdentifier.MatchString(targetDatabase) { return fmt.Errorf("invalid target database name") }
+	reader := bufio.NewReader(source)
+	for {
+		line, err := reader.ReadString('\n')
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(strings.ToUpper(trimmed), "USE ") {
+			line = "USE " + mariaQuoteIdentifier(targetDatabase) + ";\n"
+		}
+		if _, writeErr := io.WriteString(destination, line); writeErr != nil { return writeErr }
+		if err == io.EOF { return nil }
+		if err != nil { return err }
+	}
+}
