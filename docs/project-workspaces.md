@@ -19,6 +19,16 @@ Attaching a site or database server also attaches its host device to the project
 
 Deleting a project removes the grouping and its associations only. It does not delete the underlying resources or their data.
 
+## Project GitHub delivery and deployments
+
+A project may connect one GitHub App repository and attach it to one or more project sites/devices. Each target has its own verified deployment branch. Connecting a target snapshots the site's previous Git URL, branch and webhook settings; detaching the target, disconnecting the repository, or deleting the project restores those original settings.
+
+Automatic Deploy uses the existing per-site HMAC-SHA256 GitHub push endpoint, including delivery replay protection, branch filtering and exact commit checkout. Configure `YEVQO_PUBLIC_URL` to the public HTTPS Control Plane origin (Cloudflare Tunnel is supported). With GitHub App Administration: Write permission, Yevqo creates, rotates and removes repository push webhooks. Without that permission, the UI returns a one-time webhook secret and URL for manual setup. The App also needs Pull requests: Read and Checks: Read for the PR and CI panels.
+
+Project deployment runs persist source, branch, commit, Agent job ID, status, progress, timestamps and bounded output. The project Deployments tab supports manual Deploy, progress/log viewing, cancellation and redeploy. Agent deployment events are persisted; cancellation is treated as terminal and cannot be overwritten by a later completion race.
+
+Migration `025_project_deployment_lifecycle.sql` adds site targets, webhook registration IDs and durable deployment runs. It is additive and must be applied through the normal migration/upgrade process; it is not applied to any existing or production database as part of this change.
+
 ## Project source repository
 
 A project can store one verified GitHub App repository binding. The authenticated project owner/admin selects an installed GitHub App and a repository; the Control Plane verifies that the installation belongs to the repository owner, reads repository metadata, and checks the selected deployment branch before persisting the binding. The project Source Repository tab can display and disconnect the binding.
