@@ -72,7 +72,7 @@
   {#each members as member (member.id)}
    <div class="member-row">
     <div class="member-main"><strong>{member.username}</strong><small>{member.email} · {member.status}</small></div>
-    {#if currentWorkspace?.can_manage_members}<select class="input role-select" value={member.role} on:change={(event)=>changeRole(member,event.currentTarget.value)}><option value="admin">Admin</option><option value="developer">Developer</option></select>{:else}<span class:admin={member.role==='admin'} class:developer={member.role==='developer'} class="role">{member.role}</span>{/if}
+    {#if currentWorkspace?.can_manage_members && member.status==='active'}<select class="input role-select" value={member.role} on:change={(event)=>changeRole(member,event.currentTarget.value)}><option value="admin">Admin</option><option value="developer">Developer</option></select>{:else}<span class:admin={member.role==='admin'} class:developer={member.role==='developer'} class="role">{member.role}</span>{/if}
     {#if currentWorkspace?.can_manage_members}<Button variant="ghost" size="sm" on:click={()=>remove(member)}>Удалить</Button>{/if}
    </div>
   {/each}
