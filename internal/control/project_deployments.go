@@ -103,7 +103,7 @@ func (s *Server) handleProjectDeployments(w http.ResponseWriter,r *http.Request)
 		switch parts[3] {
 		case "cancel":
 			if deploymentTerminal(status){apiError(w,shared.ErrBadRequest("deployment is already finished"));return}
-			if jobID==""{apiError(w,shared.ErrConflict("Agent has not reported a cancellable deployment job yet"));return}
+			if jobID==""{apiError(w,shared.ErrBadRequest("Agent has not reported a cancellable deployment job yet"));return}
 			conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
 			ctx,cancel:=context.WithTimeout(r.Context(),10*time.Second);defer cancel()
 			result,err:=conn.SendCommand(ctx,"cancel_deployment_job",&shared.DeploymentJobAction{SiteId:siteID,JobId:jobID})
