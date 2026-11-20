@@ -590,6 +590,24 @@ func parsePayload(action string, raw json.RawMessage) (interface{}, error) {
 			return nil, err
 		}
 		return &p, nil
+	case "get_site_restart_policy":
+		var p shared.GetSiteRestartPolicy
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, err
+		}
+		return &p, nil
+	case "set_site_restart_policy":
+		var p shared.SetSiteRestartPolicy
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, err
+		}
+		return &p, nil
+	case "cancel_deployment_job":
+		var p shared.DeploymentJobAction
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, err
+		}
+		return &p, nil
 	case "create_tunnel":
 		var p shared.CreateTunnel
 		if err := json.Unmarshal(raw, &p); err != nil {
