@@ -604,7 +604,7 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 			res, err := s.db.conn.ExecContext(r.Context(), `INSERT INTO backups(user_id,device_id,database_server_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,?,0,'queued')`, ownerID, deviceID, serverID, "database", fmt.Sprint(in.DatabaseID), fmt.Sprintf("pending-%d.dump", in.DatabaseID))
 			if err != nil { apiError(w, shared.ErrInternal("could not queue database backup")); return }
 			backupID, _ := res.LastInsertId()
-			go s.runDatabaseBackup(backupID, ownerID, deviceID, conn, &shared.CreateDatabaseBackup{DatabaseID: in.DatabaseID, ServerID: serverID, Database: database, Port: uint32(port)})
+			go s.runDatabaseBackup(backupID, ownerID, u.ID, deviceID, conn, &shared.CreateDatabaseBackup{DatabaseID: in.DatabaseID, ServerID: serverID, Database: database, Port: uint32(port)})
 			writeJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "backup": map[string]interface{}{"id": backupID, "device_id": deviceID, "resource_type": "database", "resource_id": fmt.Sprint(in.DatabaseID), "file_name": fmt.Sprintf("pending-%d.dump", in.DatabaseID), "size_bytes": 0, "status": "queued"}})
 			return
 		}
@@ -622,7 +622,7 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 		res, err := s.db.conn.ExecContext(r.Context(), "INSERT INTO backups(user_id,device_id,resource_type,resource_id,file_name,size_bytes,status) VALUES(?,?,?,?,?,0,'queued')", ownerID, in.DeviceID, "site", resourceID, pendingName)
 		if err != nil { apiError(w, shared.ErrInternal("could not queue website backup")); return }
 		id, _ := res.LastInsertId()
-		go s.runSiteBackup(id, ownerID, in.DeviceID, conn, &shared.CreateSiteBackup{SiteId: in.SiteID})
+		go s.runSiteBackup(id, ownerID, u.ID, in.DeviceID, conn, &shared.CreateSiteBackup{SiteId: in.SiteID})
 		writeJSON(w, http.StatusAccepted, map[string]interface{}{"ok": true, "backup": map[string]interface{}{"id": id, "device_id": in.DeviceID, "resource_type": "site", "resource_id": resourceID, "file_name": pendingName, "size_bytes": 0, "status": "queued"}})
 		return
 	}
@@ -649,46 +649,46 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "backups": out})
 }
 
-func (s *Server) runSiteBackup(backupID,userID,deviceID int64,conn *AgentConn,req *shared.CreateSiteBackup) {
-	_,_=s.db.conn.ExecContext(context.Background(),"UPDATE backups SET status='running' WHERE id=? AND user_id=?",backupID,userID)
+func (s *Server) runSiteBackup(backupID,ownerID,actorID,deviceID int64,conn *AgentConn,req *shared.CreateSiteBackup) {
+	_,_=s.db.conn.ExecContext(context.Background(),"UPDATE backups SET status='running' WHERE id=? AND user_id=?",backupID,ownerID)
 	ctx,cancel:=context.WithTimeout(context.Background(),2*time.Minute);defer cancel()
 	result,err:=conn.SendCommand(ctx,"create_site_backup",req)
 	if err!=nil||!result.Ok {
-		_,_=s.db.conn.ExecContext(context.Background(),"UPDATE backups SET status='failed' WHERE id=? AND user_id=?",backupID,userID)
+		_,_=s.db.conn.ExecContext(context.Background(),"UPDATE backups SET status='failed' WHERE id=? AND user_id=?",backupID,ownerID)
 		message:="Agent could not create the website backup";if err!=nil{message=err.Error()}else if result!=nil&&result.Message!=""{message=result.Message}
-		s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Website backup failed",message);return
+		s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Website backup failed",message);return
 	}
 	var backup shared.SiteBackupResult
 	if err:=shared.Unmarshal(result.Payload,&backup);err!=nil||backup.FileName==""||backup.SizeBytes<1 {
-		_,_=s.db.conn.ExecContext(context.Background(),"UPDATE backups SET status='failed' WHERE id=? AND user_id=?",backupID,userID)
-		s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Website backup failed","Agent returned invalid backup metadata.");return
+		_,_=s.db.conn.ExecContext(context.Background(),"UPDATE backups SET status='failed' WHERE id=? AND user_id=?",backupID,ownerID)
+		s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Website backup failed","Agent returned invalid backup metadata.");return
 	}
-	if _,err:=s.db.conn.ExecContext(context.Background(),"UPDATE backups SET file_name=?,size_bytes=?,status='completed' WHERE id=? AND user_id=?",backup.FileName,backup.SizeBytes,backupID,userID);err!=nil {
-		s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Website backup failed","The Control Plane could not save backup metadata.");return
+	if _,err:=s.db.conn.ExecContext(context.Background(),"UPDATE backups SET file_name=?,size_bytes=?,status='completed' WHERE id=? AND user_id=?",backup.FileName,backup.SizeBytes,backupID,ownerID);err!=nil {
+		s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Website backup failed","The Control Plane could not save backup metadata.");return
 	}
-	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(deviceID),Action:"site_backup_created",Details:map[string]interface{}{"backup_id":backupID,"site_id":req.SiteId,"size_bytes":backup.SizeBytes}})
-	s.notifyWorkspaceEvent(context.Background(),userID,0,"success","Website backup completed",fmt.Sprintf("Backup %s is ready (%d bytes).",backup.FileName,backup.SizeBytes))
+	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(actorID),DeviceID:shared.PtrInt64(deviceID),Action:"site_backup_created",Details:map[string]interface{}{"backup_id":backupID,"site_id":req.SiteId,"size_bytes":backup.SizeBytes}})
+	s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"success","Website backup completed",fmt.Sprintf("Backup %s is ready (%d bytes).",backup.FileName,backup.SizeBytes))
 }
 
-func (s *Server) runDatabaseBackup(backupID,userID,deviceID int64,conn *AgentConn,req *shared.CreateDatabaseBackup) {
-	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='running' WHERE id=? AND user_id=?`,backupID,userID)
+func (s *Server) runDatabaseBackup(backupID,ownerID,actorID,deviceID int64,conn *AgentConn,req *shared.CreateDatabaseBackup) {
+	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='running' WHERE id=? AND user_id=?`,backupID,ownerID)
 	ctx,cancel:=context.WithTimeout(context.Background(),13*time.Minute);defer cancel()
 	result,err:=conn.SendCommand(ctx,"create_database_backup",req)
 	if err!=nil||!result.Ok {
-		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='failed' WHERE id=? AND user_id=?`,backupID,userID)
+		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='failed' WHERE id=? AND user_id=?`,backupID,ownerID)
 		message:="Agent could not create the database backup";if err!=nil{message=err.Error()}else if result!=nil&&result.Message!=""{message=result.Message}
-		s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Database backup failed",message);return
+		s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Database backup failed",message);return
 	}
 	var backup shared.DatabaseBackupResult
 	if err:=shared.Unmarshal(result.Payload,&backup);err!=nil||backup.FileName==""||backup.SizeBytes<1||!backup.Verified {
-		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='failed' WHERE id=? AND user_id=?`,backupID,userID)
-		s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Database backup failed","Agent did not return a verified backup.");return
+		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET status='failed' WHERE id=? AND user_id=?`,backupID,ownerID)
+		s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Database backup failed","Agent did not return a verified backup.");return
 	}
-	if _,err:=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET file_name=?,size_bytes=?,status='verified' WHERE id=? AND user_id=?`,backup.FileName,backup.SizeBytes,backupID,userID);err!=nil {
-		s.notifyWorkspaceEvent(context.Background(),userID,0,"error","Database backup failed","The Control Plane could not save backup metadata.");return
+	if _,err:=s.db.conn.ExecContext(context.Background(),`UPDATE backups SET file_name=?,size_bytes=?,status='verified' WHERE id=? AND user_id=?`,backup.FileName,backup.SizeBytes,backupID,ownerID);err!=nil {
+		s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Database backup failed","The Control Plane could not save backup metadata.");return
 	}
-	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(userID),DeviceID:shared.PtrInt64(deviceID),Action:"database_backup_created",Details:map[string]interface{}{"backup_id":backupID,"database_id":req.DatabaseID,"size_bytes":backup.SizeBytes}})
-	s.notifyWorkspaceEvent(context.Background(),userID,0,"success","Database backup verified",fmt.Sprintf("Backup %s is verified (%d bytes).",backup.FileName,backup.SizeBytes))
+	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(actorID),DeviceID:shared.PtrInt64(deviceID),Action:"database_backup_created",Details:map[string]interface{}{"backup_id":backupID,"database_id":req.DatabaseID,"size_bytes":backup.SizeBytes}})
+	s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"success","Database backup verified",fmt.Sprintf("Backup %s is verified (%d bytes).",backup.FileName,backup.SizeBytes))
 }
 
 func validBackupSiteID(siteID string) bool {
