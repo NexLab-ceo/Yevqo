@@ -47,7 +47,7 @@ if [ ! -s "$CONFIG_FILE" ]; then
 '
   read -r -p 'Control Plane WebSocket URL (example: ws://192.168.1.10:8080/ws): ' SERVER_URL
   case "$SERVER_URL" in ws://*|wss://*) ;; *) echo "URL must start with ws:// or wss://" >&2; exit 1;; esac
-  read -r -s -p 'Agent pairing code from Profile > Agent pairing code: ' TOKEN
+  read -r -s -p 'Agent pairing token from Profile > Agent pairing token: ' TOKEN
   printf '
 '
   [ -n "$TOKEN" ] || { echo "Token is required" >&2; exit 1; }
