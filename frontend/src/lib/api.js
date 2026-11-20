@@ -84,6 +84,10 @@ export async function changePassword(currentPassword, newPassword) {
     return request('POST', '/api/password', { current_password: currentPassword, new_password: newPassword });
 }
 
+export async function rotateAgentToken() {
+    return request('POST', '/api/agent-token');
+}
+
 // === Devices ===
 
 export async function listDevices(projectId = '') {
