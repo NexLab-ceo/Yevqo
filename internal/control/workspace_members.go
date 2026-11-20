@@ -81,7 +81,7 @@ func (s *Server) handleWorkspaceMembers(w http.ResponseWriter, r *http.Request) 
 		err=s.db.conn.QueryRowContext(r.Context(),`SELECT id FROM users WHERE email=?`,in.Email).Scan(&memberID)
 		if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("user must create an account before being invited"));return}
 		if err!=nil{apiError(w,shared.ErrInternal("could not find invited user"));return}
-		if memberID==user.ID{apiError(w,shared.ErrBadRequest("workspace owner cannot invite themselves"));return}
+		if memberID==ownerID{apiError(w,shared.ErrBadRequest("workspace owner cannot be invited as a member"));return}
 		var existing int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM workspace_members WHERE owner_user_id=? AND member_user_id=?`,ownerID,memberID).Scan(&existing);err!=nil{apiError(w,shared.ErrInternal("could not check workspace membership"));return}
 		if existing>0{apiError(w,shared.ErrBadRequest("user is already a workspace member or has a pending invitation"));return}
