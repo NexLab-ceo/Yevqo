@@ -120,9 +120,9 @@ func (s *Server) handleProjectRepository(w http.ResponseWriter, r *http.Request)
 	if len(parts) == 3 { sub = parts[2] }
 	if sub != "" {
 		switch sub {
-		case "branches": s.handleProjectRepositoryBranches(w, r, u.ID, projectID); return
-		case "pulls": s.handleProjectRepositoryPulls(w, r, u.ID, projectID); return
-		case "checks": s.handleProjectRepositoryChecks(w, r, u.ID, projectID); return
+		case "branches": s.handleProjectRepositoryBranches(w, r, ownerID, projectID); return
+		case "pulls": s.handleProjectRepositoryPulls(w, r, ownerID, projectID); return
+		case "checks": s.handleProjectRepositoryChecks(w, r, ownerID, projectID); return
 		case "sites": s.handleProjectRepositorySites(w, r, u.ID, projectID, ownerID); return
 		default: http.NotFound(w, r); return
 		}
@@ -175,10 +175,10 @@ func (s *Server) projectRepositoryAccess(ctx context.Context, userID, projectID 
 
 func (s *Server) projectRepositoryToken(ctx context.Context,userID,projectID int64)(string,string,string,string,error){
 	var integrationID int64
-	var fullName,cloneURL,branch,account string
-	if err:=s.db.conn.QueryRowContext(ctx,`SELECT pr.integration_id,pr.full_name,pr.clone_url,pr.deploy_branch,i.account_name FROM project_repositories pr JOIN integrations i ON i.id=pr.integration_id WHERE pr.project_id=? AND i.user_id=? AND i.provider='github_app'`,projectID,userID).Scan(&integrationID,&fullName,&cloneURL,&branch,&account);err!=nil{return "","","","",err}
+	var fullName,cloneURL,branch,account string;var ownerID int64
+	if err:=s.db.conn.QueryRowContext(ctx,`SELECT pr.integration_id,pr.full_name,pr.clone_url,pr.deploy_branch,i.account_name,p.user_id FROM project_repositories pr JOIN projects p ON p.id=pr.project_id JOIN integrations i ON i.id=pr.integration_id WHERE pr.project_id=? AND i.user_id=p.user_id AND i.provider='github_app'`,projectID,userID).Scan(&integrationID,&fullName,&cloneURL,&branch,&account,&ownerID);err!=nil{return "","","","",err}
 	owner,_,_,err:=parseGitHubRepositoryName(fullName);if err!=nil{return "","","","",err}
-	token,err:=s.githubAppTokenForIntegration(ctx,userID,integrationID,owner)
+	token,err:=s.githubAppTokenForIntegration(ctx,ownerID,integrationID,owner)
 	return token,fullName,cloneURL,branch,err
 }
 
