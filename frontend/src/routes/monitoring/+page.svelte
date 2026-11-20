@@ -1,7 +1,7 @@
 <script>
- import {onMount} from 'svelte';import {getMonitoring,refreshDeviceMetrics} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
+ import {onMount} from 'svelte';import {page} from '$app/stores';import {getMonitoring,refreshDeviceMetrics} from '$lib/api.js';import {notify} from '$lib/stores.js';import Button from '$lib/components/Button.svelte';import StatusDot from '$lib/components/StatusDot.svelte';
  let data=null,loading=true;
- async function load(){loading=true;const first=await getMonitoring();if(first.ok){const online=first.data.devices.filter(d=>d.status==='online');await Promise.all(online.map(d=>refreshDeviceMetrics(d.id)));const latest=await getMonitoring();data=latest.ok?latest.data:first.data}else notify(first.error||'Не удалось загрузить мониторинг','error');loading=false}
+ async function load(){loading=true;const projectId=$page.url.searchParams.get('project_id')||'';const first=await getMonitoring(projectId);if(first.ok){const online=first.data.devices.filter(d=>d.status==='online');await Promise.all(online.map(d=>refreshDeviceMetrics(d.id)));const latest=await getMonitoring(projectId);data=latest.ok?latest.data:first.data}else notify(first.error||'Не удалось загрузить мониторинг','error');loading=false}
  function sparkline(points,key){if(!points?.length)return '';const values=points.map(p=>Number(p[key]||0));return values.map((v,i)=>`${values.length===1?50: i*100/(values.length-1)},${24-Math.max(0,Math.min(100,v))*0.22}`).join(' ')}
  onMount(load);
 </script>
