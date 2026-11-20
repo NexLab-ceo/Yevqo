@@ -513,11 +513,20 @@ func (db *DB) Log(ctx context.Context, entry *shared.LogEntry) error {
 	if entry.UserID != nil {
 		ownerID := *entry.UserID
 		targetType, targetID := "account", strconv.FormatInt(ownerID, 10)
+		if entry.WorkspaceOwnerID != nil {
+			ownerID = *entry.WorkspaceOwnerID
+			targetType, targetID = "workspace", strconv.FormatInt(ownerID, 10)
+		}
 		if entry.DeviceID != nil {
 			targetType, targetID = "device", strconv.FormatInt(*entry.DeviceID, 10)
-			if lookupErr := db.conn.QueryRowContext(ctx, `SELECT user_id FROM devices WHERE id=?`, *entry.DeviceID).Scan(&ownerID); lookupErr != nil {
+			var deviceOwnerID int64
+			if lookupErr := db.conn.QueryRowContext(ctx, `SELECT user_id FROM devices WHERE id=?`, *entry.DeviceID).Scan(&deviceOwnerID); lookupErr != nil {
 				return fmt.Errorf("resolve audit workspace owner: %w", lookupErr)
 			}
+			if entry.WorkspaceOwnerID != nil && deviceOwnerID != ownerID {
+				return fmt.Errorf("audit workspace owner does not own device")
+			}
+			ownerID = deviceOwnerID
 		}
 		outcome := "success"
 		if ok, exists := entry.Details["ok"].(bool); exists && !ok { outcome = "failure" }
