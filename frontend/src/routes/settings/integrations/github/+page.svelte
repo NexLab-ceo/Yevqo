@@ -5,7 +5,7 @@
  import {locale} from '$lib/i18n.js';
  import {notify} from '$lib/stores.js';
  import {getGitHubAppConfig,createGitHubAppInstallState,connectGitHubApp,listIntegrations,disconnectIntegration,listIntegrationRepositories} from '$lib/api.js';
- let config={configured:false,app_slug:''},integration=null,repositories=[],loading=true,connecting=false,repositoriesLoading=false,errorState='';
+ let config={configured:false,app_slug:''},integration=null,repositories=[],loading=true,connecting=false,repositoriesLoading=false,errorState='',integrationStatus='connected';
  $: ru=$locale!=='en';
  $: installURL=config.app_slug?'https://github.com/apps/'+encodeURIComponent(config.app_slug)+'/installations/new':'';
  onMount(async()=>{
@@ -50,7 +50,7 @@
  async function loadRepositories(){
   if(!integration)return;
   repositoriesLoading=true;const r=await listIntegrationRepositories(integration.id);
-  if(r.ok)repositories=r.data.repositories||[];else errorState=r.error||'Repository synchronization failed';
+  if(r.ok){repositories=r.data.repositories||[];integrationStatus='connected';errorState=''}else{errorState=r.error||'Repository synchronization failed';if(errorState.toLowerCase().includes('removed'))integrationStatus='removed';else if(errorState.toLowerCase().includes('permission'))integrationStatus='permission';else if(errorState.toLowerCase().includes('rate limit'))integrationStatus='rate_limit';}
   repositoriesLoading=false;
  }
  async function disconnect(){
@@ -63,7 +63,7 @@
 <svelte:head><title>GitHub App · Yevqo</title></svelte:head>
 <div class="page-header"><div><div class="eyebrow">SETTINGS / INTEGRATIONS</div><h1 class="page-title">GitHub App</h1><p class="page-desc">{ru?'Подключение GitHub через официальное приложение Yevqo. Доступ к репозиториям выдаётся установке GitHub App.':'Connect GitHub through the official Yevqo application. Repository access is granted to a GitHub App installation.'}</p></div><a class="back-link" href="/settings">← {ru?'Настройки':'Settings'}</a></div>
 <section class="github-card">
- <div class="app-heading"><div class="github-logo">GH</div><div class="app-title"><strong>Yevqo GitHub App</strong><span>{ru?'Официальная интеграция платформы':'Official Yevqo platform integration'}</span></div><span class:connected={!!integration} class="state-pill">{integration?(ru?'Подключено':'Connected'):(ru?'Не подключено':'Not connected')}</span></div>
+ <div class="app-heading"><div class="github-logo">GH</div><div class="app-title"><strong>Yevqo GitHub App</strong><span>{ru?'Официальная интеграция платформы':'Official Yevqo platform integration'}</span></div><span class:connected={!!integration&&integrationStatus==='connected'} class="state-pill">{integrationStatus==='removed'?(ru?'Установка удалена':'Installation removed'):integrationStatus==='permission'?(ru?'Нет разрешения':'Permission denied'):integrationStatus==='rate_limit'?'API rate limit':integration?(ru?'Подключено':'Connected'):(ru?'Не подключено':'Not connected')}</span></div>
  {#if loading}<div class="empty">{ru?'Проверяем подключение…':'Checking connection…'}</div>
  {:else if !config.configured}
   <div class="setup-warning"><strong>{ru?'GitHub App ещё не настроено на сервере':'GitHub App is not configured on this server'}</strong><p>{ru?'Администратору Control Plane нужно зарегистрировать GitHub App и задать серверные переменные YEVQO_GITHUB_APP_ID, YEVQO_GITHUB_APP_SLUG и YEVQO_GITHUB_APP_PRIVATE_KEY. Секреты не вводятся в браузере.':'The Control Plane operator must register a GitHub App and set YEVQO_GITHUB_APP_ID, YEVQO_GITHUB_APP_SLUG and YEVQO_GITHUB_APP_PRIVATE_KEY on the server. Secrets are never entered in the browser.'}</p></div>
