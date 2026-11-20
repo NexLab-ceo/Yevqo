@@ -150,6 +150,7 @@ func (s *Server) queueProjectDeployment(ctx context.Context,actorID,ownerID,proj
 	env,err:=s.siteRuntimeEnvironment(ctx,ownerID,in.DeviceID,in.SiteID,projectIDScope,environmentID);if err!=nil{return 0,err}
 	if _,err:=s.db.conn.ExecContext(ctx,`UPDATE sites SET git_branch=? WHERE device_id=? AND site_id=?`,branch,in.DeviceID,in.SiteID);err!=nil{return 0,shared.ErrInternal("could not save deployment branch")}
 	_ = s.db.conn.QueryRowContext(ctx,`UPDATE project_repository_sites SET deploy_branch=? WHERE project_id=? AND device_id=? AND site_id=?`,branch,projectID,in.DeviceID,in.SiteID)
+	_,_ = s.db.conn.ExecContext(ctx,`UPDATE project_repositories SET last_commit_sha=? WHERE project_id=?`,in.Commit,projectID)
 	res,err:=s.db.conn.ExecContext(ctx,`INSERT INTO project_deployment_runs(project_id,user_id,device_id,site_id,source,branch,commit_sha,status,message) VALUES(?,?,?,?,?,?,?,'queued','Deployment queued')`,projectID,ownerID,in.DeviceID,in.SiteID,source,branch,in.Commit)
 	if err!=nil{return 0,shared.ErrInternal("could not create deployment record")}
 	runID,_:=res.LastInsertId()
