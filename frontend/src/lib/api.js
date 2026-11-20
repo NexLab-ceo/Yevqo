@@ -175,9 +175,10 @@ export async function adminStats() {
 
 
 // === Workspace ===
-export async function listWorkspaceMembers() { return request('GET', '/api/workspace/members'); }
-export async function inviteWorkspaceMember(email, role) { return request('POST', '/api/workspace/members', { email, role }); }
-export async function removeWorkspaceMember(id) { return request('DELETE', `/api/workspace/members/${id}`); }
+export async function listWorkspaces() { return request('GET', '/api/workspaces'); }
+export async function listWorkspaceMembers(ownerId = '') { return request('GET', '/api/workspace/members' + (ownerId ? `?owner_user_id=${encodeURIComponent(ownerId)}` : '')); }
+export async function inviteWorkspaceMember(email, role, ownerId = '') { return request('POST', '/api/workspace/members' + (ownerId ? `?owner_user_id=${encodeURIComponent(ownerId)}` : ''), { email, role }); }
+export async function removeWorkspaceMember(id, ownerId = '') { return request('DELETE', `/api/workspace/members/${id}` + (ownerId ? `?owner_user_id=${encodeURIComponent(ownerId)}` : '')); }
 export async function listWorkspaceInvitations() { return request('GET', '/api/workspace/invitations'); }
 export async function acceptWorkspaceInvitation(id) { return request('POST', '/api/workspace/invitations', { id }); }
 export async function listProjects() { return request('GET', '/api/projects'); }
