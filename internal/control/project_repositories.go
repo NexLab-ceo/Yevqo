@@ -186,28 +186,41 @@ func (s *Server) projectRepositoryToken(ctx context.Context,userID,projectID int
 
 func (s *Server) handleProjectRepositoryBranches(w http.ResponseWriter,r *http.Request,userID,projectID int64){
 	if r.Method!=http.MethodGet{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
-	ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
+	ctx,cancel:=context.WithTimeout(r.Context(),60*time.Second);defer cancel()
 	token,fullName,_,_,err:=s.projectRepositoryToken(ctx,userID,projectID);if err!=nil{apiError(w,shared.ErrNotFound("project repository not connected"));return}
 	owner,name,_,_:=parseGitHubRepositoryName(fullName)
-	page:=1;if raw:=r.URL.Query().Get("page");raw!=""{if n,e:=strconv.Atoi(raw);e==nil&&n>0&&n<=100{page=n}}
-	var branches []struct{Name string `json:"name"`;Protected bool `json:"protected"`;Commit struct{SHA string `json:"sha"`} `json:"commit"`}
-	endpoint:=fmt.Sprintf("https://api.github.com/repos/%s/%s/branches?per_page=100&page=%d",url.PathEscape(owner),url.PathEscape(name),page)
-	if err:=githubAPIGet(ctx,token,endpoint,&branches);err!=nil{writeJSON(w,http.StatusBadGateway,map[string]interface{}{"ok":false,"error":"GitHub branches are unavailable; verify Contents read permission"});return}
-	out:=make([]map[string]interface{},0,len(branches));for _,b:=range branches{out=append(out,map[string]interface{}{"name":b.Name,"protected":b.Protected,"commit_sha":b.Commit.SHA})}
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"branches":out,"page":page,"per_page":100})
+	requestedPage:=0;if raw:=r.URL.Query().Get("page");raw!=""{if n,e:=strconv.Atoi(raw);e==nil&&n>0&&n<=100{requestedPage=n}}
+	type branchItem struct{Name string `json:"name"`;Protected bool `json:"protected"`;Commit struct{SHA string `json:"sha"`} `json:"commit"`}
+	all:=make([]branchItem,0);startPage,endPage:=1,10;if requestedPage>0{startPage,endPage=requestedPage,requestedPage}
+	nextPage:=0
+	for page:=startPage;page<=endPage;page++{
+		var items []branchItem
+		endpoint:=fmt.Sprintf("https://api.github.com/repos/%s/%s/branches?per_page=100&page=%d",url.PathEscape(owner),url.PathEscape(name),page)
+		if err:=githubAPIGet(ctx,token,endpoint,&items);err!=nil{writeJSON(w,http.StatusBadGateway,map[string]interface{}{"ok":false,"error":"GitHub branches are unavailable; verify Contents read permission"});return}
+		all=append(all,items...)
+		if len(items)<100{break}
+		if page==endPage{nextPage=page+1}
+	}
+	out:=make([]map[string]interface{},0,len(all));for _,b:=range all{out=append(out,map[string]interface{}{"name":b.Name,"protected":b.Protected,"commit_sha":b.Commit.SHA})}
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"branches":out,"next_page":nextPage,"total_loaded":len(out)})
 }
 
 func (s *Server) handleProjectRepositoryPulls(w http.ResponseWriter,r *http.Request,userID,projectID int64){
 	if r.Method!=http.MethodGet{http.Error(w,"method not allowed",http.StatusMethodNotAllowed);return}
-	ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
+	ctx,cancel:=context.WithTimeout(r.Context(),60*time.Second);defer cancel()
 	token,fullName,_,_,err:=s.projectRepositoryToken(ctx,userID,projectID);if err!=nil{apiError(w,shared.ErrNotFound("project repository not connected"));return}
 	owner,name,_,_:=parseGitHubRepositoryName(fullName)
 	state:=r.URL.Query().Get("state");if state!="closed"&&state!="all"{state="open"}
-	var pulls []struct{Number int `json:"number"`;Title string `json:"title"`;State string `json:"state"`;HTMLURL string `json:"html_url"`;Draft bool `json:"draft"`;CreatedAt time.Time `json:"created_at"`;UpdatedAt time.Time `json:"updated_at"`;Head struct{Ref string `json:"ref"`;SHA string `json:"sha"`} `json:"head"`;Base struct{Ref string `json:"ref"`} `json:"base"`;User struct{Login string `json:"login"`} `json:"user"`}
-	endpoint:=fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls?state=%s&per_page=100",url.PathEscape(owner),url.PathEscape(name),url.QueryEscape(state))
-	if err:=githubAPIGet(ctx,token,endpoint,&pulls);err!=nil{writeJSON(w,http.StatusBadGateway,map[string]interface{}{"ok":false,"error":"GitHub pull requests are unavailable; enable Pull requests read permission for the App"});return}
-	out:=make([]map[string]interface{},0,len(pulls));for _,p:=range pulls{out=append(out,map[string]interface{}{"number":p.Number,"title":p.Title,"state":p.State,"url":p.HTMLURL,"draft":p.Draft,"created_at":p.CreatedAt,"updated_at":p.UpdatedAt,"head_branch":p.Head.Ref,"head_sha":p.Head.SHA,"base_branch":p.Base.Ref,"author":p.User.Login})}
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"pull_requests":out})
+	type pullItem struct{Number int `json:"number"`;Title string `json:"title"`;State string `json:"state"`;HTMLURL string `json:"html_url"`;Draft bool `json:"draft"`;CreatedAt time.Time `json:"created_at"`;UpdatedAt time.Time `json:"updated_at"`;Head struct{Ref string `json:"ref"`;SHA string `json:"sha"`} `json:"head"`;Base struct{Ref string `json:"ref"`} `json:"base"`;User struct{Login string `json:"login"`} `json:"user"`}
+	all:=make([]pullItem,0);nextPage:=0
+	for page:=1;page<=10;page++{
+		var items []pullItem
+		endpoint:=fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls?state=%s&per_page=100&page=%d",url.PathEscape(owner),url.PathEscape(name),url.QueryEscape(state),page)
+		if err:=githubAPIGet(ctx,token,endpoint,&items);err!=nil{writeJSON(w,http.StatusBadGateway,map[string]interface{}{"ok":false,"error":"GitHub pull requests are unavailable; enable Pull requests read permission for the App"});return}
+		all=append(all,items...);if len(items)<100{break};if page==10{nextPage=11}
+	}
+	out:=make([]map[string]interface{},0,len(all));for _,p:=range all{out=append(out,map[string]interface{}{"number":p.Number,"title":p.Title,"state":p.State,"url":p.HTMLURL,"draft":p.Draft,"created_at":p.CreatedAt,"updated_at":p.UpdatedAt,"head_branch":p.Head.Ref,"head_sha":p.Head.SHA,"base_branch":p.Base.Ref,"author":p.User.Login})}
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"pull_requests":out,"next_page":nextPage,"total_loaded":len(out)})
 }
 
 func (s *Server) handleProjectRepositoryChecks(w http.ResponseWriter,r *http.Request,userID,projectID int64){
