@@ -98,7 +98,7 @@ PostgreSQL and MariaDB/MySQL now have typed Agent workflows for server installat
 
 ### Android Agent connection (Termux)
 - The Control Plane registers the Agent WebSocket endpoint at `/ws`. For an Agent running on the same Android device, set `server_url` to `ws://127.0.0.1:8080/ws`. For an Agent on another device, replace `127.0.0.1` with the Control Plane device's reachable LAN or Tailscale address.
-- Authentication is sent by the Agent as the first WebSocket binary message using the protocol `AuthRequest` envelope. Its `token` field is the account's **Agent pairing code**, shown in Dashboard → Profile → Agent pairing code (the same value as the account referral/authentication token). The endpoint does not require an Authorization header or a `?token=` query parameter.
+- Authentication is sent by the Agent as the first WebSocket binary message using the `AuthRequest` envelope. Its `token` field is the dedicated **Agent pairing token**, generated in Dashboard → Profile → Agent pairing token. It is separate from the public referral code; Control Plane stores only its SHA-256 hash. The raw token is shown once and must be pasted into the Agent setup. The endpoint does not require an Authorization header or a `?token=` query parameter.
 - The WebSocket route is intentionally unauthenticated at HTTP upgrade time; authentication happens immediately after upgrade in the first protocol message.
 - The HTTP logging middleware must preserve the `http.Hijacker` interface used by Gorilla WebSocket. The Control Plane's `responseWriter` forwards hijacking so the WebSocket handshake can complete.
 
