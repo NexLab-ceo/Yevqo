@@ -142,7 +142,7 @@ func (s *Server) handleProjectRepository(w http.ResponseWriter, r *http.Request)
 		var in projectRepositoryInput
 		if err := decodeJSON(r,&in); err != nil { apiError(w,shared.ErrBadRequest("invalid JSON")); return }
 		if in.IntegrationID < 1 { apiError(w,shared.ErrBadRequest("GitHub App integration is required")); return }
-		owner, name, fullName, err := parseGitHubRepositoryName(in.FullName)
+		owner, name, _, err := parseGitHubRepositoryName(in.FullName)
 		if err != nil { apiError(w,shared.ErrBadRequest(err.Error())); return }
 		ctx,cancel := context.WithTimeout(r.Context(),20*time.Second); defer cancel()
 		var integrationOwnerID int64
@@ -294,7 +294,7 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		if err!=nil{_=tx.Rollback();if hookID>0&&in.AutoDeploy{_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,hookID)};apiError(w,shared.ErrInternal("could not save repository deployment target"));return}
 		if err=tx.Commit();err!=nil{if hookID>0&&in.AutoDeploy{_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,hookID)};apiError(w,shared.ErrInternal("could not commit repository deployment target"));return}
 		_,_=s.db.conn.ExecContext(r.Context(),`UPDATE project_repositories SET last_commit_sha=? WHERE project_id=?`,branchInfo.Commit.SHA,projectID)
-		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(userID),WorkspaceOwnerID:shared.PtrInt64(ownerID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"project_repository_site_connected",Details:map[string]interface{}{"project_id":projectID,"site_id":in.SiteID,"repository":fullName,"auto_deploy":in.AutoDeploy},IP:clientIP(r)})
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(userID),WorkspaceOwnerID:shared.PtrInt64(ownerID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"project_repository_site_connected",Details:map[string]interface{}{"project_id":projectID,"site_id":in.SiteID,"repository":repoName,"auto_deploy":in.AutoDeploy},IP:clientIP(r)})
 		if !in.AutoDeploy&&existingHookID>0{_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,existingHookID)}
 		webhookPath:=fmt.Sprintf("/webhooks/github/%d/%s",in.DeviceID,in.SiteID)
 		resp:=map[string]interface{}{"ok":true,"device_id":in.DeviceID,"site_id":in.SiteID,"branch":branch,"auto_deploy_enabled":in.AutoDeploy,"webhook_path":webhookPath,"webhook_registered":hookRegistered}
