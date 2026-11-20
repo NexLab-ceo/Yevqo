@@ -870,6 +870,10 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			var in struct { Domain string `json:"domain"`; TunnelToken string `json:"tunnel_token"` }
 			if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 			domain:=strings.ToLower(strings.TrimSpace(in.Domain))
+			var configuredHostname string
+			routeErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT hostname FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,dev.UserID,deviceID,siteID).Scan(&configuredHostname)
+			if routeErr==nil && !strings.EqualFold(configuredHostname,domain) { apiError(w,shared.ErrConflict("remove the managed Cloudflare route before changing or removing the site domain")); return }
+			if routeErr!=nil && routeErr!=sql.ErrNoRows { apiError(w,shared.ErrInternal("could not check Cloudflare route")); return }
 			if domain!="" && !domainPattern.MatchString(domain){apiError(w,shared.ErrBadRequest("enter a valid hostname, such as app.example.com"));return}
 			if domain=="" {
 				conn,online:=s.hub.Get(deviceID)
@@ -915,6 +919,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"domain":domain,"tunnel_status":"active","message":"Cloudflare Tunnel connected"});return
 		}
 		if r.Method == http.MethodDelete {
+			if _, _, routeErr := s.removeCloudflareRouteForSite(r.Context(), dev.UserID, deviceID, siteID); routeErr != nil { apiError(w, shared.ErrBadRequest("remove the managed Cloudflare route before deleting this site: "+routeErr.Error())); return }
 			if st.Domain != "" {
 				conn, online := s.hub.Get(deviceID)
 				if !online { apiError(w, shared.ErrBadRequest("device is offline; reconnect the Agent before deleting a site with an active domain")); return }

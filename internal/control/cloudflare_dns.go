@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,6 +94,9 @@ func (s *Server) handleCloudflareConfig(w http.ResponseWriter,r *http.Request){
 		if err!=nil{apiError(w,shared.ErrInternal("could not save Cloudflare configuration"));return}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":true,"account_id":zone.Account.ID,"zone_id":zone.ID,"zone_name":zone.Name})
 	case http.MethodDelete:
+		var routes int
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM site_cloudflare_routes WHERE user_id=?`,u.ID).Scan(&routes);err!=nil{apiError(w,shared.ErrInternal("could not check managed Cloudflare routes"));return}
+		if routes>0{apiError(w,shared.ErrConflict("remove all managed site routes before disconnecting Cloudflare"));return}
 		_,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM cloudflare_accounts WHERE user_id=?`,u.ID)
 		if err!=nil{apiError(w,shared.ErrInternal("could not disconnect Cloudflare"));return}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":false})
@@ -186,6 +190,20 @@ func deleteCloudflareTunnelDNS(ctx context.Context, token, zoneID, hostname, tun
 	return cloudflareAPIRequest(ctx,token,http.MethodDelete,"/zones/"+zoneID+"/dns_records/"+record.ID,nil,nil)
 }
 
+
+func (s *Server) removeCloudflareRouteForSite(ctx context.Context, userID, deviceID int64, siteID string) (bool, string, error) {
+	var tunnelID, hostname string
+	err:=s.db.conn.QueryRowContext(ctx,`SELECT tunnel_id,hostname FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,userID,deviceID,siteID).Scan(&tunnelID,&hostname)
+	if err==sql.ErrNoRows{return false,"",nil};if err!=nil{return false,"",err}
+	accountID,zoneID,_,token,err:=s.cloudflareCredentials(ctx,userID);if err!=nil{return false,"",err}
+	workCtx,cancel:=context.WithTimeout(ctx,30*time.Second);defer cancel()
+	if err:=updateCloudflareTunnelIngress(workCtx,token,accountID,tunnelID,hostname,"",true);err!=nil{return false,"",err}
+	dnsErr:=deleteCloudflareTunnelDNS(workCtx,token,zoneID,hostname,tunnelID)
+	if _,err:=s.db.conn.ExecContext(workCtx,`DELETE FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,userID,deviceID,siteID);err!=nil{return false,"",err}
+	if dnsErr!=nil{return true,"Cloudflare ingress removed; DNS record left unchanged: "+dnsErr.Error(),nil}
+	return true,"Cloudflare ingress and managed DNS record removed",nil
+}
+
 func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Request) {
 	u:=UserFromContext(r.Context())
 	if r.Method==http.MethodGet {
@@ -204,6 +222,7 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 	dev,err:=s.db.GetDeviceByID(r.Context(),in.DeviceID);if err!=nil{apiError(w,shared.ErrNotFound("device not found"));return}
 	if err:=s.authorizeWorkspace(r.Context(),dev.UserID,u.ID,"site.configure");err!=nil{apiError(w,err);return}
 	if r.Method==http.MethodPost {
+		if u.ID!=dev.UserID{apiError(w,shared.ErrForbidden("only the workspace owner can manage Cloudflare routes"));return}
 		if !validCloudflareTunnelID(in.TunnelID){apiError(w,shared.ErrBadRequest("invalid Cloudflare Tunnel ID"));return}
 		var hostname string;var port int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT domain,port FROM sites WHERE device_id=? AND site_id=?`,in.DeviceID,in.SiteID).Scan(&hostname,&port);err!=nil{apiError(w,shared.ErrNotFound("site not found"));return}
@@ -214,9 +233,11 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 		if !hostnameBelongsToZone(hostname,zoneName){apiError(w,shared.ErrBadRequest("site domain must belong to the connected Cloudflare zone"));return}
 		var existingTunnel,existingHost string
 		existingErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT tunnel_id,hostname FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,dev.UserID,in.DeviceID,in.SiteID).Scan(&existingTunnel,&existingHost)
+		if existingErr!=nil&&existingErr!=sql.ErrNoRows{apiError(w,shared.ErrInternal("could not check existing Cloudflare route"));return}
 		if existingErr==nil&&(existingTunnel!=in.TunnelID||existingHost!=hostname){apiError(w,shared.ErrConflict("remove the existing Cloudflare route before changing its tunnel or hostname"));return}
 		var occupied int
-		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM site_cloudflare_routes WHERE user_id=? AND hostname=? AND NOT(device_id=? AND site_id=?)`,dev.UserID,hostname,in.DeviceID,in.SiteID).Scan(&occupied);err!=nil||occupied>0{apiError(w,shared.ErrConflict("hostname is already assigned to another Yevqo site"));return}
+		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM site_cloudflare_routes WHERE user_id=? AND hostname=? AND NOT(device_id=? AND site_id=?)`,dev.UserID,hostname,in.DeviceID,in.SiteID).Scan(&occupied);err!=nil{apiError(w,shared.ErrInternal("could not check hostname assignment"));return}
+		if occupied>0{apiError(w,shared.ErrConflict("hostname is already assigned to another Yevqo site"));return}
 		ctx,cancel:=context.WithTimeout(r.Context(),30*time.Second);defer cancel()
 		service:=fmt.Sprintf("http://127.0.0.1:%d",port)
 		if err:=updateCloudflareTunnelIngress(ctx,token,accountID,in.TunnelID,hostname,service,false);err!=nil{apiError(w,shared.ErrBadRequest("could not configure Cloudflare Tunnel ingress: "+err.Error()));return}
@@ -228,18 +249,11 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"configured":true,"hostname":hostname,"tunnel_id":in.TunnelID,"origin":service,"dns_record":record});return
 	}
 	if r.Method==http.MethodDelete {
-		var tunnelID,hostname string
-		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT tunnel_id,hostname FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,dev.UserID,in.DeviceID,in.SiteID).Scan(&tunnelID,&hostname)
-		if err==sql.ErrNoRows{writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"configured":false});return}
-		if err!=nil{apiError(w,shared.ErrInternal("could not load Cloudflare route"));return}
-		accountID,zoneID,_,token,err:=s.cloudflareCredentials(r.Context(),dev.UserID);if err!=nil{apiError(w,shared.ErrBadRequest("Cloudflare API connection is required to remove this route"));return}
-		ctx,cancel:=context.WithTimeout(r.Context(),30*time.Second);defer cancel()
-		if err:=updateCloudflareTunnelIngress(ctx,token,accountID,tunnelID,hostname,"",true);err!=nil{apiError(w,shared.ErrBadRequest("could not remove Cloudflare Tunnel ingress: "+err.Error()));return}
-		dnsErr:=deleteCloudflareTunnelDNS(ctx,token,zoneID,hostname,tunnelID)
-		if _,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,dev.UserID,in.DeviceID,in.SiteID);err!=nil{apiError(w,shared.ErrInternal("route removed from Cloudflare but local route record could not be deleted"));return}
-		message:="Cloudflare route and managed DNS record removed"
-		if dnsErr!=nil{message="Cloudflare route removed; DNS record was left unchanged: "+dnsErr.Error()}
-		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"cloudflare_tunnel_route_removed",Details:map[string]interface{}{"site_id":in.SiteID,"hostname":hostname,"tunnel_id":tunnelID},IP:clientIP(r)})
+		if u.ID!=dev.UserID{apiError(w,shared.ErrForbidden("only the workspace owner can manage Cloudflare routes"));return}
+		removed,message,err:=s.removeCloudflareRouteForSite(r.Context(),dev.UserID,in.DeviceID,in.SiteID)
+		if err!=nil{apiError(w,shared.ErrBadRequest("could not remove Cloudflare route: "+err.Error()));return}
+		if !removed{writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"configured":false});return}
+		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"cloudflare_tunnel_route_removed",Details:map[string]interface{}{"site_id":in.SiteID},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"configured":false,"message":message});return
 	}
 	http.Error(w,"method not allowed",http.StatusMethodNotAllowed)

@@ -297,3 +297,7 @@ export async function deleteScheduledTask(id) { return request('DELETE', `/api/s
 export async function listSitePreviews(deviceId, siteId) { return request('GET', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId) + '/previews'); }
 export async function createSitePreview(deviceId, siteId, input) { return request('POST', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId) + '/previews', input); }
 export async function deleteSitePreview(deviceId, siteId, key) { return request('DELETE', '/api/sites/' + deviceId + '/' + encodeURIComponent(siteId) + '/previews/' + encodeURIComponent(key)); }
+
+export async function getCloudflareTunnelRoute(deviceId, siteId) { return request('GET', '/api/cloudflare/tunnel-routes?device_id=' + encodeURIComponent(deviceId) + '&site_id=' + encodeURIComponent(siteId)); }
+export async function configureCloudflareTunnelRoute(deviceId, siteId, tunnelId) { return request('POST', '/api/cloudflare/tunnel-routes', { device_id: Number(deviceId), site_id: siteId, tunnel_id: tunnelId }); }
+export async function removeCloudflareTunnelRoute(deviceId, siteId) { return request('DELETE', '/api/cloudflare/tunnel-routes', { device_id: Number(deviceId), site_id: siteId }); }

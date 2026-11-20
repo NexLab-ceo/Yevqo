@@ -2,7 +2,7 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteMetrics, updateSiteDomain, listSitePreviews, createSitePreview, deleteSitePreview, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream } from '$lib/api.js';
+    import { getDevice, getSite, getSiteMetrics, updateSiteDomain, listSitePreviews, createSitePreview, deleteSitePreview, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream, getCloudflareConfig, saveCloudflareConfig, disconnectCloudflare, getCloudflareTunnelRoute, configureCloudflareTunnelRoute, removeCloudflareTunnelRoute } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -44,6 +44,13 @@
     let domainDraft = '';
     let domainTunnelToken = '';
     let domainBusy = false;
+    let cloudflareConfig = { connected: false };
+    let cloudflareTokenDraft = '';
+    let cloudflareZoneDraft = '';
+    let cloudflareTunnelIdDraft = '';
+    let cloudflareRoute = { configured: false };
+    let cloudflareConfigBusy = false;
+    let cloudflareRouteBusy = false;
     let releases = [];
     let previews = [];
     let previewsLoading = false;
@@ -126,6 +133,7 @@
         online = !!deviceRes.data.online;
         site = siteRes.data.site;
         domainDraft = site.domain || '';
+        await loadCloudflareIntegration();
         if (gitRes.ok) {
             git = { ...git, ...gitRes.data };
             gitForm = {
@@ -146,6 +154,54 @@
         }
     }
 
+
+    async function loadCloudflareIntegration() {
+        const [configRes, routeRes] = await Promise.all([getCloudflareConfig(), getCloudflareTunnelRoute(deviceId, siteId)]);
+        cloudflareConfig = configRes.ok ? configRes.data : { connected: false };
+        cloudflareRoute = routeRes.ok ? routeRes.data : { configured: false };
+        if (cloudflareRoute.configured) cloudflareTunnelIdDraft = cloudflareRoute.tunnel_id || '';
+    }
+
+    async function connectCloudflare() {
+        if (cloudflareConfigBusy || !cloudflareTokenDraft.trim() || !cloudflareZoneDraft.trim()) return;
+        cloudflareConfigBusy = true;
+        const res = await saveCloudflareConfig(cloudflareTokenDraft.trim(), cloudflareZoneDraft.trim());
+        cloudflareConfigBusy = false;
+        if (!res.ok) { notify(res.error || 'Не удалось подключить Cloudflare', 'error'); return; }
+        cloudflareTokenDraft = '';
+        notify('Cloudflare zone подключена', 'success');
+        await loadCloudflareIntegration();
+    }
+
+    async function disconnectCloudflareAccount() {
+        if (cloudflareConfigBusy || !confirm('Отключить Cloudflare API? Сначала удалите все управляемые Tunnel routes.')) return;
+        cloudflareConfigBusy = true;
+        const res = await disconnectCloudflare();
+        cloudflareConfigBusy = false;
+        if (!res.ok) { notify(res.error || 'Не удалось отключить Cloudflare', 'error'); return; }
+        cloudflareConfig = { connected: false };
+        notify('Cloudflare отключён', 'success');
+    }
+
+    async function configureCloudflareRoute() {
+        if (cloudflareRouteBusy || !site?.domain || !cloudflareTunnelIdDraft.trim()) return;
+        cloudflareRouteBusy = true;
+        const res = await configureCloudflareTunnelRoute(deviceId, siteId, cloudflareTunnelIdDraft.trim());
+        cloudflareRouteBusy = false;
+        if (!res.ok) { notify(res.error || 'Не удалось настроить Cloudflare route', 'error'); return; }
+        cloudflareRoute = res.data;
+        notify('Cloudflare Tunnel route настроен', 'success');
+    }
+
+    async function removeCloudflareRoute() {
+        if (cloudflareRouteBusy || !cloudflareRoute?.configured || !confirm('Удалить Cloudflare ingress route и управляемую DNS-запись?')) return;
+        cloudflareRouteBusy = true;
+        const res = await removeCloudflareTunnelRoute(deviceId, siteId);
+        cloudflareRouteBusy = false;
+        if (!res.ok) { notify(res.error || 'Не удалось удалить Cloudflare route', 'error'); return; }
+        cloudflareRoute = { configured: false };
+        notify(res.data?.message || 'Cloudflare route удалён', 'success');
+    }
 
     async function loadPreviews() {
         if (!online || !device || String(device.platform || '').toLowerCase() !== 'android') return;
@@ -832,16 +888,61 @@
     {:else if activeTab === 'domains'}
         <Card>
             <h2 class="details-title">Domains</h2>
-            <p class="muted">Домен принадлежит этому сайту. Для публичного HTTPS настройте Cloudflare Tunnel и DNS в Cloudflare.</p>
+            <p class="muted">Домен сайта и Cloudflare Tunnel. Сохранение домена запускает cloudflared на Agent; публичный маршрут и CNAME можно настроить автоматически ниже.</p>
             <label class="field-label" for="site-domain">Primary domain</label>
             <input id="site-domain" class="input" bind:value={domainDraft} placeholder="app.example.com" autocomplete="off"/>
             <label class="field-label" for="site-tunnel-token">Cloudflare Tunnel token</label>
             <input id="site-tunnel-token" class="input" type="password" bind:value={domainTunnelToken} placeholder="Оставьте пустым, чтобы использовать сохранённый token" autocomplete="new-password"/>
             <div class="actions">
-                <Button variant="primary" loading={domainBusy} disabled={domainBusy || !online} on:click={async()=>{domainBusy=true;const r=await updateSiteDomain(deviceId,siteId,domainDraft.trim(),domainTunnelToken.trim());domainBusy=false;if(r.ok){domainTunnelToken='';if(r.data?.ok){notify(r.data?.message||'Домен обновлён','success')}else{notify(r.data?.message||'Домен сохранён, но Tunnel не активирован','error')}await refresh()}else notify(r.error||'Не удалось сохранить домен','error')}}>Save domain</Button>
-                <Button variant="danger" disabled={domainBusy||!site?.domain||!online} on:click={async()=>{if(!confirm('Удалить домен и остановить Cloudflare Tunnel?'))return;domainBusy=true;const r=await updateSiteDomain(deviceId,siteId,'','');domainBusy=false;if(r.ok){notify('Домен удалён','success');domainDraft='';await refresh()}else notify(r.error||'Не удалось удалить домен','error')}}>Remove domain</Button>
+                <Button variant="primary" loading={domainBusy} disabled={domainBusy || !online} on:click={async()=>{
+                    domainBusy=true;
+                    if (cloudflareRoute?.configured && domainDraft.trim().toLowerCase() !== String(site?.domain || '').toLowerCase()) {
+                        const removed=await removeCloudflareTunnelRoute(deviceId,siteId);
+                        if(!removed.ok){domainBusy=false;notify(removed.error||'Сначала удалите Cloudflare route','error');return;}
+                        cloudflareRoute={configured:false};
+                    }
+                    const r=await updateSiteDomain(deviceId,siteId,domainDraft.trim(),domainTunnelToken.trim());
+                    domainBusy=false;
+                    if(r.ok){domainTunnelToken='';if(r.data?.ok){notify(r.data?.message||'Домен обновлён','success')}else{notify(r.data?.message||'Домен сохранён, но Tunnel не активирован','error')}await refresh()}else notify(r.error||'Не удалось сохранить домен','error')
+                }}>Save domain</Button>
+                <Button variant="danger" disabled={domainBusy||!site?.domain||!online} on:click={async()=>{
+                    if(!confirm('Удалить домен и остановить Cloudflare Tunnel?'))return;
+                    domainBusy=true;
+                    if(cloudflareRoute?.configured){
+                        const removed=await removeCloudflareTunnelRoute(deviceId,siteId);
+                        if(!removed.ok){domainBusy=false;notify(removed.error||'Не удалось удалить Cloudflare route','error');return;}
+                        cloudflareRoute={configured:false};
+                    }
+                    const r=await updateSiteDomain(deviceId,siteId,'','');
+                    domainBusy=false;
+                    if(r.ok){notify('Домен удалён','success');domainDraft='';await refresh()}else notify(r.error||'Не удалось удалить домен','error')
+                }}>Remove domain</Button>
             </div>
-            <p class="muted">Cloudflare API zone и DNS automation остаются в настройках интеграции проекта/рабочего пространства; секреты туннеля не отображаются в интерфейсе.</p>
+        </Card>
+        <Card>
+            <h2 class="details-title">Cloudflare API integration</h2>
+            {#if cloudflareConfig.connected}
+                <p class="muted">Подключено: {cloudflareConfig.zone_name} ({cloudflareConfig.zone_id})</p>
+                <label class="field-label" for="cloudflare-tunnel-id">Cloudflare Tunnel ID</label>
+                <input id="cloudflare-tunnel-id" class="input" bind:value={cloudflareTunnelIdDraft} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off"/>
+                <div class="actions">
+                    <Button variant="primary" loading={cloudflareRouteBusy} disabled={cloudflareRouteBusy||!site?.domain||!cloudflareTunnelIdDraft.trim()} on:click={configureCloudflareRoute}>Configure public route</Button>
+                    {#if cloudflareRoute?.configured}<Button variant="danger" loading={cloudflareRouteBusy} disabled={cloudflareRouteBusy} on:click={removeCloudflareRoute}>Remove route</Button>{/if}
+                    <Button size="sm" disabled={cloudflareConfigBusy} on:click={disconnectCloudflareAccount}>Disconnect API</Button>
+                </div>
+                {#if cloudflareRoute?.configured}
+                    <p class="muted">Route: <strong>{cloudflareRoute.hostname}</strong> → <code>{cloudflareRoute.origin}</code></p>
+                {:else}
+                    <p class="muted">Route ещё не настроен. Yevqo добавит ingress rule и CNAME для этого сайта.</p>
+                {/if}
+            {:else}
+                <label class="field-label" for="cloudflare-api-token">Cloudflare API token</label>
+                <input id="cloudflare-api-token" class="input" type="password" bind:value={cloudflareTokenDraft} placeholder="API token" autocomplete="new-password"/>
+                <label class="field-label" for="cloudflare-zone-id">Cloudflare Zone ID</label>
+                <input id="cloudflare-zone-id" class="input" bind:value={cloudflareZoneDraft} placeholder="Zone ID" autocomplete="off"/>
+                <Button variant="primary" loading={cloudflareConfigBusy} disabled={cloudflareConfigBusy||!cloudflareTokenDraft.trim()||!cloudflareZoneDraft.trim()} on:click={connectCloudflare}>Connect Cloudflare</Button>
+                <p class="muted">Токен должен иметь Zone Read, DNS Edit и Cloudflare Tunnel Write. API token хранится зашифрованным. Настройку выполняет владелец workspace.</p>
+            {/if}
         </Card>
     {:else if activeTab === 'environment'}
         <Card>
