@@ -25,7 +25,7 @@ A project may connect one GitHub App repository and attach it to one or more pro
 
 Automatic Deploy uses the existing per-site HMAC-SHA256 GitHub push endpoint, including delivery replay protection, branch filtering and exact commit checkout. Configure `YEVQO_PUBLIC_URL` to the public HTTPS Control Plane origin (Cloudflare Tunnel is supported). With GitHub App Administration: Write permission, Yevqo creates, rotates and removes repository push webhooks. Without that permission, the UI returns a one-time webhook secret and URL for manual setup. The App also needs Pull requests: Read and Checks: Read for the PR and CI panels.
 
-Project deployment runs persist source, branch, commit, Agent job ID, status, progress, timestamps and bounded output. The project Deployments tab supports manual Deploy, progress/log viewing, cancellation and redeploy. Agent deployment events are persisted; cancellation is treated as terminal and cannot be overwritten by a later completion race.
+Project deployment runs persist source, branch, commit, Agent job ID, status, progress, timestamps and bounded output. The project Deployments tab supports manual Deploy, progress/log viewing, cancellation, redeploy and rollback to a successful immutable release. Agent deployment events and build output are persisted; cancellation is treated as terminal and cannot be overwritten by a later completion race.
 
 Migration `025_project_deployment_lifecycle.sql` adds site targets, webhook registration IDs and durable deployment runs. It is additive and must be applied through the normal migration/upgrade process; it is not applied to any existing or production database as part of this change.
 
@@ -37,7 +37,7 @@ The binding stores repository metadata and the selected branch, not a long-lived
 
 Migration `024_project_repositories.sql` is additive and must be applied through the normal migration/upgrade process. It has not been applied to a live or production database as part of this work.
 
-**Remaining:** branch discovery/browser, project-to-site deployment target mapping, automatic deployment-on-push, and PR/checks integration are separate follow-up work. Connecting a repository does not trigger a build or deploy by itself.
+**Boundary:** connecting a repository alone does not trigger a build. At least one project site/device target must be linked. Automatic webhook registration requires `YEVQO_PUBLIC_URL` plus GitHub App Administration: Write; otherwise the one-time webhook URL and secret must be added manually. Environment promotion pipelines and PR merge automation are not part of this stage.
 
 ## Environments
 
@@ -61,6 +61,6 @@ Managed PostgreSQL and MariaDB/MySQL server installation and local database oper
 
 - `021_project_environments.sql` adds project environments, application assignments, and project database-server associations.
 - `022_project_environment_databases.sql` adds environment-level database-server assignments.
-- `024_project_repositories.sql` adds the optional project-level GitHub App repository binding.
+- `024_project_repositories.sql` adds the optional project-level GitHub App repository binding.\n- `025_project_deployment_lifecycle.sql` adds repository-to-site deployment targets, webhook registration IDs, and durable deployment runs.
 
 Both are additive migrations. They have not been applied to production or to the user's existing database as part of this work. Apply them only through the normal migration/upgrade process after taking a verified backup and checking the target installation.
