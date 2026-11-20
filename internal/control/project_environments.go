@@ -77,6 +77,7 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 				return
 			}
 			id, _ := res.LastInsertId()
+			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_environment_created",Details:map[string]interface{}{"project_id":projectID,"environment_id":id,"name":in.Name},IP:clientIP(r)})
 			writeJSON(w, http.StatusCreated, map[string]interface{}{"ok": true, "environment": map[string]interface{}{"id": id, "name": in.Name, "slug": slug, "description": in.Description}})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -105,6 +106,7 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 			if protected { in.Name = name; newSlug = slug }
 			_, err := s.db.conn.ExecContext(r.Context(), "UPDATE project_environments SET name=?,slug=?,description=? WHERE id=? AND project_id=?", in.Name, newSlug, strings.TrimSpace(in.Description), environmentID, projectID)
 			if err != nil { apiError(w, shared.ErrBadRequest("environment name is already in use or could not be updated")); return }
+			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_environment_updated",Details:map[string]interface{}{"project_id":projectID,"environment_id":environmentID,"name":in.Name},IP:clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 		case http.MethodDelete:
 			if protected || slug == "production" { apiError(w, shared.ErrBadRequest("Production is protected and cannot be deleted")); return }
@@ -115,6 +117,7 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 			}
 			if err != nil { _ = tx.Rollback(); apiError(w, shared.ErrInternal("could not delete environment")); return }
 			if err = tx.Commit(); err != nil { apiError(w, shared.ErrInternal("could not commit environment deletion")); return }
+			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_environment_deleted",Details:map[string]interface{}{"project_id":projectID,"environment_id":environmentID},IP:clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -177,6 +180,7 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 				apiError(w, shared.ErrInternal("could not assign application to environment"))
 				return
 			}
+			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_environment_site_attached",Details:map[string]interface{}{"project_id":projectID,"environment_id":environmentID,"device_id":in.DeviceID,"site_id":in.SiteID},IP:clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 		case http.MethodDelete:
 			// Production assignments are protected just like the environment itself.
@@ -211,6 +215,7 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 				apiError(w, shared.ErrNotFound("application assignment not found"))
 				return
 			}
+			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_environment_site_detached",Details:map[string]interface{}{"project_id":projectID,"environment_id":environmentID,"device_id":in.DeviceID,"site_id":in.SiteID},IP:clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -252,6 +257,7 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 			if _, err := s.db.conn.ExecContext(r.Context(), `INSERT IGNORE INTO project_environment_database_servers(project_id,environment_id,database_server_id) VALUES(?,?,?)`, projectID, environmentID, in.ServerID); err != nil {
 				apiError(w, shared.ErrInternal("could not assign database server to environment")); return
 			}
+			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_environment_database_attached",Details:map[string]interface{}{"project_id":projectID,"environment_id":environmentID,"database_server_id":in.ServerID},IP:clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true})
 		case http.MethodDelete:
 			if protected { apiError(w, shared.ErrBadRequest("Production database assignments are protected")); return }
@@ -262,6 +268,7 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 			deleted, err := res.RowsAffected()
 			if err != nil { apiError(w, shared.ErrInternal("could not verify database assignment removal")); return }
 			if deleted == 0 { apiError(w, shared.ErrNotFound("database server assignment not found")); return }
+			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_environment_database_detached",Details:map[string]interface{}{"project_id":projectID,"environment_id":environmentID,"database_server_id":in.ServerID},IP:clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true})
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
