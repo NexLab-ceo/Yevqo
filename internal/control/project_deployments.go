@@ -161,7 +161,8 @@ func (s *Server) runTrackedProjectDeployment(runID,ownerID,actorID,deviceID int6
 		if started.CommitHash!=""{_,_=s.db.conn.ExecContext(context.Background(),`UPDATE sites SET deployed_commit=?,deployed_at=UTC_TIMESTAMP() WHERE device_id=? AND site_id=?`,started.CommitHash,deviceID,action.SiteId)}
 	}
 	if len(message)>1000{message=message[:1000]}
-	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE project_deployment_runs SET status=IF(status='cancelled','cancelled',?),progress=IF(status='cancelled',0,?),message=?,finished_at=UTC_TIMESTAMP(),commit_sha=IF(?='',commit_sha,?) WHERE id=?`,status,map[bool]int{true:100,false:0}[status=="succeeded"],message,started.CommitHash,started.CommitHash,runID)
+	_,_=s.db.conn.ExecContext(context.Background(),`UPDATE project_deployment_runs SET status=IF(status='cancelled','cancelled',?),progress=IF(status='cancelled',0,?),message=IF(status='cancelled','Deployment cancelled',?),finished_at=UTC_TIMESTAMP(),commit_sha=IF(?='',commit_sha,?) WHERE id=?`,status,map[bool]int{true:100,false:0}[status=="succeeded"],message,started.CommitHash,started.CommitHash,runID)
+	var finalStatus string;_ = s.db.conn.QueryRowContext(context.Background(),`SELECT status FROM project_deployment_runs WHERE id=?`,runID).Scan(&finalStatus);if finalStatus=="cancelled"{status="cancelled";message="Deployment cancelled"}
 	_ = s.db.Log(context.Background(),&shared.LogEntry{UserID:shared.PtrInt64(actorID),DeviceID:shared.PtrInt64(deviceID),Action:"project_deployment_"+status,Details:map[string]interface{}{"deployment_id":runID,"site_id":action.SiteId,"commit":started.CommitHash,"error":func()string{if status=="failed"{return message};return ""}()}})
 	if status=="failed"{s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"error","Deployment failed: "+action.SiteId,message)}else{s.notifyWorkspaceEvent(context.Background(),ownerID,actorID,"success","Deployment completed: "+action.SiteId,message)}
 }
