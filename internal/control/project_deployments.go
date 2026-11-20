@@ -44,12 +44,12 @@ func (s *Server) persistDeploymentJobEvent(ctx context.Context, userID, deviceID
 	state:=deploymentStoredState(event.State)
 	message:=strings.TrimSpace(event.Message);if len(message)>1000{message=message[:1000]}
 	var runID int64
-	err:=s.db.conn.QueryRowContext(ctx,`SELECT id FROM project_deployment_runs WHERE device_id=? AND site_id=? AND status IN ('queued','running','preparing','cloning','installing','building','starting') AND (agent_job_id='' OR agent_job_id=?) ORDER BY id DESC LIMIT 1`,deviceID,event.SiteId,event.JobId).Scan(&runID)
+	err:=s.db.conn.QueryRowContext(ctx,`SELECT id FROM project_deployment_runs WHERE device_id=? AND site_id=? AND (agent_job_id=? OR (agent_job_id='' AND status IN ('queued','running','preparing','cloning','installing','building','starting'))) ORDER BY id DESC LIMIT 1`,deviceID,event.SiteId,event.JobId).Scan(&runID)
 	if err==sql.ErrNoRows {
 		res,insertErr:=s.db.conn.ExecContext(ctx,`INSERT INTO project_deployment_runs(project_id,user_id,device_id,site_id,source,branch,agent_job_id,status,progress,message,started_at,finished_at) VALUES(?,?,?,?, 'agent',?,?,?,?,?,IF(?='queued',NULL,UTC_TIMESTAMP()),IF(? IN ('succeeded','failed','cancelled'),UTC_TIMESTAMP(),NULL))`,nullableInt64(projectID),userID,deviceID,event.SiteId,branch,event.JobId,state,event.Progress,message,state,state)
 		if insertErr!=nil{return};runID,_=res.LastInsertId()
 	} else if err==nil {
-		_,_=s.db.conn.ExecContext(ctx,`UPDATE project_deployment_runs SET agent_job_id=?,status=?,progress=?,message=?,output=LEFT(CONCAT(COALESCE(output,''),IF(?='', '', CONCAT(?, '\\n'))),65535),started_at=COALESCE(started_at,IF(?='queued',NULL,UTC_TIMESTAMP())),finished_at=IF(? IN ('succeeded','failed','cancelled'),UTC_TIMESTAMP(),NULL) WHERE id=?`,event.JobId,state,event.Progress,message,message,message,state,state,runID)
+		_,_=s.db.conn.ExecContext(ctx,`UPDATE project_deployment_runs SET agent_job_id=?,status=IF(status IN ('succeeded','failed','cancelled'),status,?),progress=IF(status IN ('succeeded','failed','cancelled'),progress,?),message=IF(status IN ('succeeded','failed','cancelled'),message,?),output=LEFT(CONCAT(COALESCE(output,''),IF(?='', '', CONCAT(?, '\\n'))),65535),started_at=COALESCE(started_at,IF(?='queued',NULL,UTC_TIMESTAMP())),finished_at=IF(? IN ('succeeded','failed','cancelled'),UTC_TIMESTAMP(),NULL) WHERE id=?`,event.JobId,state,event.Progress,message,message,message,state,state,runID)
 	}
 	if runID>0 && event.CommitSHA!="" && validWebhookCommit(event.CommitSHA) {
 		_,_=s.db.conn.ExecContext(ctx,`UPDATE project_deployment_runs SET commit_sha=? WHERE id=?`,event.CommitSHA,runID)
