@@ -261,25 +261,38 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		token,repoName,_,_,tokenErr:=s.projectRepositoryToken(ctx,ownerID,projectID);if tokenErr!=nil{apiError(w,shared.ErrForbidden("GitHub App installation is unavailable"));return}
 		owner,name,_,parseErr:=parseGitHubRepositoryName(repoName);if parseErr!=nil{apiError(w,shared.ErrBadRequest("invalid connected repository"));return}
 		if _,branchErr:=s.fetchGitHubBranch(ctx,token,owner,name,branch);branchErr!=nil{apiError(w,shared.ErrBadRequest("deployment branch is not available in the repository"));return}
-		var previousURL sql.NullString;var previousBranch string;var previousWebhookEnabled bool;var previousWebhookSecret []byte
-		previousErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc FROM project_repository_sites WHERE project_id=? AND device_id=? AND site_id=?`,projectID,in.DeviceID,in.SiteID).Scan(&previousURL,&previousBranch,&previousWebhookEnabled,&previousWebhookSecret)
+		var previousURL sql.NullString;var previousBranch string;var previousWebhookEnabled bool;var previousWebhookSecret []byte;var existingHookID int64
+		previousErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc,COALESCE(github_webhook_id,0) FROM project_repository_sites WHERE project_id=? AND device_id=? AND site_id=?`,projectID,in.DeviceID,in.SiteID).Scan(&previousURL,&previousBranch,&previousWebhookEnabled,&previousWebhookSecret,&existingHookID)
+		var currentWebhookSecret []byte
 		if errors.Is(previousErr,sql.ErrNoRows){
 			if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT git_url,git_branch,github_webhook_enabled,github_webhook_secret_enc FROM sites WHERE device_id=? AND site_id=?`,in.DeviceID,in.SiteID).Scan(&previousURL,&previousBranch,&previousWebhookEnabled,&previousWebhookSecret);err!=nil{apiError(w,shared.ErrNotFound("site not found"));return}
 		}else if previousErr!=nil{apiError(w,shared.ErrInternal("could not read original site Git settings"));return}
-		var secret string;var webhookSecret interface{}=previousWebhookSecret;webhookEnabled:=previousWebhookEnabled
+		_ = s.db.conn.QueryRowContext(r.Context(),`SELECT github_webhook_secret_enc FROM sites WHERE device_id=? AND site_id=?`,in.DeviceID,in.SiteID).Scan(&currentWebhookSecret)
+		var secret string;var webhookSecret interface{}=previousWebhookSecret;webhookEnabled:=previousWebhookEnabled;hookID:=int64(0);hookRegistered:=false
 		if in.AutoDeploy{
-			raw:=make([]byte,32);if _,err:=rand.Read(raw);err!=nil{apiError(w,shared.ErrInternal("could not create webhook secret"));return}
-			secret=base64.RawURLEncoding.EncodeToString(raw);nonce,ciphertext,err:=encryptCredential(s.credentialKey,[]byte(secret));if err!=nil{apiError(w,shared.ErrInternal("could not encrypt webhook secret"));return};webhookSecret=append(nonce,ciphertext...);webhookEnabled=true
+			if callbackURL,configured:=githubWebhookURLForSite(in.DeviceID,in.SiteID);configured{
+				raw:=make([]byte,32);if _,err:=rand.Read(raw);err!=nil{apiError(w,shared.ErrInternal("could not create webhook secret"));return}
+				secret=base64.RawURLEncoding.EncodeToString(raw);nonce,ciphertext,err:=encryptCredential(s.credentialKey,[]byte(secret));if err!=nil{apiError(w,shared.ErrInternal("could not encrypt webhook secret"));return};webhookSecret=append(nonce,ciphertext...);webhookEnabled=true
+				registeredID,registerErr:=s.registerGitHubPushWebhook(ctx,token,owner,name,callbackURL,secret,existingHookID)
+				if registerErr==nil{hookID=registeredID;hookRegistered=true}else if existingHookID>0{apiError(w,shared.ErrBadRequest("existing GitHub webhook could not be updated; grant repository administration write permission or remove the old webhook"));return}
+			}
+			if !hookRegistered{
+				if existingHookID>0&&len(currentWebhookSecret)>0{webhookSecret=currentWebhookSecret;webhookEnabled=true}else{
+					raw:=make([]byte,32);if _,err:=rand.Read(raw);err!=nil{apiError(w,shared.ErrInternal("could not create webhook secret"));return}
+					secret=base64.RawURLEncoding.EncodeToString(raw);nonce,ciphertext,err:=encryptCredential(s.credentialKey,[]byte(secret));if err!=nil{apiError(w,shared.ErrInternal("could not encrypt webhook secret"));return};webhookSecret=append(nonce,ciphertext...);webhookEnabled=true
+				}
+			}
 		}
 		tx,err:=s.db.conn.BeginTx(r.Context(),nil);if err!=nil{apiError(w,shared.ErrInternal("could not start repository target transaction"));return}
 		if _,err=tx.ExecContext(r.Context(),`UPDATE sites SET git_url=?,git_branch=?,github_webhook_secret_enc=?,github_webhook_enabled=?,github_webhook_updated_at=NOW() WHERE device_id=? AND site_id=?`,cloneURL,branch,webhookSecret,webhookEnabled,in.DeviceID,in.SiteID);err==nil{
-			_,err=tx.ExecContext(r.Context(),`INSERT INTO project_repository_sites(project_id,device_id,site_id,auto_deploy_enabled,deploy_branch,previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc) VALUES(?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE auto_deploy_enabled=VALUES(auto_deploy_enabled),deploy_branch=VALUES(deploy_branch)`,projectID,in.DeviceID,in.SiteID,in.AutoDeploy,branch,nullableString(previousURL.String),previousBranch,previousWebhookEnabled,previousWebhookSecret)
+			_,err=tx.ExecContext(r.Context(),`INSERT INTO project_repository_sites(project_id,device_id,site_id,auto_deploy_enabled,deploy_branch,previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc,github_webhook_id) VALUES(?,?,?,?,?,?,?,?,?,NULLIF(?,0)) ON DUPLICATE KEY UPDATE auto_deploy_enabled=VALUES(auto_deploy_enabled),deploy_branch=VALUES(deploy_branch),github_webhook_id=VALUES(github_webhook_id)`,projectID,in.DeviceID,in.SiteID,in.AutoDeploy,branch,nullableString(previousURL.String),previousBranch,previousWebhookEnabled,previousWebhookSecret,hookID)
 		}
 		if err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not save repository deployment target"));return}
 		if err=tx.Commit();err!=nil{apiError(w,shared.ErrInternal("could not commit repository deployment target"));return}
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(userID),WorkspaceOwnerID:shared.PtrInt64(ownerID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"project_repository_site_connected",Details:map[string]interface{}{"project_id":projectID,"site_id":in.SiteID,"repository":fullName,"auto_deploy":in.AutoDeploy},IP:clientIP(r)})
-		resp:=map[string]interface{}{"ok":true,"device_id":in.DeviceID,"site_id":in.SiteID,"branch":branch,"auto_deploy_enabled":in.AutoDeploy,"webhook_path":fmt.Sprintf("/webhooks/github/%d/%s",in.DeviceID,in.SiteID)}
-		if secret!=""{resp["webhook_secret"]=secret;resp["webhook_secret_once"]=true}
+		if !in.AutoDeploy&&existingHookID>0{_ = s.deleteGitHubPushWebhook(ctx,token,owner,name,existingHookID)}
+		resp:=map[string]interface{}{"ok":true,"device_id":in.DeviceID,"site_id":in.SiteID,"branch":branch,"auto_deploy_enabled":in.AutoDeploy,"webhook_path":fmt.Sprintf("/webhooks/github/%d/%s",in.DeviceID,in.SiteID),"webhook_registered":hookRegistered}
+		if secret!=""&&!hookRegistered{resp["webhook_secret"]=secret;resp["webhook_secret_once"]=true}
 		writeJSON(w,http.StatusOK,resp)
 	case http.MethodDelete:
 		var in struct{DeviceID int64 `json:"device_id"`;SiteID string `json:"site_id"`}
