@@ -54,7 +54,7 @@ func TestUpdateCloudflareIngressRulesPreservesPathRulesAndCatchallOrder(t *testi
 		{"path":marshal("/api/*"),"service":marshal("http://127.0.0.1:9000")},
 		{"service":marshal("http_status:404")},
 	}
-	updated,changed,err:=updateCloudflareIngressRules(rules,"app.example.com","http://127.0.0.1:3000",false)
+	updated,changed,err:=updateCloudflareIngressRules(rules,"app.example.com","http://127.0.0.1:3000",false,false)
 	if err!=nil||!changed{t.Fatalf("add route changed=%v err=%v",changed,err)}
 	if len(updated)!=3{t.Fatalf("rules=%d, want 3",len(updated))}
 	var path,host string

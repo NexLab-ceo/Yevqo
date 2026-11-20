@@ -267,7 +267,7 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 		if err!=nil{
 			rollbackCtx,rollbackCancel:=context.WithTimeout(context.Background(),20*time.Second)
 			_ = deleteCloudflareTunnelDNS(rollbackCtx,token,zoneID,hostname,in.TunnelID)
-			_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,"",true)
+			_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,"",true,false)
 			rollbackCancel()
 			apiError(w,shared.ErrInternal("Cloudflare route was configured but could not be saved"));return
 		}
