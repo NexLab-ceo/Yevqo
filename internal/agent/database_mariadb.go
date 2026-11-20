@@ -67,12 +67,18 @@ func installMariaDBServer(req shared.InstallDatabaseServer) (*shared.DatabaseSer
 	if l, err := netListenLocal(req.Port); err != nil { return nil, err } else { _ = l.Close() }
 	var fs syscallStatfs
 	if getTermuxFreeSpace(prefix, &fs) && fs.available < 200*1024*1024 { return nil, fmt.Errorf("at least 200 MB of free storage is required") }
+	managedMarker := filepath.Join(dataDir, ".yevqo-managed-mariadb")
+	managedExisting := false
 	if info, err := os.Lstat(dataDir); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() { return nil, fmt.Errorf("MariaDB data path must be a real directory") }
 		entries, e := os.ReadDir(dataDir); if e != nil { return nil, e }
 		if len(entries) > 0 {
-			if _, e := os.Stat(filepath.Join(dataDir, "ibdata1")); e == nil { return nil, fmt.Errorf("an existing MariaDB data directory was detected; it was not modified") }
-			return nil, fmt.Errorf("MariaDB data directory is not empty; no files were changed")
+			markerInfo, markerErr := os.Lstat(managedMarker)
+			if markerErr != nil || markerInfo.Mode()&os.ModeSymlink != 0 || !markerInfo.Mode().IsRegular() { return nil, fmt.Errorf("an existing non-empty MariaDB data directory was detected; it was not modified") }
+			marker, markerErr := os.ReadFile(managedMarker)
+			if markerErr != nil || strings.TrimSpace(string(marker)) != strconv.FormatInt(req.ServerID, 10) { return nil, fmt.Errorf("MariaDB data directory belongs to a different or unknown server; it was not modified") }
+			if _, markerErr = os.Stat(filepath.Join(dataDir, "ibdata1")); markerErr != nil { return nil, fmt.Errorf("Yevqo-managed MariaDB data directory is incomplete; it was not modified") }
+			managedExisting = true
 		}
 	} else if !os.IsNotExist(err) { return nil, err }
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute); defer cancel()
@@ -88,8 +94,15 @@ func installMariaDBServer(req shared.InstallDatabaseServer) (*shared.DatabaseSer
 	if err := os.MkdirAll(filepath.Dir(dataDir), 0o700); err != nil { return nil, err }
 	args := []string{"--datadir=" + dataDir, "--auth-root-authentication-method=normal", "--skip-test-db"}
 	
-	out, err := exec.CommandContext(ctx, installDB, args...).CombinedOutput()
-	if err != nil { return nil, fmt.Errorf("MariaDB system-table initialization failed: %s", trimOutput(string(out))) }
+	if !managedExisting {
+		out, err := exec.CommandContext(ctx, installDB, args...).CombinedOutput()
+		if err != nil { return nil, fmt.Errorf("MariaDB system-table initialization failed: %s", trimOutput(string(out))) }
+		markerFile, err := os.OpenFile(managedMarker, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err != nil { return nil, fmt.Errorf("could not mark initialized MariaDB data directory: %w", err) }
+		_, writeErr := markerFile.WriteString(strconv.FormatInt(req.ServerID, 10)+"\n")
+		syncErr := markerFile.Sync(); closeErr := markerFile.Close()
+		if writeErr != nil { return nil, writeErr }; if syncErr != nil { return nil, syncErr }; if closeErr != nil { return nil, closeErr }
+	}
 	if err := startMariaDB(dataDir, req.Port, req.MaxConnections, req.SSLMode); err != nil { return nil, err }
 	cli, err := mariaCLI(); if err != nil { return nil, err }
 	versionOut, _ := exec.CommandContext(ctx, cli, "--version").CombinedOutput()
