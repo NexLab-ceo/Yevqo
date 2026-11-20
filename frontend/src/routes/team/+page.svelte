@@ -1,6 +1,6 @@
 <script>
  import { onMount } from 'svelte';
- import { listWorkspaces, listWorkspaceMembers, inviteWorkspaceMember, removeWorkspaceMember, listWorkspaceInvitations, acceptWorkspaceInvitation } from '$lib/api.js';
+ import { listWorkspaces, listWorkspaceMembers, inviteWorkspaceMember, removeWorkspaceMember, updateWorkspaceMemberRole, listWorkspaceInvitations, acceptWorkspaceInvitation } from '$lib/api.js';
  import { notify } from '$lib/stores.js';
  import Button from '$lib/components/Button.svelte';
 
@@ -30,6 +30,7 @@
   if(!r.ok){notify(r.error||'Не удалось отправить приглашение','error');return}
   email='';notify('Приглашение отправлено','success');await load();
  }
+ async function changeRole(member,nextRole){if(!currentWorkspace?.can_manage_members||!['admin','developer'].includes(nextRole)||member.role===nextRole)return;const previous=member.role;const r=await updateWorkspaceMemberRole(member.id,nextRole,selectedOwner);if(!r.ok){notify(r.error||'Не удалось изменить роль','error');return}member.role=nextRole;members=[...members];notify('Роль участника обновлена','success')}
  async function remove(member){
   if(!confirm('Удалить участника из workspace?'))return;
   const r=await removeWorkspaceMember(member.id,selectedOwner);
@@ -71,7 +72,7 @@
   {#each members as member (member.id)}
    <div class="member-row">
     <div class="member-main"><strong>{member.username}</strong><small>{member.email} · {member.status}</small></div>
-    <span class:admin={member.role==='admin'} class:developer={member.role==='developer'} class="role">{member.role}</span>
+    {#if currentWorkspace?.can_manage_members}<select class="input role-select" value={member.role} on:change={(event)=>changeRole(member,event.currentTarget.value)}><option value="admin">Admin</option><option value="developer">Developer</option></select>{:else}<span class:admin={member.role==='admin'} class:developer={member.role==='developer'} class="role">{member.role}</span>{/if}
     {#if currentWorkspace?.can_manage_members}<Button variant="ghost" size="sm" on:click={()=>remove(member)}>Удалить</Button>{/if}
    </div>
   {/each}
@@ -100,7 +101,7 @@
 <style>
 .eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}
 .panel{padding:16px;background:#101727;border:1px solid #253149;border-radius:11px;margin-bottom:12px}
-.panel h2{font-size:12px;margin-bottom:12px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.workspace-select{max-width:240px}
+.panel h2{font-size:12px;margin-bottom:12px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.workspace-select{max-width:240px}.role-select{width:118px;padding:5px 7px;font-size:9px}
 .member,.member-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #1e293b}
 .member-row:last-child{border-bottom:0}
 .avatar{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;background:#242b50;color:#c7d2fe;font-size:12px;font-weight:700}
