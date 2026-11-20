@@ -160,7 +160,16 @@ func (s *Server) handleProjectRepository(w http.ResponseWriter, r *http.Request)
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_repository_connected",Details:map[string]interface{}{"project_id":projectID,"repository":repository.FullName,"branch":branch},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"repository":map[string]interface{}{"integration_id":in.IntegrationID,"repository_id":repository.ID,"full_name":repository.FullName,"clone_url":repository.CloneURL,"web_url":repository.HTMLURL,"default_branch":repository.DefaultBranch,"branch":branch,"private":repository.Private,"language":repository.Language,"last_commit_sha":branchDetails.Commit.SHA}})
 	case http.MethodDelete:
-		if _,err:=s.db.conn.ExecContext(r.Context(),"DELETE FROM project_repositories WHERE project_id=?",projectID);err!=nil{apiError(w,shared.ErrInternal("could not disconnect project repository"));return}
+		tx,err:=s.db.conn.BeginTx(r.Context(),nil);if err!=nil{apiError(w,shared.ErrInternal("could not start repository disconnect"));return}
+		rows,err:=tx.QueryContext(r.Context(),`SELECT device_id,site_id,previous_git_url,previous_git_branch,previous_webhook_enabled,previous_webhook_secret_enc FROM project_repository_sites WHERE project_id=?`,projectID)
+		if err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not load linked deployment targets"));return}
+		type restoreTarget struct{deviceID int64;siteID string;gitURL sql.NullString;branch string;webhook bool;secret []byte}
+		targets:=make([]restoreTarget,0)
+		for rows.Next(){var item restoreTarget;if err:=rows.Scan(&item.deviceID,&item.siteID,&item.gitURL,&item.branch,&item.webhook,&item.secret);err!=nil{rows.Close();_=tx.Rollback();apiError(w,shared.ErrInternal("could not read linked deployment targets"));return};targets=append(targets,item)}
+		if err:=rows.Err();err!=nil{rows.Close();_=tx.Rollback();apiError(w,shared.ErrInternal("could not read linked deployment targets"));return};rows.Close()
+		for _,item:=range targets{if _,err=tx.ExecContext(r.Context(),`UPDATE sites SET git_url=?,git_branch=?,github_webhook_enabled=?,github_webhook_secret_enc=?,github_webhook_updated_at=NOW() WHERE device_id=? AND site_id=?`,nullableString(item.gitURL.String),item.branch,item.webhook,item.secret,item.deviceID,item.siteID);err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not restore linked site Git settings"));return}}
+		if _,err=tx.ExecContext(r.Context(),"DELETE FROM project_repositories WHERE project_id=?",projectID);err!=nil{_=tx.Rollback();apiError(w,shared.ErrInternal("could not disconnect project repository"));return}
+		if err=tx.Commit();err!=nil{apiError(w,shared.ErrInternal("could not commit repository disconnect"));return}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 	default: http.Error(w,"method not allowed",http.StatusMethodNotAllowed)
 	}
