@@ -26,7 +26,7 @@ type createDatabaseInput struct {
 	SiteID string `json:"site_id"`
 }
 
-func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request) {
+func serverDataDirectory(db *sql.DB, ctx context.Context, serverID, ownerID int64) string { var path string; _ = db.QueryRowContext(ctx, `SELECT data_directory FROM database_servers WHERE id=? AND user_id=?`, serverID, ownerID).Scan(&path); return path }\n\nfunc (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet { s.handleDatabases(w,r); return }
 	if r.Method != http.MethodPost { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
 	u:=UserFromContext(r.Context())
@@ -57,7 +57,7 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 		var assigned int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM project_environment_database_servers WHERE project_id=? AND environment_id=? AND database_server_id=?`,in.ProjectID,in.EnvironmentID,in.ServerID).Scan(&assigned);err!=nil||assigned!=1 { apiError(w,shared.ErrNotFound("database server is not assigned to this environment"));return }
 	}
-	if engine!="postgresql" { apiError(w,shared.ErrBadRequest("database creation currently supports PostgreSQL only"));return }
+	if engine!="postgresql" && engine!="mariadb" && engine!="mysql" { apiError(w,shared.ErrBadRequest("unsupported database engine"));return }
 	if status!="ready" { apiError(w,shared.ErrBadRequest("database server must be ready"));return }
 	if in.SiteID!="" {
 		if in.SiteDeviceID==0 { in.SiteDeviceID=deviceID }
@@ -79,7 +79,7 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 	res,err:=s.db.conn.ExecContext(ctx,`INSERT INTO db_instances(user_id,server_id,name,status) VALUES(?,?,?,'planned')`,ownerID,in.ServerID,in.Name)
 	if err!=nil { apiError(w,shared.ErrBadRequest("database name already exists or could not be reserved"));return }
 	databaseID,_:=res.LastInsertId()
-	cmdResult,err:=conn.SendCommand(ctx,"create_database",&shared.CreateDatabase{DatabaseID:databaseID,ServerID:in.ServerID,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)})
+	cmdResult,err:=conn.SendCommand(ctx,"create_database",&shared.CreateDatabase{Engine:engine,DataDirectory:serverDataDirectory(s.db.conn,ctx,in.ServerID,ownerID),DatabaseID:databaseID,ServerID:in.ServerID,Database:in.Name,Username:in.Username,Password:in.Password,Port:uint32(port)})
 	if err!=nil || !cmdResult.Ok {
 		_,_=s.db.conn.ExecContext(context.Background(),`UPDATE db_instances SET status='error' WHERE id=? AND user_id=?`,databaseID,ownerID)
 		if err!=nil { apiError(w,shared.ErrInternal("Agent database creation command failed"));return }
@@ -300,19 +300,19 @@ func (s *Server) handleDatabaseConnectionTest(w http.ResponseWriter,r *http.Requ
 	raw:=strings.TrimSuffix(strings.TrimPrefix(r.URL.Path,"/api/databases/"),"/test")
 	id,err:=strconv.ParseInt(strings.Trim(raw,"/"),10,64);if err!=nil||id<1{apiError(w,shared.ErrBadRequest("invalid database id"));return}
 	ownerID,_,_,accessErr:=s.authorizeDatabaseInstance(r.Context(),id,u.ID,"database.read");if accessErr!=nil{apiError(w,accessErr);return}
-	var name,serverStatus,databaseStatus,sslMode string;var deviceID int64;var port int;var username sql.NullString;var ciphertext,nonce []byte
-	err=s.db.conn.QueryRowContext(r.Context(),`SELECT d.name,ds.device_id,ds.port,ds.ssl_mode,ds.status,d.status,dc.username,dc.ciphertext,dc.nonce
+	var name,serverStatus,databaseStatus,sslMode,engine,dataDir string;var deviceID int64;var port int;var username sql.NullString;var ciphertext,nonce []byte
+	err=s.db.conn.QueryRowContext(r.Context(),`SELECT d.name,ds.device_id,ds.port,ds.ssl_mode,ds.status,d.status,dc.username,dc.ciphertext,dc.nonce,ds.engine,ds.data_directory
 		FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id
 		JOIN database_credentials dc ON dc.database_id=d.id
-		WHERE d.id=? AND d.user_id=?`,id,ownerID).Scan(&name,&deviceID,&port,&sslMode,&serverStatus,&databaseStatus,&username,&ciphertext,&nonce)
+		WHERE d.id=? AND d.user_id=?`,id,ownerID).Scan(&name,&deviceID,&port,&sslMode,&serverStatus,&databaseStatus,&username,&ciphertext,&nonce,&engine,&dataDir)
 	if err==sql.ErrNoRows{apiError(w,shared.ErrNotFound("database credentials not found"));return}
 	if err!=nil{apiError(w,shared.ErrInternal("could not load database connection"));return}
 	if databaseStatus!="ready"||serverStatus!="ready"||!username.Valid{apiError(w,shared.ErrBadRequest("database and server must be ready"));return}
 	password,err:=decryptCredential(s.credentialKey,nonce,ciphertext);if err!=nil{apiError(w,shared.ErrInternal("could not decrypt database credentials"));return}
 	conn,online:=s.hub.Get(deviceID);if !online{apiError(w,shared.ErrBadRequest("device is offline"));return}
 	ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
-	result,err:=conn.SendCommand(ctx,"test_database_connection",&shared.TestDatabaseConnection{DatabaseID:id,Database:name,Username:username.String,Password:string(password),Port:uint32(port),SSLMode:sslMode})
+	result,err:=conn.SendCommand(ctx,"test_database_connection",&shared.TestDatabaseConnection{Engine:engine,DataDirectory:dataDir,DatabaseID:id,Database:name,Username:username.String,Password:string(password),Port:uint32(port),SSLMode:sslMode})
 	if err!=nil{apiError(w,shared.ErrInternal("database connection test command failed"));return}
 	if !result.Ok{apiError(w,shared.ErrBadRequest(result.Message));return}
-	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"message":"PostgreSQL connection test succeeded"})
+	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"message":engine+" connection test succeeded"})
 }
