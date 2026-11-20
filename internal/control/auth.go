@@ -40,6 +40,16 @@ func CheckPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
+// validateAccountPassword keeps registration and password changes on one policy.
+// bcrypt only considers the first 72 bytes, so longer passwords are rejected
+// rather than silently hashing an ambiguous prefix.
+func validateAccountPassword(password string) error {
+	if len(password) < 12 || len(password) > 72 || strings.TrimSpace(password) != password {
+		return shared.ErrBadRequest("password must be 12-72 bytes and have no leading or trailing spaces")
+	}
+	return nil
+}
+
 // ============================================================
 // ГЕНЕРАЦИЯ ТОКЕНОВ
 // ============================================================
@@ -206,8 +216,8 @@ func (srv *Server) Register(ctx context.Context, in RegisterInput) (*shared.User
 	if !strings.Contains(in.Email, "@") {
 		return nil, shared.ErrBadRequest("invalid email")
 	}
-	if len(in.Password) < 6 {
-		return nil, shared.ErrBadRequest("password must be at least 6 chars")
+	if err := validateAccountPassword(in.Password); err != nil {
+		return nil, err
 	}
 
 	hash, err := HashPassword(in.Password)
