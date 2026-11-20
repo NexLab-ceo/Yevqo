@@ -6,7 +6,7 @@
  $: ru=$locale!=='en';
  async function load(){const r=await listNotifications();if(r.ok)items=r.data.notifications||[];else notify(r.error||(ru?'Не удалось загрузить уведомления':'Could not load notifications'),'error');loading=false}
  onMount(load);
- async function mark(item){const r=await markNotificationRead(item.id);if(r.ok){item.read_at=new Date().toISOString();items=[...items]}else notify(r.error||'{ru?'Ошибка':'Error'},'error')}
+ async function mark(item){const r=await markNotificationRead(item.id);if(r.ok){item.read_at=new Date().toISOString();items=[...items]}else notify(r.error||(ru?'Ошибка':'Error'),'error')}
 </script>
 <div class="page-header"><div><div class="eyebrow">OPERATIONS</div><h1 class="page-title">{ru?'Уведомления':'Notifications'}</h1><p class="page-desc">{ru?'Системные события и уведомления аккаунта.':'System events and account notifications.'}</p></div><Button on:click={load}>{ru?'↻ Обновить':'↻ Refresh'}</Button></div>
 {#if loading}<div class="empty">{ru?'Загрузка…':'Loading…'}</div>{:else if !items.length}<div class="empty">{ru?'Новых уведомлений нет.':'No notifications yet.'}</div>{:else}<div class="notification-list">{#each items as item}<article class:unread={!item.read_at} class="notification"><span class="notification-dot"></span><div class="notification-copy"><strong>{item.title}</strong><span class="notification-type">{item.type}</span><p>{item.body}</p><small>{formatDate(item.created_at)}</small></div>{#if !item.read_at}<Button size="sm" on:click={()=>mark(item)}>{ru?'Прочитано':'Mark read'}</Button>{:else}<span class="read-label">{ru?'Прочитано':'Read'}</span>{/if}</article>{/each}</div>{/if}
