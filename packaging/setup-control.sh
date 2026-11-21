@@ -98,15 +98,51 @@ if [ ! -s "$SHARE/public/index.html" ]; then
 fi
 log "Updating Control Plane frontend from $SHARE/public"
 cp -a "$SHARE/public/." "$DATA_ROOT/public/"
+# Keep GitHub App metadata separate from the PEM private key. The package setup
+# never overwrites either file; the service loads them on every start.
+GITHUB_CONFIG_DIR="$PREFIX/etc/yevqo"
+GITHUB_ENV_FILE="$GITHUB_CONFIG_DIR/github-app.env"
+GITHUB_KEY_FILE="$GITHUB_CONFIG_DIR/github-app.pem"
+mkdir -p "$GITHUB_CONFIG_DIR"
+chmod 700 "$GITHUB_CONFIG_DIR"
+if [ ! -e "$GITHUB_ENV_FILE" ]; then
+  cat > "$GITHUB_ENV_FILE" <<'ENV'
+# Yevqo GitHub App server configuration (no private key in this file).
+YEVQO_GITHUB_APP_ID=
+YEVQO_GITHUB_APP_SLUG=
+# Optional public HTTPS origin; enables automatic push webhook management.
+YEVQO_PUBLIC_URL=
+ENV
+  chmod 600 "$GITHUB_ENV_FILE"
+fi
+if [ -f "$GITHUB_KEY_FILE" ]; then chmod 600 "$GITHUB_KEY_FILE"; fi
+
 mkdir -p "$SERVICE_DIR"
 cat > "$SERVICE_DIR/run" <<'RUN'
 #!/data/data/com.termux/files/usr/bin/sh
-set -e
+set -eu
 exec 2>&1
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 BIN="$PREFIX/bin/yevqo-control"
 DATA_ROOT="${YEVQO_DATA_ROOT:-${VELTRIX_DATA_ROOT:-/sdcard/yevqo}}"
+GITHUB_CONFIG_DIR="$PREFIX/etc/yevqo"
+GITHUB_ENV_FILE="$GITHUB_CONFIG_DIR/github-app.env"
+GITHUB_KEY_FILE="$GITHUB_CONFIG_DIR/github-app.pem"
 [ -x "$BIN" ] || { echo "Control Plane binary missing: $BIN"; exit 1; }
+
+# The env file contains only non-secret identifiers and the optional public URL.
+if [ -f "$GITHUB_ENV_FILE" ]; then
+  set -a
+  . "$GITHUB_ENV_FILE"
+  set +a
+fi
+# Load the PEM only into the service process environment; never print it.
+if [ -s "$GITHUB_KEY_FILE" ]; then
+  YEVQO_GITHUB_APP_PRIVATE_KEY="$(cat "$GITHUB_KEY_FILE")"
+  export YEVQO_GITHUB_APP_PRIVATE_KEY
+else
+  unset YEVQO_GITHUB_APP_PRIVATE_KEY 2>/dev/null || true
+fi
 exec "$BIN" -data "$DATA_ROOT"
 RUN
 chmod 700 "$SERVICE_DIR/run"
