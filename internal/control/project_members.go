@@ -13,11 +13,11 @@ func (s *Server) handleProjectMembers(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
 	if user == nil { apiError(w, shared.ErrUnauthorized("not logged in")); return }
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/projects/"), "/"), "/")
-	if len(parts) < 3 || parts[1] != "members" { http.NotFound(w, r); return }
+	if len(parts) < 2 || parts[1] != "members" { http.NotFound(w, r); return }
 	projectID, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil || projectID < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
 
-	if len(parts) == 3 && r.Method == http.MethodGet {
+	if len(parts) == 2 && r.Method == http.MethodGet {
 		ownerID, err := s.authorizeProjectOwner(r.Context(), projectID, user.ID, "project.read")
 		if err != nil { apiError(w, err); return }
 		var ownerName, ownerEmail string
@@ -45,7 +45,7 @@ func (s *Server) handleProjectMembers(w http.ResponseWriter, r *http.Request) {
 
 	ownerID, err := s.authorizeProjectOwner(r.Context(), projectID, user.ID, "project.manage")
 	if err != nil { apiError(w, err); return }
-	if len(parts) == 3 && r.Method == http.MethodPost {
+	if len(parts) == 2 && r.Method == http.MethodPost {
 		var in struct { UserID int64 `json:"user_id"`; Role string `json:"role"` }
 		if err := decodeJSON(r,&in); err != nil || in.UserID < 1 { apiError(w, shared.ErrBadRequest("invalid project member")); return }
 		in.Role = strings.ToLower(strings.TrimSpace(in.Role))
@@ -61,8 +61,8 @@ func (s *Server) handleProjectMembers(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 		return
 	}
-	if len(parts) == 4 && r.Method == http.MethodDelete {
-		memberID, parseErr := strconv.ParseInt(parts[3],10,64)
+	if len(parts) == 3 && r.Method == http.MethodDelete {
+		memberID, parseErr := strconv.ParseInt(parts[2],10,64)
 		if parseErr != nil || memberID < 1 || memberID == ownerID { apiError(w, shared.ErrBadRequest("invalid project member id")); return }
 		res, err := s.db.conn.ExecContext(r.Context(),"DELETE FROM project_members WHERE project_id=? AND member_user_id=?",projectID,memberID)
 		if err != nil { apiError(w, shared.ErrInternal("could not remove project member role")); return }
