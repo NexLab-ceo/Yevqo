@@ -90,6 +90,28 @@ func githubAppRequest(ctx context.Context, method, endpoint, jwt string, body io
 	return integrationHTTPClient.Do(req)
 }
 
+// githubAppVerificationMessage maps internal failures to actionable, credential-safe diagnostics.
+func githubAppVerificationMessage(err error) string {
+	if err == nil { return "GitHub App installation verification failed" }
+	message := err.Error()
+	switch {
+	case strings.Contains(message, "provider returned HTTP 401"):
+		return "GitHub rejected the App JWT (HTTP 401). Check that the App ID matches the App that generated the private key."
+	case strings.Contains(message, "provider returned HTTP 404"):
+		return "GitHub could not find this installation (HTTP 404). Check the installation ID and that the App is installed for this account."
+	case strings.Contains(message, "provider returned HTTP 403"):
+		return "GitHub denied access to this App installation (HTTP 403). Check the App and installation permissions."
+	case strings.Contains(message, "installation does not belong to this GitHub App"):
+		return "The installation belongs to a different GitHub App. Check the configured App ID and installation ID."
+	case strings.Contains(message, "not valid PEM"), strings.Contains(message, "could not parse GitHub App RSA private key"), strings.Contains(message, "must be RSA"):
+		return "The configured GitHub App private key could not be parsed. Upload the private key generated for this App."
+	case strings.Contains(message, "provider returned HTTP 429"):
+		return "GitHub API rate limit reached (HTTP 429). Try connecting again later."
+	default:
+		return "Could not reach or verify the GitHub App installation. Check network access and the App configuration."
+	}
+}
+
 func githubAppInstallationToken(ctx context.Context, credentials githubAppCredentials) (string, string, error) {
 	if err := validateGitHubAppCredentials(credentials); err != nil { return "", "", err }
 	appID, _ := strconv.ParseInt(credentials.AppID, 10, 64)
