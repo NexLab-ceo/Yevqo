@@ -3,6 +3,7 @@ package control
 import (
 	"bufio"
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -66,7 +67,7 @@ func integrationDNSServers() []string {
 	return nil
 }
 
-func parseIntegrationResolverConfig(file *os.File) []string {
+func parseIntegrationResolverConfig(file io.Reader) []string {
 	var servers []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
