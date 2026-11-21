@@ -178,15 +178,22 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 				apiError(w, shared.ErrNotFound("application is not assigned to this project"))
 				return
 			}
-			var currentEnvironment int64
-			assignmentErr := s.db.conn.QueryRowContext(r.Context(), "SELECT environment_id FROM project_environment_sites WHERE project_id=? AND device_id=? AND site_id=? LIMIT 1", projectID, in.DeviceID, in.SiteID).Scan(&currentEnvironment)
-			if assignmentErr == nil && currentEnvironment != environmentID { apiError(w, shared.ErrBadRequest("application is already assigned to another environment in this project")); return }
-			if assignmentErr != nil && assignmentErr != sql.ErrNoRows { apiError(w, shared.ErrInternal("could not check application environment assignment")); return }
-			_, err = s.db.conn.ExecContext(r.Context(), "INSERT IGNORE INTO project_environment_sites(project_id,environment_id,device_id,site_id) VALUES(?,?,?,?)", projectID, environmentID, in.DeviceID, in.SiteID)
-			if err != nil {
-				apiError(w, shared.ErrInternal("could not assign application to environment"))
-				return
+			tx, txErr := s.db.conn.BeginTx(r.Context(), nil)
+			if txErr != nil { apiError(w, shared.ErrInternal("could not start application environment assignment")); return }
+			// Lock the site row so simultaneous requests cannot assign the same
+			// application to two environments within this project.
+			var lockedSite int64
+			if lockErr := tx.QueryRowContext(r.Context(), "SELECT id FROM sites WHERE device_id=? AND site_id=? FOR UPDATE", in.DeviceID, in.SiteID).Scan(&lockedSite); lockErr != nil {
+				_ = tx.Rollback(); apiError(w, shared.ErrNotFound("application not found")); return
 			}
+			var currentEnvironment int64
+			assignmentErr := tx.QueryRowContext(r.Context(), "SELECT environment_id FROM project_environment_sites WHERE project_id=? AND device_id=? AND site_id=? LIMIT 1 FOR UPDATE", projectID, in.DeviceID, in.SiteID).Scan(&currentEnvironment)
+			if assignmentErr == nil && currentEnvironment != environmentID { _ = tx.Rollback(); apiError(w, shared.ErrBadRequest("application is already assigned to another environment in this project")); return }
+			if assignmentErr != nil && assignmentErr != sql.ErrNoRows { _ = tx.Rollback(); apiError(w, shared.ErrInternal("could not check application environment assignment")); return }
+			if _, err = tx.ExecContext(r.Context(), "INSERT IGNORE INTO project_environment_sites(project_id,environment_id,device_id,site_id) VALUES(?,?,?,?)", projectID, environmentID, in.DeviceID, in.SiteID); err != nil {
+				_ = tx.Rollback(); apiError(w, shared.ErrInternal("could not assign application to environment")); return
+			}
+			if err = tx.Commit(); err != nil { apiError(w, shared.ErrInternal("could not commit application environment assignment")); return }
 			_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"project_environment_site_attached",Details:map[string]interface{}{"project_id":projectID,"environment_id":environmentID,"device_id":in.DeviceID,"site_id":in.SiteID},IP:clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 		case http.MethodDelete:
