@@ -405,7 +405,7 @@
         if (action === 'start') {
             res = await sendCommand(deviceId, 'start_site', {
                 site_id: site.site_id, path: site.path, port: site.port, runtime: site.runtime
-            });
+            }, projectId);
         } else {
             res = await runSiteCommand(deviceId, siteId, action, action === 'deploy' || action === 'rebuild' ? allowDeployCode : false, '', action === 'deploy' || action === 'rebuild' ? deployCommit.trim() : '', projectId, environmentId);
         }
