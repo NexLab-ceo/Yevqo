@@ -10,7 +10,7 @@ import (
 
 func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 	templates := ListAppTemplates()
-	if len(templates) != 8 {
+	if len(templates) != 7 {
 		t.Fatalf("template catalog has %d entries, want 7", len(templates))
 	}
 	want := map[string]string{
@@ -18,7 +18,6 @@ func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 		"php-api":"index.php",
 		"nodejs-http":"server.js",
 		"nodejs-api":"server.js",
-		"nextjs-app":"app/page.js",
 		"static-site":"index.html",
 		"go-http":"main.go",
 		"custom-app":"",
