@@ -142,6 +142,9 @@ Before finishing every task:
 
 ### Progress history
 
+- 2026-11-21 — Fixed the Debian all-in-one package Control Plane UI refresh: `packaging/setup-control.sh` now reads frontend assets from `$PREFIX/share/yevqo/public`, validates the packaged `index.html`, and copies the current bundle into the configured `$DATA_ROOT/public` served by Control Plane. Deliberately does not copy packaged migrations during setup, because server startup can auto-apply pending migrations to the existing database. Shell/CI verification is pending; no production device, database, or deployment was changed.
+
+
 - 2026-11-20 — Began Control Panel product-spec implementation on `main`: consolidated global navigation to Overview, Projects, Deployments, Logs, Devices and Settings; restored the canonical dark-green Yevqo design tokens and shell styling. Existing routes and APIs are preserved. Visual/build verification pending; global search, complete EN/RU coverage and official GitHub App installation callback remain open. The dedicated `/overview` route now reads real projects/devices/sites; active deployment count is explicitly unavailable until the API exposes active jobs.
 
 - 2026-11-20 — Unified registration and password-change validation: passwords must be 12–72 bytes, cannot have leading/trailing whitespace, and are validated consistently before bcrypt hashing. Updated registration UI and added boundary/UTF-8 tests. Existing accounts and stored hashes are untouched; CI verification is pending.
