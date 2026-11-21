@@ -11,6 +11,10 @@ trap 'rm -rf "$TMP"' EXIT
 command -v curl >/dev/null || { echo "Install curl: pkg install curl" >&2; exit 1; }
 command -v jq >/dev/null || { echo "Install jq: pkg install jq" >&2; exit 1; }
 command -v dpkg-deb >/dev/null || { echo "dpkg-deb is unavailable" >&2; exit 1; }
+if ! dpkg-query -W -f='${Status}' coreutils 2>/dev/null | grep -q 'install ok installed'; then
+  command -v pkg >/dev/null || { echo "Install coreutils: pkg install coreutils" >&2; exit 1; }
+  pkg install -y coreutils
+fi
 [ "$(uname -m)" = "aarch64" ] || { echo "Yevqo requires Android ARM64" >&2; exit 1; }
 
 CURRENT="$(dpkg-query -W -f='${Version}' "$PACKAGE" 2>/dev/null || true)"
