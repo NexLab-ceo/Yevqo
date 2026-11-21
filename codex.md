@@ -105,7 +105,7 @@ This is a conservative starting snapshot based on the repository documentation a
 | Phase / area | Initial status | Notes |
 |---|---|---|
 | P0 — Go Control Plane and Agent foundation | PARTIAL | Core services and Android/Termux packaging are present; re-check full install/upgrade and device runtime coverage. |
-| P0 — Android package build and CI | PARTIAL | The previous full build passed at `755e16f`; this task changes package contents and cross-repository release publishing. Re-run the current build workflow to verify both packages, checksum generation and release upload. Physical Android startup remains tracked separately under P3. |
+| P0 — Android package build and CI | PARTIAL | Android packages and setup scripts are present. Setup launchers now switch to a stable Termux working directory before setup; this prevents a legacy data-root migration or package operation from leaving child service commands in a deleted cwd. Shell/CI and physical Android startup verification remain pending. |
 | P0 — Automatic package updates and VELTRIX Dock releases | PARTIAL | Both package updaters now target the public `NexLab-ceo/veltrix-dock` releases, compare installed versions, verify SHA-256/package metadata and install newer `.deb` files. Debian post-install enables a six-hour Termux updater service. The build workflow publishes both packages and `SHA256SUMS` on version tags using `PUBLIC_RELEASE_TOKEN`; token permissions, current CI, first release and physical Android/background execution remain unverified. |
 | P0 — Agent pairing token separation | PARTIAL | Dedicated 256-bit random token is issued from Profile, stored only as SHA-256, and checked by WebSocket auth; public referral codes remain for referrals. Rotation revokes the previous token. Existing Agent configs must be re-paired; physical-device verification and multi-device token management remain open. |
 | P0 — Account password policy | PARTIAL | Registration and password changes now share a 12–72 byte policy; bcrypt's 72-byte limit and leading/trailing whitespace are enforced. Unit coverage added; full CI verification pending. Existing password hashes and accounts are unchanged. |
@@ -142,6 +142,8 @@ Before finishing every task:
 7. Keep the ledger concise and current. Do not append repetitive logs; update existing rows and add only meaningful history entries.
 
 ### Progress history
+
+- 2026-11-21 — Fixed a Termux installer working-directory hazard on `main`: the combined, Control Plane and Agent setup scripts now move to `$HOME` (or `$PREFIX`) before performing setup, so a data-root migration cannot leave subsequent `sv`/service commands running from a directory that was moved. Also moved Control Plane log helpers before the legacy migration branch so migration diagnostics are callable. Existing configs and database data are preserved; shell/CI and physical-device verification remain pending.
 
 - 2026-11-21 — Added periodic Termux package updates for both Yevqo editions, public VELTRIX Dock release lookup, SHA-256 and Debian metadata validation, non-interactive package installation, and service restarts. The build workflow now publishes both packages plus checksums to `NexLab-ceo/veltrix-dock` for version tags. CI, cross-repository token permissions, first published release and physical Android validation remain pending; no device or production database was changed.
 
