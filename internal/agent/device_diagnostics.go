@@ -13,6 +13,7 @@ import (
 
 type packageInfo struct { Installed bool `json:"installed"`; Version string `json:"version,omitempty"` }
 type deviceDiagnostics struct {
+ LocalIP string `json:"local_ip,omitempty"`
  BatteryPercent *int `json:"battery_percent,omitempty"`
  BatteryStatus string `json:"battery_status,omitempty"`
  DeviceUptimeSeconds int64 `json:"device_uptime_seconds,omitempty"`
@@ -75,8 +76,15 @@ func readListeningPorts() []int {
  return out
 }
 
+func primaryLocalIP() string {
+ addrs,err:=net.InterfaceAddrs();if err!=nil{return ""}
+ for _,addr:=range addrs { ipnet,ok:=addr.(*net.IPNet);if !ok||ipnet.IP.IsLoopback(){continue};if ip4:=ipnet.IP.To4();ip4!=nil{return ip4.String()} }
+ return ""
+}
+
 func collectDeviceDiagnostics() deviceDiagnostics {
  return deviceDiagnostics{
+  LocalIP:primaryLocalIP(),
   BatteryPercent: func()*int{v,_:=readBattery();return v}(),
   BatteryStatus: func()string{_,v:=readBattery();return v}(),
   DeviceUptimeSeconds:readDeviceUptime(),
