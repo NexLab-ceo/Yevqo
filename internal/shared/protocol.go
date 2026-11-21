@@ -209,6 +209,7 @@ type SiteBackupResult struct {
 }
 
 type GetDeviceDiagnostics struct{}
+type RestartAgent struct{}
 type CheckDevicePort struct { Port int `json:"port"` }
 
 type GetMetrics struct{}
