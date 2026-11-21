@@ -161,6 +161,8 @@ Before finishing every task:
 
 - 2026-11-21 — Corrected environment-variable and project-member endpoint path segment parsing (`6c411a9`, `a55caf1`), so GET/POST/DELETE member operations and per-environment variable CRUD route to the intended handlers. Added per-environment resource counts (applications, database servers, database instances) to the environments API and Overview (`e8f3be9`, `4ef921d`), using one aggregate response instead of N+1 frontend requests. The newest count/UI build is running; previous route-fix CI passed.
 
+- 2026-11-21 — Final UI/summary polish: Project Activity now displays useful resource context for audit and operational entries (`3d4eb1b`); environment resource counts are localized for Russian users (`2bf8e0e`). The previous revision `3d4eb1b` passed Go tests, Android/ARM64 compilation, Svelte/Vite frontend build and package verification. The localized final commit's CI is still running.
+
 ### Progress history
 
 - 2026-11-21 — Fixed the integration HTTP client's DNS selection on `main`: outbound GitHub/GitLab/Cloudflare integration requests now use Go's resolver with DNS servers read from Termux `$PREFIX/etc/resolv.conf`, with `/etc/resolv.conf` fallback outside Termux. Added parser tests for IPv4/IPv6 nameservers and invalid/empty entries. This targets the reproduced `lookup api.github.com on [::1]:53: connection refused` failure; Go CI and a fresh physical Android GitHub App connection attempt are still required before marking it verified. No GitHub App credentials or database records were changed.
