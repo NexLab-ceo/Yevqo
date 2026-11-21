@@ -32,7 +32,11 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 	if len(parts) == 2 {
 		switch r.Method {
 		case http.MethodGet:
-			rows, err := s.db.conn.QueryContext(r.Context(), "SELECT id,name,slug,description,is_protected,created_at,updated_at FROM project_environments WHERE project_id=? ORDER BY CASE slug WHEN 'production' THEN 0 WHEN 'development' THEN 1 WHEN 'staging' THEN 2 ELSE 3 END,name", projectID)
+			rows, err := s.db.conn.QueryContext(r.Context(), `SELECT e.id,e.name,e.slug,e.description,e.is_protected,e.created_at,e.updated_at,
+				(SELECT COUNT(*) FROM project_environment_sites es WHERE es.project_id=e.project_id AND es.environment_id=e.id),
+				(SELECT COUNT(*) FROM project_environment_database_servers eds WHERE eds.project_id=e.project_id AND eds.environment_id=e.id),
+				(SELECT COUNT(*) FROM project_environment_databases edb WHERE edb.project_id=e.project_id AND edb.environment_id=e.id)
+				FROM project_environments e WHERE e.project_id=? ORDER BY CASE e.slug WHEN 'production' THEN 0 WHEN 'development' THEN 1 WHEN 'staging' THEN 2 ELSE 3 END,e.name`, projectID)
 			if err != nil {
 				apiError(w, shared.ErrInternal("could not load project environments"))
 				return
@@ -44,11 +48,12 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 				var name, slug, description string
 				var protected bool
 				var created, updated interface{}
-				if err := rows.Scan(&id, &name, &slug, &description, &protected, &created, &updated); err != nil {
+				var applications, databaseServers, databases int
+				if err := rows.Scan(&id, &name, &slug, &description, &protected, &created, &updated, &applications, &databaseServers, &databases); err != nil {
 					apiError(w, shared.ErrInternal("could not read project environments"))
 					return
 				}
-				items = append(items, map[string]interface{}{"id": id, "name": name, "slug": slug, "description": description, "is_protected": protected, "created_at": created, "updated_at": updated})
+				items = append(items, map[string]interface{}{"id": id, "name": name, "slug": slug, "description": description, "is_protected": protected, "created_at": created, "updated_at": updated, "application_count": applications, "database_server_count": databaseServers, "database_count": databases})
 			}
 			if err := rows.Err(); err != nil {
 				apiError(w, shared.ErrInternal("could not read project environments"))
