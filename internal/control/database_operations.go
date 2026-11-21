@@ -104,9 +104,8 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) siteEnvironmentScope(ctx context.Context, userID, deviceID int64, siteID string) (int64, int64, error) {
-	var connections int
-	if err := s.db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM site_database_connections WHERE user_id=? AND device_id=? AND site_id=?`, userID, deviceID, siteID).Scan(&connections); err != nil { return 0, 0, err }
-	if connections == 0 { return 0, 0, nil }
+	// Environment scope applies to every application, not only applications
+	// with a database connection: project-level ENV values must also load.
 	rows, err := s.db.conn.QueryContext(ctx, `SELECT es.project_id,es.environment_id FROM project_environment_sites es
 		JOIN projects p ON p.id=es.project_id WHERE p.user_id=? AND es.device_id=? AND es.site_id=?
 		ORDER BY es.project_id,es.environment_id LIMIT 2`, userID, deviceID, siteID)
