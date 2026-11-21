@@ -52,3 +52,22 @@ func TestParsePayloadAgentControlActions(t *testing.T) {
   })
  }
 }
+
+
+func TestParsePayloadDeviceDiagnosticsActions(t *testing.T) {
+ cases:=[]struct{action,raw string;want any}{
+  {"get_device_diagnostics",`{}`,&shared.GetDeviceDiagnostics{}},
+  {"check_device_port",`{"port":8080}`,&shared.CheckDevicePort{}},
+  {"restart_agent",`{}`,&shared.RestartAgent{}},
+  {"update_agent",`{}`,&struct{}{}},
+ }
+ for _,tc:=range cases{t.Run(tc.action,func(t *testing.T){
+  got,err:=parsePayload(tc.action,json.RawMessage(tc.raw));if err!=nil{t.Fatal(err)}
+  switch tc.want.(type){
+  case *shared.GetDeviceDiagnostics:if _,ok:=got.(*shared.GetDeviceDiagnostics);!ok{t.Fatalf("payload type %T",got)}
+  case *shared.CheckDevicePort:if _,ok:=got.(*shared.CheckDevicePort);!ok{t.Fatalf("payload type %T",got)}
+  case *shared.RestartAgent:if _,ok:=got.(*shared.RestartAgent);!ok{t.Fatalf("payload type %T",got)}
+  case *struct{}:if _,ok:=got.(*struct{});!ok{t.Fatalf("payload type %T",got)}
+  }
+ })}
+}
