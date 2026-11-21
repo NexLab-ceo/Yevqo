@@ -10,7 +10,7 @@ import (
 
 func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 	templates := ListAppTemplates()
-	if len(templates) != 7 {
+	if len(templates) != 8 {
 		t.Fatalf("template catalog has %d entries, want 7", len(templates))
 	}
 	want := map[string]string{
@@ -18,6 +18,7 @@ func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 		"php-api":"index.php",
 		"nodejs-http":"server.js",
 		"nodejs-api":"server.js",
+		"nextjs-app":"app/page.js",
 		"static-site":"index.html",
 		"go-http":"main.go",
 		"custom-app":"",
@@ -58,6 +59,16 @@ func TestAppTemplateCatalogAndScaffolding(t *testing.T) {
 			if template.ID == "nodejs-api" && !strings.Contains(string(content), "/health") {
 				t.Fatal("Node.js API starter is missing its health endpoint")
 			}
+		}
+		if template.ID == "nextjs-app" {
+			for _, name := range []string{"package.json", "app/page.js", "app/layout.js", "app/api/health/route.js", "next.config.mjs", ".gitignore"} {
+				if _, err := os.Stat(filepath.Join(siteRoot, name)); err != nil { t.Fatalf("Next.js starter file %s missing: %v", name, err) }
+			}
+			packageData, err := os.ReadFile(filepath.Join(siteRoot, "package.json"))
+			if err != nil { t.Fatal(err) }
+			var manifest struct { Scripts map[string]string `json:"scripts"` }
+			if err := json.Unmarshal(packageData, &manifest); err != nil { t.Fatal(err) }
+			if manifest.Scripts["build"] != "next build" || manifest.Scripts["start"] != "next start -H 127.0.0.1" { t.Fatalf("unexpected Next.js scripts: %#v", manifest.Scripts) }
 		}
 		if template.ID == "go-http" {
 			for _, name := range []string{"go.mod", "main.go"} {
