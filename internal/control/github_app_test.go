@@ -43,7 +43,9 @@ func TestGitHubAppVerificationMessageDoesNotExposeInternalErrors(t *testing.T) {
 		{"installation missing", "GitHub rejected App installation credentials: provider returned HTTP 404", "GitHub could not find this installation (HTTP 404). Check the installation ID and that the App is installed for this account."},
 		{"wrong app", "installation does not belong to this GitHub App", "The installation belongs to a different GitHub App. Check the configured App ID and installation ID."},
 		{"bad key", "could not parse GitHub App RSA private key", "The configured GitHub App private key could not be parsed. Upload the private key generated for this App."},
-		{"network", "dial tcp: private-network-detail", "Could not reach or verify the GitHub App installation. Check network access and the App configuration."},
+		{"network", "dial tcp: private-network-detail", "GitHub App verification failed during installation lookup. Check the App configuration and retry; internal details were withheld."},
+		{"installation token rejected", "could not create GitHub installation token: provider returned HTTP 422", "GitHub rejected the installation token creation request (HTTP 422). Recheck that the App is installed for the selected account and that its installation is active."},
+		{"TLS failure", "x509: certificate signed by unknown authority", "The Control Plane could not establish a trusted TLS connection to GitHub. Check the device date, certificate store and network filtering."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
