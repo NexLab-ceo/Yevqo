@@ -277,9 +277,9 @@ func (s *Server) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	out:=make([]auditView,0,limit)
 	for _,ownerID:=range owners {
-		role,allowed,roleErr:=s.db.WorkspaceRole(r.Context(),ownerID,user.ID)
+		role,roleErr:=s.projectAccessRole(r.Context(),projectID,user.ID,ownerID)
 		if roleErr!=nil{apiError(w,roleErr);return}
-		if !allowed||!CanWorkspaceAction(role,"audit.read"){continue}
+		if !CanWorkspaceAction(role,"audit.read"){continue}
 		query:=`SELECT a.id,a.workspace_owner_id,a.actor_user_id,a.target_type,a.target_id,a.action,a.outcome,a.request_id,a.ip,a.details,a.created_at,COALESCE(d.hostname,'')
 			FROM audit_logs a LEFT JOIN devices d ON a.target_type='device' AND d.id=CAST(a.target_id AS UNSIGNED)
 			WHERE a.workspace_owner_id=?`
