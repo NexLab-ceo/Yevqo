@@ -523,6 +523,12 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=?`
 	args := []interface{}{ownerID}
 	if projectID > 0 {
+		query = `SELECT l.id,l.action,l.details,l.ip,l.created_at,COALESCE(d.hostname,'')
+			FROM logs l LEFT JOIN devices d ON d.id=l.device_id
+			WHERE (l.user_id=? OR l.user_id IN (SELECT wm.member_user_id FROM workspace_members wm WHERE wm.owner_user_id=? AND wm.status='active'))`
+		args = []interface{}{ownerID, ownerID}
+	}
+	if projectID > 0 {
 		query += ` AND (EXISTS (SELECT 1 FROM project_devices pd WHERE pd.project_id=? AND pd.device_id=l.device_id)
 			OR EXISTS (SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=l.device_id)
 			OR (l.device_id IS NULL AND CAST(JSON_UNQUOTE(JSON_EXTRACT(l.details,'$.project_id')) AS UNSIGNED)=?))`
