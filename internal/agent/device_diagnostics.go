@@ -6,6 +6,7 @@ import (
  "net"
  "os"
  "os/exec"
+ "os/exec"
  "strconv"
  "strings"
  "time"
@@ -20,6 +21,7 @@ type deviceDiagnostics struct {
  AgentUptimeSeconds int64 `json:"agent_uptime_seconds,omitempty"`
  ListeningPorts []int `json:"listening_ports"`
  Packages map[string]packageInfo `json:"packages"`
+ AgentLogs string `json:"agent_logs,omitempty"`
  CapturedAt time.Time `json:"captured_at"`
 }
 var agentStartedAt = time.Now()
@@ -82,6 +84,13 @@ func primaryLocalIP() string {
  return ""
 }
 
+func readAgentLogs() string {
+ prefix:=os.Getenv("PREFIX");if prefix==""{prefix="/data/data/com.termux/files/usr"}
+ service:="yevqo";if _,err:=os.Stat(prefix+"/var/service/yevqo");err!=nil{service="yevqo-agent"}
+ binary,err:=exec.LookPath("svlogtail");if err!=nil{return "svlogtail недоступен в PATH"}
+ out,err:=exec.Command(binary,service).CombinedOutput();text:=strings.TrimSpace(string(out));if len(text)>24000{text=text[len(text)-24000:]};if err!=nil&&text==""{return "Логи сервиса пока недоступны"};return text
+}
+
 func collectDeviceDiagnostics() deviceDiagnostics {
  return deviceDiagnostics{
   LocalIP:primaryLocalIP(),
@@ -96,6 +105,7 @@ func collectDeviceDiagnostics() deviceDiagnostics {
    "git":commandVersion("git","--version"),
    "cloudflared":commandVersion("cloudflared","--version"),
   },
+  AgentLogs:readAgentLogs(),
   CapturedAt:time.Now().UTC(),
  }
 }
