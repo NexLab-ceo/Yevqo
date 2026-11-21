@@ -18,7 +18,7 @@ import (
 // Config — настройки сервера (из config.json).
 type Config struct {
 	ListenAddr    string `json:"listen_addr"`     // ":8080"
-	DataRoot      string `json:"data_root"`       // "/sdcard/veltrix-control"
+	DataRoot      string `json:"data_root"`       // "/sdcard/yevqo"
 	StaticDir     string `json:"static_dir"`      // "public" (SvelteKit)
 	MySQLDSN      string `json:"mysql_dsn"`       // user:pass@tcp(...)/veltrix
 	AdminUsername string `json:"admin_username"`  // "maksim"

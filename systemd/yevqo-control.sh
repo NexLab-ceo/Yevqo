@@ -17,7 +17,7 @@ if [ ! -x "$BIN" ]; then
 fi
 
 # Корень данных (можно переопределить переменной окружения).
-DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/yevqo-control}"
+DATA_ROOT="${YEVQO_DATA_ROOT:-${VELTRIX_DATA_ROOT:-/sdcard/yevqo}}"
 
 echo "starting yevqo-control (data=$DATA_ROOT)"
 

@@ -17,7 +17,7 @@ import (
 // defaultConfig — значения по умолчанию.
 var defaultConfig = control.Config{
 	ListenAddr:    ":8080",
-	DataRoot:      "/sdcard/veltrix-control",
+	DataRoot:      "/sdcard/yevqo",
 	StaticDir:     "public",
 	MySQLDSN:      "veltrix:veltrix@tcp(127.0.0.1:3306)/veltrix?parseTime=true&charset=utf8mb4",
 	AdminUsername: "admin",
@@ -90,6 +90,17 @@ func loadConfig(path, dataRoot string) control.Config {
 	// Парсим.
 	if err := json.Unmarshal(b, &cfg); err != nil {
 		log.Fatalf("parse config: %v", err)
+	}
+
+	// An explicit -data flag is authoritative over a legacy config.json.
+	// Keep the existing absolute static path aligned with the migrated root.
+	if dataRoot != "" {
+		previousRoot := cfg.DataRoot
+		cfg.DataRoot = dataRoot
+		if cfg.StaticDir == filepath.Join(previousRoot, "public") ||
+			cfg.StaticDir == filepath.Join("/sdcard/veltrix-control", "public") {
+			cfg.StaticDir = filepath.Join(dataRoot, "public")
+		}
 	}
 
 	log.Printf("config loaded from %s", path)

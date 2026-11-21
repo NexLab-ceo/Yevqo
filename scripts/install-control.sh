@@ -26,7 +26,34 @@ if [ "$(uname -o)" != "Android" ]; then
     warn "not running on Android/Termux. Some steps may fail."
 fi
 
-DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
+DATA_ROOT="${YEVQO_DATA_ROOT:-${VELTRIX_DATA_ROOT:-/sdcard/yevqo}}"
+LEGACY_DATA_ROOT="/sdcard/veltrix-control"
+if [ ! -d /sdcard ]; then
+    err "Shared storage is unavailable. Run termux-setup-storage first."
+    exit 1
+fi
+if [ -z "${YEVQO_DATA_ROOT:-}" ] && [ -z "${VELTRIX_DATA_ROOT:-}" ] && [ -e "$LEGACY_DATA_ROOT" ]; then
+    if [ -L "$LEGACY_DATA_ROOT" ] || [ -L "$DATA_ROOT" ] || [ ! -d "$LEGACY_DATA_ROOT" ]; then
+        err "Unsafe legacy/new data-root path; refusing automatic migration."
+        exit 1
+    fi
+    if [ ! -e "$DATA_ROOT" ]; then
+        mv "$LEGACY_DATA_ROOT" "$DATA_ROOT"
+        log "Migrated Control Plane data to $DATA_ROOT"
+    elif [ ! -d "$DATA_ROOT" ]; then
+        err "New data root exists and is not a directory: $DATA_ROOT"
+        exit 1
+    elif [ -z "$(find "$DATA_ROOT" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        rmdir "$DATA_ROOT"
+        mv "$LEGACY_DATA_ROOT" "$DATA_ROOT"
+        log "Migrated Control Plane data to $DATA_ROOT"
+    elif [ -z "$(find "$LEGACY_DATA_ROOT" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+        warn "Legacy data directory is empty; leaving it in place."
+    else
+        err "Both legacy and new data roots contain data; refusing to merge or overwrite either."
+        exit 1
+    fi
+fi
 CONFIG_FILE="$DATA_ROOT/config/config.json"
 # Generate a strong database password only when creating a fresh config.
 # Existing configs and their database credentials are never overwritten.

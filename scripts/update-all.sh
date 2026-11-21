@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO="NexLab-ceo/veltrix"
 API="https://api.github.com/repos/$REPO/releases/latest"
-TOKEN_FILE="/sdcard/veltrix-control/config/github-token"
+TOKEN_FILE="/sdcard/yevqo/config/github-token"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

@@ -1,11 +1,38 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
+DATA_ROOT="${YEVQO_DATA_ROOT:-${VELTRIX_DATA_ROOT:-/sdcard/yevqo}}"
+LEGACY_DATA_ROOT="/sdcard/veltrix-control"
 if [ ! -d /sdcard ]; then
   echo "Shared storage is not available. Run termux-setup-storage and grant permission first." >&2
   exit 1
 fi
+
+# Move the legacy Control Plane directory only when the new destination is
+# absent or empty. Never merge/overwrite two populated data roots.
+if [ -z "${YEVQO_DATA_ROOT:-}" ] && [ -z "${VELTRIX_DATA_ROOT:-}" ] && [ -e "$LEGACY_DATA_ROOT" ]; then
+  if [ -L "$LEGACY_DATA_ROOT" ] || [ -L "$DATA_ROOT" ] || [ ! -d "$LEGACY_DATA_ROOT" ]; then
+    echo "Unsafe legacy/new data-root path; refusing automatic migration." >&2
+    exit 1
+  fi
+  if [ ! -e "$DATA_ROOT" ]; then
+    mv "$LEGACY_DATA_ROOT" "$DATA_ROOT"
+    log "Migrated Control Plane data to $DATA_ROOT"
+  elif [ ! -d "$DATA_ROOT" ]; then
+    echo "New data root exists and is not a directory: $DATA_ROOT" >&2
+    exit 1
+  elif [ -z "$(find "$DATA_ROOT" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+    rmdir "$DATA_ROOT"
+    mv "$LEGACY_DATA_ROOT" "$DATA_ROOT"
+    log "Migrated Control Plane data to $DATA_ROOT"
+  elif [ -z "$(find "$LEGACY_DATA_ROOT" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+    warn "Legacy data directory is empty; leaving it in place."
+  else
+    echo "Both $LEGACY_DATA_ROOT and $DATA_ROOT contain data. Refusing to merge or overwrite either directory; resolve them manually." >&2
+    exit 1
+  fi
+fi
+
 CONFIG_FILE="$DATA_ROOT/config/config.json"
 SERVICE_DIR="$PREFIX/var/service/yevqo-control"
 log(){ printf '==> %s\n' "$*"; }
@@ -89,7 +116,7 @@ set -e
 exec 2>&1
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 BIN="$PREFIX/bin/yevqo-control"
-DATA_ROOT="${VELTRIX_DATA_ROOT:-/sdcard/veltrix-control}"
+DATA_ROOT="${YEVQO_DATA_ROOT:-${VELTRIX_DATA_ROOT:-/sdcard/yevqo}}"
 [ -x "$BIN" ] || { echo "Control Plane binary missing: $BIN"; exit 1; }
 exec "$BIN" -data "$DATA_ROOT"
 RUN
