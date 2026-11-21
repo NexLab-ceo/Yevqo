@@ -49,10 +49,15 @@ func newIntegrationHTTPClient() *http.Client {
 // runtime. Prefer Termux's private PREFIX path when running inside Termux.
 func integrationDNSServers() []string {
 	prefix := strings.TrimSpace(os.Getenv("PREFIX"))
-	paths := []string{"/etc/resolv.conf"}
 	if prefix != "" {
-		paths = []string{prefix + "/etc/resolv.conf", "/etc/resolv.conf"}
+		return integrationDNSServersFrom(prefix+"/etc/resolv.conf", "/etc/resolv.conf")
 	}
+	return integrationDNSServersFrom("/etc/resolv.conf")
+}
+
+// integrationDNSServersFrom returns the first usable resolver configuration.
+// Keeping path selection separate makes Termux precedence and Linux fallback testable.
+func integrationDNSServersFrom(paths ...string) []string {
 	for _, path := range paths {
 		file, err := os.Open(path)
 		if err != nil {
