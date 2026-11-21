@@ -76,6 +76,7 @@ jobs:
           bash -n scripts/install-agent.sh
           bash -n scripts/update-agent.sh
           bash -n scripts/update-all.sh
+          bash -n scripts/auto-update-service.sh
           sh -n packaging/postinst-all
           sh -n packaging/postinst-agent
 
@@ -111,10 +112,12 @@ jobs:
           install -m 0755 packaging/setup-control.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-setup-control"
           install -m 0755 packaging/setup-agent.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-setup-agent"
           install -m 0755 scripts/update-all.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-update-all"
+          install -m 0755 scripts/auto-update-service.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-auto-update-service"
           install -m 0755 packaging/postinst-all "build-deb-all/DEBIAN/postinst"
 
           install -m 0755 packaging/setup-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/yevqo-setup"
           install -m 0755 scripts/update-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/yevqo-update"
+          install -m 0755 scripts/auto-update-service.sh "build-deb-agent/$PREFIX_ROOT/bin/yevqo-auto-update-service"
           install -m 0755 packaging/postinst-agent "build-deb-agent/DEBIAN/postinst"
 
           cat > build-deb-all/DEBIAN/control <<EOF
@@ -128,7 +131,7 @@ jobs:
           Replaces: veltrix-all
           Section: utils
           Priority: optional
-          Homepage: https://github.com/NexLab-ceo/veltrix
+          Homepage: https://github.com/NexLab-ceo/Yevqo
           Description: Yevqo Control Plane and Agent for Termux
            Includes server, Agent, web UI, migrations and setup scripts.
            cloudflared can be installed separately when Cloudflare Tunnel is needed.
@@ -173,7 +176,336 @@ jobs:
           grep -q '/bin/yevqo-control$' /tmp/yevqo-all.contents
           grep -q '/bin/yevqo-agent$' /tmp/yevqo-all.contents
           grep -q '/bin/yevqo-cli$' /tmp/yevqo-all.contents
-          grep -q '/bin/yevqo-update-all$' /tmp/yevqo-all.contents
+          grep -q '/bin/yevqo-update-all
+          grep -q '/bin/yevqo$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-setup$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-update
+          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all|/bin/yevqo-agent$' /tmp/yevqo.contents; then
+            echo "Standalone Yevqo package contains unexpected payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
+      - name: Generate package checksums
+        run: sha256sum "yevqo-all_${VERSION}_aarch64.deb" "yevqo_${VERSION}_aarch64.deb" > SHA256SUMS
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yevqo-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+            SHA256SUMS
+
+      - name: Publish Yevqo packages to VELTRIX Dock
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix-dock
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+            SHA256SUMS
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+ /tmp/yevqo-all.contents
+          grep -q '/bin/yevqo-auto-update-service
+          grep -q '/bin/yevqo$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-setup$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-update$' /tmp/yevqo.contents
+          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all|/bin/yevqo-agent$' /tmp/yevqo.contents; then
+            echo "Standalone Yevqo package contains unexpected payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yevqo-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+
+      - name: Publish full package to private repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish standalone Yevqo release to public repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+ /tmp/yevqo-all.contents
+          grep -q '/bin/yevqo$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-setup$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-update$' /tmp/yevqo.contents
+          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all|/bin/yevqo-agent$' /tmp/yevqo.contents; then
+            echo "Standalone Yevqo package contains unexpected payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yevqo-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+
+      - name: Publish full package to private repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish standalone Yevqo release to public repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+ /tmp/yevqo.contents
+          grep -q '/bin/yevqo-auto-update-service
+          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all|/bin/yevqo-agent$' /tmp/yevqo.contents; then
+            echo "Standalone Yevqo package contains unexpected payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yevqo-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+
+      - name: Publish full package to private repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish standalone Yevqo release to public repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+ /tmp/yevqo-all.contents
+          grep -q '/bin/yevqo-auto-update-service
+          grep -q '/bin/yevqo$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-setup$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-update$' /tmp/yevqo.contents
+          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all|/bin/yevqo-agent$' /tmp/yevqo.contents; then
+            echo "Standalone Yevqo package contains unexpected payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yevqo-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+
+      - name: Publish full package to private repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish standalone Yevqo release to public repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+ /tmp/yevqo-all.contents
+          grep -q '/bin/yevqo$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-setup$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-update$' /tmp/yevqo.contents
+          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all|/bin/yevqo-agent$' /tmp/yevqo.contents; then
+            echo "Standalone Yevqo package contains unexpected payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yevqo-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+
+      - name: Publish full package to private repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish standalone Yevqo release to public repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+ /tmp/yevqo.contents
+          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all|/bin/yevqo-agent$' /tmp/yevqo.contents; then
+            echo "Standalone Yevqo package contains unexpected payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yevqo-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+
+      - name: Publish full package to private repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish standalone Yevqo release to public repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+ /tmp/yevqo-all.contents
+          grep -q '/bin/yevqo-auto-update-service
+          grep -q '/bin/yevqo$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-setup$' /tmp/yevqo.contents
+          grep -q '/bin/yevqo-update$' /tmp/yevqo.contents
+          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all|/bin/yevqo-agent$' /tmp/yevqo.contents; then
+            echo "Standalone Yevqo package contains unexpected payload" >&2
+            exit 1
+          fi
+          dpkg-deb --info "$ALL"
+          dpkg-deb --info "$AGENT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yevqo-android-aarch64-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+
+      - name: Publish full package to private repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            yevqo-all_${{ env.VERSION }}_aarch64.deb
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish standalone Yevqo release to public repository
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: NexLab-ceo/veltrix
+          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          files: |
+            yevqo_${{ env.VERSION }}_aarch64.deb
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+ /tmp/yevqo-all.contents
           grep -q '/bin/yevqo$' /tmp/yevqo.contents
           grep -q '/bin/yevqo-setup$' /tmp/yevqo.contents
           grep -q '/bin/yevqo-update$' /tmp/yevqo.contents
