@@ -175,6 +175,10 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 				apiError(w, shared.ErrNotFound("application is not assigned to this project"))
 				return
 			}
+			var currentEnvironment int64
+			assignmentErr := s.db.conn.QueryRowContext(r.Context(), "SELECT environment_id FROM project_environment_sites WHERE project_id=? AND device_id=? AND site_id=? LIMIT 1", projectID, in.DeviceID, in.SiteID).Scan(&currentEnvironment)
+			if assignmentErr == nil && currentEnvironment != environmentID { apiError(w, shared.ErrBadRequest("application is already assigned to another environment in this project")); return }
+			if assignmentErr != nil && assignmentErr != sql.ErrNoRows { apiError(w, shared.ErrInternal("could not check application environment assignment")); return }
 			_, err = s.db.conn.ExecContext(r.Context(), "INSERT IGNORE INTO project_environment_sites(project_id,environment_id,device_id,site_id) VALUES(?,?,?,?)", projectID, environmentID, in.DeviceID, in.SiteID)
 			if err != nil {
 				apiError(w, shared.ErrInternal("could not assign application to environment"))
