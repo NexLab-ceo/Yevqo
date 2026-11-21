@@ -135,7 +135,7 @@ func githubAppInstallationToken(ctx context.Context, credentials githubAppCreden
 
 	installationURL := fmt.Sprintf("https://api.github.com/app/installations/%d", installationID)
 	resp, err := githubAppRequest(ctx, http.MethodGet, installationURL, jwt, nil)
-	if err != nil { return "", "", err }
+	if err != nil { return "", "", fmt.Errorf("GitHub App installation lookup request failed: %w", err) }
 	var installation githubAppInstallation
 	if err := readProviderJSON(resp, &installation); err != nil { return "", "", fmt.Errorf("GitHub rejected App installation credentials: %w", err) }
 	if installation.ID != installationID || installation.AppID != appID || strings.TrimSpace(installation.Account.Login) == "" {
@@ -144,7 +144,7 @@ func githubAppInstallationToken(ctx context.Context, credentials githubAppCreden
 
 	tokenURL := fmt.Sprintf("https://api.github.com/app/installations/%d/access_tokens", installationID)
 	resp, err = githubAppRequest(ctx, http.MethodPost, tokenURL, jwt, bytes.NewReader([]byte("{}")))
-	if err != nil { return "", "", err }
+	if err != nil { return "", "", fmt.Errorf("could not create GitHub installation token: request failed: %w", err) }
 	var access githubAppAccessToken
 	if err := readProviderJSON(resp, &access); err != nil { return "", "", fmt.Errorf("could not create GitHub installation token: %w", err) }
 	if access.Token == "" { return "", "", fmt.Errorf("GitHub returned an empty installation token") }
