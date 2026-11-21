@@ -1,6 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+# The legacy data-root migration may move the directory the installer was launched from.
+cd "$HOME" 2>/dev/null || cd "$PREFIX"
 DATA_ROOT="${YEVQO_DATA_ROOT:-${VELTRIX_DATA_ROOT:-/sdcard/yevqo}}"
 LEGACY_DATA_ROOT="/sdcard/veltrix-control"
 if [ ! -d /sdcard ]; then
