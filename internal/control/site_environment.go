@@ -27,12 +27,19 @@ func validSiteEnvKey(key string) bool {
 func (s *Server) handleSiteEnvironment(w http.ResponseWriter, r *http.Request, user *shared.User, deviceID int64, siteID string) {
 	dev, err := s.db.GetDeviceByID(r.Context(), deviceID)
 	if err != nil { apiError(w, shared.ErrNotFound("site not found")); return }
-	if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil {
-		apiError(w, err)
-		return
-	}
-	if r.Method != http.MethodGet {
-		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
+	projectID, scopeErr := s.siteProjectScope(r.Context(), dev.UserID, deviceID, siteID)
+	if scopeErr != nil { apiError(w, scopeErr); return }
+	if projectID > 0 {
+		action := "project.read"
+		if r.Method != http.MethodGet { action = "project.manage" }
+		ownerID, authErr := s.authorizeProjectOwner(r.Context(), projectID, user.ID, action)
+		if authErr != nil { apiError(w, authErr); return }
+		if ownerID != dev.UserID { apiError(w, shared.ErrNotFound("site not found")); return }
+	} else {
+		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
+		if r.Method != http.MethodGet {
+			if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
+		}
 	}
 
 	switch r.Method {
