@@ -254,7 +254,7 @@
     </div>
 
     <section class="device-info-grid">
-      <article class="info-card"><div class="info-label">ЛОКАЛЬНЫЙ IP</div><strong class="info-value mono">{diagnostics?.local_ip||device.tailscale_ip||'—'}</strong><small>Адрес Android-устройства</small></article>
+      <article class="info-card"><div class="info-label">ЛОКАЛЬНЫЙ IP</div><strong class="info-value mono">{diagnostics?.local_ip||'—'}</strong><small>Адрес Android-устройства</small></article>
       <article class="info-card"><div class="info-label">AGENT VERSION</div><strong class="info-value">{device.agent_version||'—'}</strong><small>Последний heartbeat: {device.last_seen?formatDate(device.last_seen):'—'}</small></article>
       <article class="info-card"><div class="info-label">UPTIME ТЕЛЕФОНА</div><strong class="info-value">{formatDuration(diagnostics?.device_uptime_seconds)}</strong><small>Работа агента: {formatDuration(diagnostics?.agent_uptime_seconds)}</small></article>
     </section>
