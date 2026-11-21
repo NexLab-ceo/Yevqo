@@ -823,16 +823,22 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
 			var in struct { Action string `json:"action"`; AllowProjectCode bool `json:"allow_project_code"`; ReleaseCommit string `json:"release_commit"`; GitCommit string `json:"git_commit"`; ProjectID int64 `json:"project_id"`; EnvironmentID int64 `json:"environment_id"` }
 			if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
-			if in.ProjectID < 0 || in.EnvironmentID < 0 || ((in.ProjectID == 0) != (in.EnvironmentID == 0)) { apiError(w, shared.ErrBadRequest("project_id and environment_id must be provided together")); return }
-			if in.ProjectID > 0 {
-				projectOwnerID, projectErr := s.authorizeProjectOwner(r.Context(), in.ProjectID, user.ID, "project.read")
-				if projectErr != nil { apiError(w, projectErr); return }
-				if projectOwnerID != dev.UserID { apiError(w, shared.ErrNotFound("project not found")); return }
-			}
+			if in.ProjectID < 0 || in.EnvironmentID < 0 || (in.ProjectID == 0 && in.EnvironmentID != 0) { apiError(w, shared.ErrBadRequest("environment_id requires a project_id")); return }
 			if in.Action != "deploy" && in.Action != "rebuild" && in.Action != "restart" && in.Action != "stop" && in.Action != "rollback" {
 				apiError(w, shared.ErrBadRequest("unsupported site action")); return
 			}
-			if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, in.Action); err != nil { apiError(w, err); return }
+			if in.ProjectID > 0 {
+				projectOwnerID, projectErr := s.authorizeProjectOwner(r.Context(), in.ProjectID, user.ID, in.Action)
+				if projectErr != nil { apiError(w, projectErr); return }
+				if projectOwnerID != dev.UserID { apiError(w, shared.ErrNotFound("project not found")); return }
+				if projectErr := s.requireProjectSite(r.Context(), in.ProjectID, deviceID, siteID); projectErr != nil { apiError(w, projectErr); return }
+				if in.EnvironmentID > 0 {
+					var assigned int
+					if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM project_environment_sites WHERE project_id=? AND environment_id=? AND device_id=? AND site_id=?", in.ProjectID, in.EnvironmentID, deviceID, siteID).Scan(&assigned); err != nil || assigned != 1 {
+						apiError(w, shared.ErrBadRequest("application is not assigned to the selected project environment")); return
+					}
+				}
+			} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, in.Action); err != nil { apiError(w, err); return }
 			if (in.Action == "deploy" || in.Action == "rebuild") && !in.AllowProjectCode {
 				apiError(w, shared.ErrBadRequest("explicit project-code consent is required before deployment")); return
 			}
