@@ -33,7 +33,7 @@ import (
 // validateGitBranchName applies Git ref-format restrictions consistently before
 // a branch is persisted or passed to GitHub/Agent operations.
 func validateGitBranchName(branch string) bool {
-	if !gitBranchPattern.MatchString(branch) || containsInvalidGitBranchSuffix(branch) {
+	if !gitBranchPattern.MatchString(branch) || branch == "" || strings.Contains(branch, "..") || strings.Contains(branch, "@{") || strings.HasSuffix(branch, "/") || strings.HasSuffix(branch, ".") {
 		return false
 	}
 	for _, component := range strings.Split(branch, "/") {
