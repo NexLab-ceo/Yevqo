@@ -181,7 +181,7 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 			if err := validateGitHubAppCredentials(credentials); err != nil { apiError(w,shared.ErrBadRequest(err.Error())); return }
 			ctx,cancel := context.WithTimeout(r.Context(),20*time.Second); defer cancel()
 			_, account, err := githubAppInstallationToken(ctx,credentials)
-			if err != nil { apiError(w,shared.ErrBadRequest("GitHub App installation could not be verified; check App ID, installation ID and private key")); return }
+			if err != nil { apiError(w,shared.ErrBadRequest(githubAppVerificationMessage(err))); return }
 			raw,err := json.Marshal(credentials); if err != nil { apiError(w,shared.ErrInternal("could not encode GitHub App credentials")); return }
 			nonce,ciphertext,err := encryptCredential(s.credentialKey,raw); if err != nil { apiError(w,shared.ErrInternal("could not encrypt GitHub App credentials")); return }
 			_,err = s.db.conn.ExecContext(r.Context(),`INSERT INTO integrations(user_id,provider,account_id,account_name,account_email,token_nonce,token_ciphertext,scopes,last_verified_at) VALUES(?,'github_app',?,?,NULL,?,?,?,?) ON DUPLICATE KEY UPDATE account_name=VALUES(account_name),token_nonce=VALUES(token_nonce),token_ciphertext=VALUES(token_ciphertext),scopes=VALUES(scopes),last_verified_at=VALUES(last_verified_at)`,u.ID,credentials.InstallationID,account,nonce,ciphertext,"contents:read, metadata:read",time.Now())
