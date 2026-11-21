@@ -33,7 +33,7 @@ if command -v mysqld_safe >/dev/null 2>&1; then
 fi
 
 # Bring up only services installed on this device.
-for service in yevqo-control yevqo-agent yevqo; do
+for service in yevqo-control yevqo-agent yevqo yevqo-updater; do
   if [ -d "${PREFIX}/var/service/$service" ] || [ -L "${PREFIX}/var/service/$service" ]; then
     echo "Starting $service"
     sv up "$service" || echo "Could not start $service"
