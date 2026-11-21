@@ -19,8 +19,10 @@
   const setupAction=params.get('setup_action');
   const callbackState=params.get('state')||'';
   if(setupAction==='install'&&installationID){
-   const expected=window.sessionStorage.getItem('yevqo_github_app_state')||'';
-   if(!callbackState||!expected||callbackState!==expected){errorState=ru?'Проверка установки не пройдена: состояние сессии не совпало. Начните подключение заново.':'Installation callback could not be verified. Start the installation again.';return}
+   // GitHub may return to a new tab/window where sessionStorage is unavailable.
+   // The authenticated Control Plane validates the one-time state against its
+   // server-side, account-bound hash; browser storage must not be authoritative.
+   if(!callbackState){errorState=ru?'GitHub не вернул проверочное состояние. Начните подключение заново.':'GitHub did not return the installation state. Start the installation again.';return}
    await finishInstall(installationID,callbackState);
   }else if(setupAction==='request'){
    errorState=ru?'Запрос на установку отправлен владельцу GitHub.':'Installation request sent to the GitHub account owner.';
@@ -31,13 +33,11 @@
   connecting=true;errorState='';
   const r=await createGitHubAppInstallState();
   if(!r.ok){connecting=false;errorState=r.error||'Could not start GitHub App installation';return}
-  window.sessionStorage.setItem('yevqo_github_app_state',r.data.state);
   window.location.assign(installURL+'?state='+encodeURIComponent(r.data.state));
  }
  async function finishInstall(id,state){
   connecting=true;
   const r=await connectGitHubApp(id,state);
-  window.sessionStorage.removeItem('yevqo_github_app_state');
   window.history.replaceState({},'',window.location.pathname);
   connecting=false;
   if(!r.ok){errorState=r.error||'GitHub App installation verification failed';return}
