@@ -103,6 +103,19 @@ func (s *Server) handleDatabaseCollection(w http.ResponseWriter, r *http.Request
 	writeJSON(w,http.StatusCreated,map[string]interface{}{"ok":true,"database":map[string]interface{}{"id":databaseID,"server_id":in.ServerID,"name":in.Name,"username":in.Username,"status":"ready"},"message":"Database and least-privilege application role created. Password stored encrypted."})
 }
 
+func (s *Server) siteProjectScope(ctx context.Context, userID, deviceID int64, siteID string) (int64, error) {
+	rows, err := s.db.conn.QueryContext(ctx, `SELECT ps.project_id FROM project_sites ps JOIN projects p ON p.id=ps.project_id
+		WHERE p.user_id=? AND ps.device_id=? AND ps.site_id=? ORDER BY ps.project_id LIMIT 2`, userID, deviceID, siteID)
+	if err != nil { return 0, err }
+	defer rows.Close()
+	if !rows.Next() { return 0, rows.Err() }
+	var projectID int64
+	if err := rows.Scan(&projectID); err != nil { return 0, err }
+	if rows.Next() { return 0, shared.ErrBadRequest("site belongs to multiple projects; select the project explicitly") }
+	if err := rows.Err(); err != nil { return 0, err }
+	return projectID, nil
+}
+
 func (s *Server) siteEnvironmentScope(ctx context.Context, userID, deviceID int64, siteID string) (int64, int64, error) {
 	// Environment scope applies to every application, not only applications
 	// with a database connection: project-level ENV values must also load.
