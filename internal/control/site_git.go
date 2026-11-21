@@ -13,7 +13,36 @@ import (
 	"veltrix/internal/shared"
 )
 
-var gitBranchPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$`)
+var gitBranchPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}package control
+
+import (
+	"context"
+	"database/sql"
+	"net/http"
+	"net/url"
+	"path"
+	"regexp"
+	"strconv"
+	"strings"
+
+	"veltrix/internal/shared"
+)
+
+)
+
+// validateGitBranchName applies Git ref-format restrictions consistently before
+// a branch is persisted or passed to GitHub/Agent operations.
+func validateGitBranchName(branch string) bool {
+	if !gitBranchPattern.MatchString(branch) || containsInvalidGitBranchSuffix(branch) {
+		return false
+	}
+	for _, component := range strings.Split(branch, "/") {
+		if component == "" || strings.HasPrefix(component, ".") || strings.HasSuffix(component, ".lock") {
+			return false
+		}
+	}
+	return true
+}
 
 type siteGitSettings struct {
 	GitURL       string
@@ -135,7 +164,7 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 		if in.RepositoryURL != "" && !validateGitRepository(in.RepositoryURL) {
 			apiError(w, shared.ErrBadRequest("repository URL must be a valid HTTPS or SSH Git URL")); return
 		}
-		if !gitBranchPattern.MatchString(in.Branch) || strings.Contains(in.Branch, "..") || strings.Contains(in.Branch, "@{") || strings.HasSuffix(in.Branch, "/") || strings.HasSuffix(in.Branch, ".") {
+		if !validateGitBranchName(in.Branch) {
 			apiError(w, shared.ErrBadRequest("invalid Git branch")); return
 		}
 		if len(in.BuildCommand) > 512 || strings.ContainsAny(in.BuildCommand, "\x00\r\n") {
