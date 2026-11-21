@@ -22,20 +22,17 @@ func TestSiteEnvironmentKeyValidation(t *testing.T) {
 
 func TestGitBranchValidation(t *testing.T) {
 	for _, branch := range []string{"main", "release/1.2", "feature/add-login", "v2.0.0"} {
-		if !gitBranchPattern.MatchString(branch) || containsInvalidGitBranchSuffix(branch) {
+		if !validateGitBranchName(branch) {
 			t.Errorf("valid branch %q was rejected", branch)
 		}
 	}
-	for _, branch := range []string{"", "../main", "main..evil", "main@", "main/", "main.", "feature/@{upstream}", "has space"} {
-		if gitBranchPattern.MatchString(branch) && !containsInvalidGitBranchSuffix(branch) {
+	for _, branch := range []string{"", "../main", "main..evil", "main@", "main/", "main.", "feature/@{upstream}", "has space", "feature//login", "feature/.hidden", "feature/hidden.lock"} {
+		if validateGitBranchName(branch) {
 			t.Errorf("invalid branch %q passed validation", branch)
 		}
 	}
 }
 
-func containsInvalidGitBranchSuffix(branch string) bool {
-	return branch == "" || strings.Contains(branch, "..") || strings.Contains(branch, "@{") || strings.HasSuffix(branch, "/") || strings.HasSuffix(branch, ".")
-}
 
 func TestGitRepositoryAndRootDirectoryValidation(t *testing.T) {
 	for _, raw := range []string{"https://github.com/acme/app.git", "ssh://github.com/acme/app.git"} {
