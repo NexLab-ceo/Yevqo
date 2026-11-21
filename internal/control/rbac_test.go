@@ -31,7 +31,13 @@ func TestCanWorkspaceActionRoleMatrix(t *testing.T) {
 		{"Admin","project.manage",true},
 		{"Admin","workspace.manage",true},
 		{"Developer","manage_members",false},
-		{"viewer","device.read",false},
+		{"viewer","project.read",true},
+		{"viewer","environment.read",true},
+		{"viewer","device.read",true},
+		{"viewer","database.read",true},
+		{"viewer","project.manage",false},
+		{"viewer","deploy",false},
+		{"viewer","device.delete",false},
 		{"","deploy",false},
 	}
 	for _, tc := range cases {
