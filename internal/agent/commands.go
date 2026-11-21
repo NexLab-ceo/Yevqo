@@ -68,7 +68,11 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleRestoreDatabaseBackup(cmd)
 	case "test_database_connection":
 		return h.handleTestDatabaseConnection(cmd)
-	case "get_metrics":
+	case "get_device_diagnostics":
+  return h.handleGetDeviceDiagnostics(cmd)
+ case "check_device_port":
+  return h.handleCheckDevicePort(cmd)
+ case "get_metrics":
 		return h.handleGetMetrics(cmd)
 	case "get_site_metrics":
 		return h.handleGetSiteMetrics(cmd)
@@ -157,6 +161,24 @@ func (h *CommandHandler) handleCreateSiteBackup(cmd *shared.Command) *shared.Res
 	payload, err := shared.Marshal(result)
 	if err != nil { return errorResult(cmd.Id, "could not encode backup result") }
 	return &shared.Result{Id:cmd.Id,Ok:true,Message:"site backup completed",Payload:payload}
+}
+
+func (h *CommandHandler) handleGetDeviceDiagnostics(cmd *shared.Command) *shared.Result {
+ var req shared.GetDeviceDiagnostics
+ if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid get_device_diagnostics payload")}
+ result:=collectDeviceDiagnostics()
+ payload,err:=shared.Marshal(result);if err!=nil{return errorResult(cmd.Id,"could not encode device diagnostics")}
+ return &shared.Result{Id:cmd.Id,Ok:true,Message:"device diagnostics collected",Payload:payload}
+}
+
+func (h *CommandHandler) handleCheckDevicePort(cmd *shared.Command) *shared.Result {
+ var req shared.CheckDevicePort
+ if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid check_device_port payload")}
+ listening,err:=checkLocalPort(req.Port);if err!=nil{return errorResult(cmd.Id,err.Error())}
+ payload,err:=shared.Marshal(map[string]interface{}{"port":req.Port,"listening":listening})
+ if err!=nil{return errorResult(cmd.Id,"could not encode port check")}
+ message:="port is free";if listening{message="port is listening"}
+ return &shared.Result{Id:cmd.Id,Ok:true,Message:message,Payload:payload}
 }
 
 func (h *CommandHandler) handleGetMetrics(cmd *shared.Command) *shared.Result {
