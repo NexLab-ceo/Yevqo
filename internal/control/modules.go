@@ -189,7 +189,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 		if err:=dbRows.Err();err!=nil{dbRows.Close();apiError(w,shared.ErrInternal("could not read project database servers"));return};dbRows.Close()
 		role,roleErr:=s.projectAccessRole(r.Context(),id,u.ID,ownerID);if roleErr!=nil{apiError(w,roleErr);return}
 		workspaceRole,_,_:=s.db.WorkspaceRole(r.Context(),ownerID,u.ID)
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"owner_user_id":ownerID,"workspace_role":workspaceRole,"project_role":role,"can_manage":CanWorkspaceAction(role,"project.manage"),"name":name,"slug":slug,"description":description},"devices":devices,"sites":sites,"database_servers":databaseServers})
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"project":map[string]interface{}{"id":id,"owner_user_id":ownerID,"workspace_role":workspaceRole,"project_role":role,"can_manage":CanWorkspaceAction(role,"project.manage"),"can_develop":CanWorkspaceAction(role,"create_site"),"name":name,"slug":slug,"description":description},"devices":devices,"sites":sites,"database_servers":databaseServers})
 	case http.MethodPatch:
 		var in projectInput;if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 		in.Name=strings.TrimSpace(in.Name);if len(in.Name)<2||len(in.Name)>80{apiError(w,shared.ErrBadRequest("project name must be 2–80 characters"));return}
