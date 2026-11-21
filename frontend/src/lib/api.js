@@ -102,8 +102,8 @@ export async function deleteDevice(id) {
     return request('DELETE', `/api/devices/${id}`);
 }
 
-export async function sendCommand(deviceId, action, payload = {}) {
-    return request('POST', `/api/devices/${deviceId}/cmd`, { action, payload });
+export async function sendCommand(deviceId, action, payload = {}, projectId = '') {
+    return request('POST', `/api/devices/${deviceId}/cmd`, { action, payload, ...(projectId ? { project_id: Number(projectId) } : {}) });
 }
 
 // Same-origin authenticated WebSocket stream for a single site.
@@ -190,6 +190,9 @@ export async function acceptWorkspaceInvitation(id) { return request('POST', '/a
 export async function listProjects() { return request('GET', '/api/projects'); }
 export async function createProject(name, description = '', ownerUserId = '') { return request('POST', '/api/projects', { name, description, ...(ownerUserId ? { owner_user_id: Number(ownerUserId) } : {}) }); }
 export async function getProject(id) { return request('GET', `/api/projects/${id}`); }
+export async function listProjectMembers(id) { return request('GET', `/api/projects/${id}/members`); }
+export async function setProjectMemberRole(projectId, userId, role) { return request('POST', `/api/projects/${projectId}/members`, { user_id: Number(userId), role }); }
+export async function removeProjectMember(projectId, userId) { return request('DELETE', `/api/projects/${projectId}/members/${userId}`); }
 export async function listProjectEnvironments(id) { return request('GET', `/api/projects/${id}/environments`); }
 export async function createProjectEnvironment(id, name, description = '') { return request('POST', `/api/projects/${id}/environments`, { name, description }); }
 export async function updateProjectEnvironment(projectId, environmentId, name, description = '') { return request('PATCH', `/api/projects/${projectId}/environments/${environmentId}`, { name, description }); }
