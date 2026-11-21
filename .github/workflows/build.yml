@@ -209,6 +209,9 @@ jobs:
         with:
           repository: NexLab-ceo/veltrix-dock
           token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          target_commitish: main
+          name: Yevqo ${{ env.VERSION }}
           files: |
             yevqo-all_${{ env.VERSION }}_aarch64.deb
             yevqo_${{ env.VERSION }}_aarch64.deb
