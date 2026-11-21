@@ -195,7 +195,7 @@ func (h *CommandHandler) handleRestartAgent(cmd *shared.Command) *shared.Result 
 func (h *CommandHandler) handleGetDeviceDiagnostics(cmd *shared.Command) *shared.Result {
  var req shared.GetDeviceDiagnostics
  if err:=shared.Unmarshal(cmd.Payload,&req);err!=nil{return errorResult(cmd.Id,"invalid get_device_diagnostics payload")}
- result:=collectDeviceDiagnostics()
+ result:=collectDeviceDiagnostics(h.cfg.DataRoot)
  payload,err:=shared.Marshal(result);if err!=nil{return errorResult(cmd.Id,"could not encode device diagnostics")}
  return &shared.Result{Id:cmd.Id,Ok:true,Message:"device diagnostics collected",Payload:payload}
 }
