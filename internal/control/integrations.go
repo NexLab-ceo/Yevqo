@@ -45,7 +45,6 @@ type providerRepository struct {
 	WebURL        string `json:"web_url"`
 }
 
-var integrationHTTPClient = &http.Client{Timeout: 15 * time.Second}
 
 func providerRequest(ctx context.Context, provider, token, endpoint string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -291,4 +290,3 @@ func (s *Server) handleIntegrationByID(w http.ResponseWriter, r *http.Request) {
 func integrationProviderLabel(provider string) string {
 	switch provider { case "github":return "GitHub";case "github_app":return "GitHub App";case "gitlab":return "GitLab";default:return provider }
 }
-
