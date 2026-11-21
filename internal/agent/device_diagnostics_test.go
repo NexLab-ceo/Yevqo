@@ -38,7 +38,7 @@ func TestDeviceDiagnosticsReturnsPackageInventoryAndUptime(t *testing.T) {
 func TestOpenAgentLogCreatesPrivateFile(t *testing.T) {
  root:=t.TempDir()
  file,err:=OpenAgentLog(root);if err!=nil{t.Fatal(err)}
- if _,err:=file.WriteString("agent started\\n");err!=nil{t.Fatal(err)}
+ if _,err:=file.WriteString("agent started\n");err!=nil{t.Fatal(err)}
  if err:=file.Close();err!=nil{t.Fatal(err)}
  info,err:=os.Stat(filepath.Join(root,"logs","agent.log"));if err!=nil{t.Fatal(err)}
  if info.Mode().Perm()!=0600{t.Fatalf("agent.log permissions = %o, want 600",info.Mode().Perm())}
@@ -58,8 +58,8 @@ func TestOpenAgentLogRejectsSymlink(t *testing.T) {
 func TestReadAgentLogsReturnsNewestLinesFromAgentLog(t *testing.T) {
  root:=t.TempDir()
  file,err:=OpenAgentLog(root);if err!=nil{t.Fatal(err)}
- for i:=0;i<205;i++{_,_=file.WriteString("line "+strconv.Itoa(i)+"\\n")}
+ for i:=0;i<205;i++{_,_=file.WriteString("line "+strconv.Itoa(i)+"\n")}
  _=file.Close()
  got:=readAgentLogs(root)
- if strings.Contains(got,"line 0\\n")||!strings.Contains(got,"line 204"){t.Fatalf("unexpected log tail: %s",got[:min(len(got),200)])}
+ if strings.Contains(got,"line 0\n")||!strings.Contains(got,"line 204"){t.Fatalf("unexpected log tail: %s",got[:min(len(got),200)])}
 }
