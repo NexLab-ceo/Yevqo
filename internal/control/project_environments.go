@@ -335,5 +335,54 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 		}
 		return
 	}
+
+	if len(parts) == 5 && parts[4] == "variables" {
+		environmentID, parseErr := strconv.ParseInt(parts[2], 10, 64)
+		if parseErr != nil || environmentID < 1 { apiError(w, shared.ErrBadRequest("invalid environment id")); return }
+		var valid int
+		if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM project_environments WHERE id=? AND project_id=?", environmentID, projectID).Scan(&valid); err != nil || valid != 1 {
+			apiError(w, shared.ErrNotFound("environment not found")); return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			rows, err := s.db.conn.QueryContext(r.Context(), "SELECT name FROM project_environment_vars WHERE project_id=? AND environment_id=? ORDER BY name", projectID, environmentID)
+			if err != nil { apiError(w, shared.ErrInternal("could not load environment variables")); return }
+			defer rows.Close()
+			items := make([]map[string]interface{}, 0)
+			for rows.Next() {
+				var name string
+				if err := rows.Scan(&name); err != nil { apiError(w, shared.ErrInternal("could not read environment variables")); return }
+				items = append(items, map[string]interface{}{"name": name, "masked": true})
+			}
+			if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read environment variables")); return }
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "variables": items})
+		case http.MethodPost:
+			var in struct { Name string `json:"name"`; Value string `json:"value"` }
+			if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
+			in.Name = strings.TrimSpace(in.Name)
+			if !validSiteEnvKey(in.Name) { apiError(w, shared.ErrBadRequest("environment key is invalid or reserved")); return }
+			if len(in.Value) > 16384 || strings.IndexByte(in.Value, 0) >= 0 { apiError(w, shared.ErrBadRequest("environment value must be at most 16 KiB and cannot contain NUL")); return }
+			nonce, ciphertext, err := encryptCredential(s.credentialKey, []byte(in.Value))
+			if err != nil { apiError(w, shared.ErrInternal("could not encrypt environment value")); return }
+			_, err = s.db.conn.ExecContext(r.Context(), `INSERT INTO project_environment_vars(project_id,environment_id,name,nonce,ciphertext) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE nonce=VALUES(nonce),ciphertext=VALUES(ciphertext),updated_at=CURRENT_TIMESTAMP`, projectID, environmentID, in.Name, nonce, ciphertext)
+			if err != nil { apiError(w, shared.ErrInternal("could not save environment variable")); return }
+			_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(u.ID), WorkspaceOwnerID: shared.PtrInt64(ownerID), Action: "project_environment_variable_updated", Details: map[string]interface{}{"project_id": projectID, "environment_id": environmentID, "key": in.Name}, IP: clientIP(r)})
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "name": in.Name, "masked": true})
+		case http.MethodDelete:
+			name := strings.TrimSpace(r.URL.Query().Get("name"))
+			if !validSiteEnvKey(name) { apiError(w, shared.ErrBadRequest("environment key is invalid")); return }
+			res, err := s.db.conn.ExecContext(r.Context(), "DELETE FROM project_environment_vars WHERE project_id=? AND environment_id=? AND name=?", projectID, environmentID, name)
+			if err != nil { apiError(w, shared.ErrInternal("could not delete environment variable")); return }
+			deleted, err := res.RowsAffected()
+			if err != nil { apiError(w, shared.ErrInternal("could not verify environment variable removal")); return }
+			if deleted == 0 { apiError(w, shared.ErrNotFound("environment variable not found")); return }
+			_ = s.db.Log(r.Context(), &shared.LogEntry{UserID: shared.PtrInt64(u.ID), WorkspaceOwnerID: shared.PtrInt64(ownerID), Action: "project_environment_variable_deleted", Details: map[string]interface{}{"project_id": projectID, "environment_id": environmentID, "key": name}, IP: clientIP(r)})
+			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+		return
+	}
+
 	http.NotFound(w, r)
 }
