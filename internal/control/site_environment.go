@@ -91,13 +91,35 @@ func (s *Server) siteEnvironment(ctx context.Context, userID, deviceID int64, si
 	return out, rows.Err()
 }
 
-func (s *Server) siteRuntimeEnvironment(ctx context.Context, userID, deviceID int64, siteID string, projectID, environmentID int64) (map[string]string, error) {
-	custom, err := s.siteEnvironment(ctx, userID, deviceID, siteID)
+func (s *Server) projectEnvironmentVariables(ctx context.Context, projectID, environmentID int64) (map[string]string, error) {
+	out := make(map[string]string)
+	if projectID == 0 && environmentID == 0 { return out, nil }
+	if projectID < 1 || environmentID < 1 { return nil, shared.ErrBadRequest("project and environment scope is invalid") }
+	rows, err := s.db.conn.QueryContext(ctx, `SELECT name,nonce,ciphertext FROM project_environment_vars WHERE project_id=? AND environment_id=? ORDER BY name`, projectID, environmentID)
 	if err != nil { return nil, err }
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		var nonce, ciphertext []byte
+		if err := rows.Scan(&name, &nonce, &ciphertext); err != nil { return nil, err }
+		if !validSiteEnvKey(name) { return nil, shared.ErrInternal("stored project environment key is invalid") }
+		value, err := decryptCredential(s.credentialKey, nonce, ciphertext)
+		if err != nil { return nil, shared.ErrInternal("could not decrypt project environment variable") }
+		out[name] = string(value)
+	}
+	return out, rows.Err()
+}
+
+func (s *Server) siteRuntimeEnvironment(ctx context.Context, userID, deviceID int64, siteID string, projectID, environmentID int64) (map[string]string, error) {
+	custom, err := s.projectEnvironmentVariables(ctx, projectID, environmentID)
+	if err != nil { return nil, err }
+	siteValues, err := s.siteEnvironment(ctx, userID, deviceID, siteID)
+	if err != nil { return nil, err }
+	// Per-site values override project environment defaults. Managed database
+	// connection values are merged last and cannot be shadowed by either layer.
+	for key, value := range siteValues { custom[key] = value }
 	database, err := s.siteDatabaseEnvironment(ctx, userID, deviceID, siteID, projectID, environmentID)
 	if err != nil { return nil, err }
-	// Database connection values are authoritative and cannot be shadowed by
-	// custom variables; credentials remain encrypted at rest.
 	for key, value := range database { custom[key] = value }
 	return custom, nil
 }
