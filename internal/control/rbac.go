@@ -14,6 +14,8 @@ func CanWorkspaceAction(role, action string) bool {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case "owner", "admin":
 		return true
+	case "viewer":
+		switch action { case "project.read", "environment.read", "device.read", "database.read": return true }
 	case "developer":
 		switch action {
 		case "project.read", "environment.read", "device.read", "device.metrics", "get_device_diagnostics", "check_device_port",
@@ -39,18 +41,30 @@ func (s *Server) authorizeWorkspace(ctx context.Context, ownerID, actorID int64,
 // authorizeProjectAction resolves the owning workspace and enforces its role.
 // Projects remain owned by the workspace owner; active members receive only
 // the actions allowed by their assigned role.
+func (s *Server) projectAccessRole(ctx context.Context, projectID, actorID, ownerID int64) (string, error) {
+	if actorID == ownerID { return "owner", nil }
+	workspaceRole, allowed, err := s.db.WorkspaceRole(ctx, ownerID, actorID)
+	if err != nil { return "", err }
+	if !allowed { return "", shared.ErrForbidden("project access denied") }
+	var projectRole string
+	err = s.db.conn.QueryRowContext(ctx, "SELECT role FROM project_members WHERE project_id=? AND member_user_id=?", projectID, actorID).Scan(&projectRole)
+	if err == nil { return projectRole, nil }
+	if err != sql.ErrNoRows { return "", shared.ErrInternal("could not resolve project role") }
+	return workspaceRole, nil
+}
+
+// authorizeProjectOwner enforces a project-specific role override when present;
+// otherwise the active workspace role remains the backward-compatible default.
 func (s *Server) authorizeProjectOwner(ctx context.Context, projectID, actorID int64, action string) (int64, error) {
-	if projectID < 1 {
-		return 0, shared.ErrBadRequest("invalid project id")
-	}
+	if projectID < 1 { return 0, shared.ErrBadRequest("invalid project id") }
 	var ownerID int64
 	if err := s.db.conn.QueryRowContext(ctx, "SELECT user_id FROM projects WHERE id=?", projectID).Scan(&ownerID); err != nil {
 		if err == sql.ErrNoRows { return 0, shared.ErrNotFound("project not found") }
 		return 0, shared.ErrInternal("could not resolve project owner")
 	}
-	if err := s.authorizeWorkspace(ctx, ownerID, actorID, action); err != nil {
-		return 0, err
-	}
+	role, err := s.projectAccessRole(ctx, projectID, actorID, ownerID)
+	if err != nil { return 0, err }
+	if !CanWorkspaceAction(role, action) { return 0, shared.ErrForbidden("project permission denied") }
 	return ownerID, nil
 }
 
