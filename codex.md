@@ -105,7 +105,8 @@ This is a conservative starting snapshot based on the repository documentation a
 | Phase / area | Initial status | Notes |
 |---|---|---|
 | P0 — Go Control Plane and Agent foundation | PARTIAL | Core services and Android/Termux packaging are present; re-check full install/upgrade and device runtime coverage. |
-| P0 — Android package build and CI | DONE | Full build and PR checks passed at `755e16f`: Go tests, Android ARM64 cross-compilation, frontend build, setup/updater validation, all-in-one and standalone package assembly/verification. Release publishing was skipped; physical Android startup remains tracked separately under P3. |
+| P0 — Android package build and CI | PARTIAL | The previous full build passed at `755e16f`; this task changes package contents and cross-repository release publishing. Re-run the current build workflow to verify both packages, checksum generation and release upload. Physical Android startup remains tracked separately under P3. |
+| P0 — Automatic package updates and VELTRIX Dock releases | PARTIAL | Both package updaters now target the public `NexLab-ceo/veltrix-dock` releases, compare installed versions, verify SHA-256/package metadata and install newer `.deb` files. Debian post-install enables a six-hour Termux updater service. The build workflow publishes both packages and `SHA256SUMS` on version tags using `PUBLIC_RELEASE_TOKEN`; token permissions, current CI, first release and physical Android/background execution remain unverified. |
 | P0 — Agent pairing token separation | PARTIAL | Dedicated 256-bit random token is issued from Profile, stored only as SHA-256, and checked by WebSocket auth; public referral codes remain for referrals. Rotation revokes the previous token. Existing Agent configs must be re-paired; physical-device verification and multi-device token management remain open. |
 | P0 — Account password policy | PARTIAL | Registration and password changes now share a 12–72 byte policy; bcrypt's 72-byte limit and leading/trailing whitespace are enforced. Unit coverage added; full CI verification pending. Existing password hashes and accounts are unchanged. |
 | P0 — Device pairing and one-device Free limit | PARTIAL | `UpsertDevice` serializes registration per account, preserves same-device reconnect, rejects cross-account UUID rebinding, and enforces the Free one-device cap regardless of referral bonuses. Unit tests cover the Free cap; Hub tests cover replacement sockets and pending-command shutdown. Physical Android pairing remains under P3. |
@@ -141,6 +142,9 @@ Before finishing every task:
 7. Keep the ledger concise and current. Do not append repetitive logs; update existing rows and add only meaningful history entries.
 
 ### Progress history
+
+- 2026-11-21 — Added periodic Termux package updates for both Yevqo editions, public VELTRIX Dock release lookup, SHA-256 and Debian metadata validation, non-interactive package installation, and service restarts. The build workflow now publishes both packages plus checksums to `NexLab-ceo/veltrix-dock` for version tags. CI, cross-repository token permissions, first published release and physical Android validation remain pending; no device or production database was changed.
+
 
 - 2026-11-21 — Improved GitHub App installation verification diagnostics: backend now maps GitHub HTTP 401/403/404/429, App/installation mismatch, PEM parsing and network failures to actionable messages without exposing provider response bodies or credentials. Added unit coverage for safe error mapping. Automated tests and CI are pending; no production service or database was changed.
 
