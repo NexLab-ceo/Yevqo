@@ -51,9 +51,9 @@ Environment application assignments must refer to applications already attached 
 
 ### Project-level membership and roles
 
-A project can assign an explicit role to an existing active workspace member. Available project roles are **Admin**, **Developer**, and **Viewer**. An explicit project role overrides the member's workspace role only for project-scoped API operations; when no project role is assigned, the workspace role is inherited. The project Owner always retains full control. Viewer is read-only. Project membership does not create a separate Yevqo account or send an email invitation; the person must already be an active member of the workspace.
+A project can assign an explicit role to an existing active workspace member. Available project roles are **Admin**, **Developer**, and **Viewer**. Developers can create applications on devices already attached to the project, attach the resulting application to the project, assign it to one of the project's environments, and run supported build/lifecycle/deployment actions; only Admins can change project configuration and secrets. An explicit project role overrides the member's workspace role only for project-scoped API operations; when no project role is assigned, the workspace role is inherited. The project Owner always retains full control. Viewer is read-only. Project membership does not create a separate Yevqo account or send an email invitation; the person must already be an active member of the workspace.
 
-Project roles are checked server-side for project detail, environment/resource management, project deployment/repository endpoints, project-scoped device commands, and site lifecycle/deployment actions opened from a project. Workspace-level operations outside a project continue to use workspace RBAC.
+Project roles are checked server-side for project detail, environment/resource management, project deployment/repository endpoints, project-scoped device commands, site lifecycle/deployment actions, preview deployments, webhook configuration, and site Git/ENV settings opened from a project. Workspace-level operations outside a project continue to use workspace RBAC.
 
 ### Per-environment variables and secrets
 
