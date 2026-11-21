@@ -36,8 +36,13 @@ browser, shell command arguments or chat. Restrict access to both files.
 
 The `yevqo-control` runit service loads the env file and reads the PEM file
 into the Control Plane process environment on every start. The key is not
-printed or returned to the browser. Restart the service after editing either
-file:
+printed or returned to the browser. Standard output and errors are written to
+`/sdcard/yevqo/logs/control.log` (or `$YEVQO_DATA_ROOT/logs/control.log` when
+a custom data root is configured). The log directory is private (0700), the
+file is private (0600), and the file is rotated at startup when it exceeds 5 MiB.
+This file is independent of the optional runit `svlogd` logger, so diagnostics
+remain available even when the nested runit logger is not running. Restart the
+service after editing either file:
 
 ```sh
 sv restart yevqo-control
