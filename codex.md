@@ -104,7 +104,7 @@ This is a conservative starting snapshot based on the repository documentation a
 
 | Phase / area | Initial status | Notes |
 |---|---|---|
-| P0 — Go Control Plane and Agent foundation | PARTIAL | Core services and Android/Termux packaging are present. The Termux Control Plane runner now writes bounded private stdout/stderr logs to `$DATA_ROOT/logs/control.log`, independently of runit `svlogd`; current package/CI and physical Android verification remain pending. |
+| P0 — Go Control Plane and Agent foundation | PARTIAL | Core services and Android/Termux packaging are present. The Termux Control Plane runner writes bounded private stdout/stderr logs to `$DATA_ROOT/logs/control.log`, independently of runit `svlogd`. Integration HTTP requests now use a Go resolver that reads `$PREFIX/etc/resolv.conf` on Termux (falling back to `/etc/resolv.conf` elsewhere), avoiding Android's erroneous `[::1]:53` fallback when Termux DNS configuration is available. Resolver parser tests were added; Go CI and physical Android/GitHub App connection verification remain pending. |
 | P0 — Android package build and CI | PARTIAL | Android packages and setup scripts are present. Setup launchers now switch to a stable Termux working directory before setup; this prevents a legacy data-root migration or package operation from leaving child service commands in a deleted cwd. Shell/CI and physical Android startup verification remain pending. |
 | P0 — Automatic package updates and VELTRIX Dock releases | PARTIAL | Both package updaters now target the public `NexLab-ceo/veltrix-dock` releases, compare installed versions, verify SHA-256/package metadata and install newer `.deb` files. Debian post-install enables a six-hour Termux updater service. The build workflow publishes both packages and `SHA256SUMS` on version tags using `PUBLIC_RELEASE_TOKEN`; token permissions, current CI, first release and physical Android/background execution remain unverified. |
 | P0 — Agent pairing token separation | PARTIAL | Dedicated 256-bit random token is issued from Profile, stored only as SHA-256, and checked by WebSocket auth; public referral codes remain for referrals. Rotation revokes the previous token. Existing Agent configs must be re-paired; physical-device verification and multi-device token management remain open. |
@@ -142,6 +142,9 @@ Before finishing every task:
 7. Keep the ledger concise and current. Do not append repetitive logs; update existing rows and add only meaningful history entries.
 
 ### Progress history
+
+- 2026-11-21 — Fixed the integration HTTP client's DNS selection on `main`: outbound GitHub/GitLab/Cloudflare integration requests now use Go's resolver with DNS servers read from Termux `$PREFIX/etc/resolv.conf`, with `/etc/resolv.conf` fallback outside Termux. Added parser tests for IPv4/IPv6 nameservers and invalid/empty entries. This targets the reproduced `lookup api.github.com on [::1]:53: connection refused` failure; Go CI and a fresh physical Android GitHub App connection attempt are still required before marking it verified. No GitHub App credentials or database records were changed.
+
 
 - 2026-11-21 — Added credential-safe GitHub App failure logging and corrected stage attribution for transport errors: installation lookup and installation-token creation now have distinct wrapped errors, and the authenticated callback logs the server-side request/transport diagnostic plus installation ID without logging JWTs, PEM contents or installation tokens. Added a regression test for token-creation timeout messaging. CI and physical Android verification pending.
 
