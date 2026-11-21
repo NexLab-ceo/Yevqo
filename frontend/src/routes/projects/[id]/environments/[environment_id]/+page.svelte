@@ -19,7 +19,8 @@
   available=all.ok?(all.data.sites||[]).filter(x=>!linked.has(x.device_id+':'+x.site.site_id)):[];
   dbItems=envDb.ok?envDb.data.database_servers||[]:[];
   const linkedDB=new Set(dbItems.map(x=>x.id));dbAvailable=db.ok?(db.data.servers||[]).filter(x=>!linkedDB.has(x.id)):[];
-  databaseInstances=envDbInstances.ok?envDbInstances.data.databases||[]:[];\n  environmentVariables=vars.ok?vars.data.variables||[]:[];
+  databaseInstances=envDbInstances.ok?envDbInstances.data.databases||[]:[];
+  environmentVariables=vars.ok?vars.data.variables||[]:[];
   const assignedDatabaseIds=new Set(databaseInstances.map(x=>x.id));
   const environmentServerIds=new Set(dbItems.map(x=>x.id));
   dbInstanceAvailable=allDatabases.ok?(allDatabases.data.databases||[]).filter(x=>environmentServerIds.has(x.server_id)&&!assignedDatabaseIds.has(x.id)):[];
@@ -27,7 +28,9 @@
  }
  onMount(load);
 
- async function saveVariable(){if(variableBusy||!variableName.trim())return;variableBusy=true;const r=await saveProjectEnvironmentVariable(projectId,environmentId,variableName.trim(),variableValue);variableBusy=false;if(r.ok){notify(ru?'Переменная сохранена':'Variable saved','success');variableName='';variableValue='';await load()}else notify(r.error||'Не удалось сохранить переменную','error')}\n async function removeVariable(item){if(variableBusy||!confirm((ru?'Удалить переменную ':'Delete variable ')+item.name+'?'))return;variableBusy=true;const r=await deleteProjectEnvironmentVariable(projectId,environmentId,item.name);variableBusy=false;if(r.ok){notify(ru?'Переменная удалена':'Variable deleted','success');await load()}else notify(r.error||'Не удалось удалить переменную','error')}\n async function saveEnvironment(){if(busy||!environment)return;busy=true;const r=await updateProjectEnvironment(projectId,environmentId,editName,editDescription);busy=false;if(r.ok){notify('Окружение обновлено','success');await load()}else notify(r.error||'Не удалось обновить окружение','error')}
+ async function saveVariable(){if(variableBusy||!variableName.trim())return;variableBusy=true;const r=await saveProjectEnvironmentVariable(projectId,environmentId,variableName.trim(),variableValue);variableBusy=false;if(r.ok){notify(ru?'Переменная сохранена':'Variable saved','success');variableName='';variableValue='';await load()}else notify(r.error||'Не удалось сохранить переменную','error')}
+ async function removeVariable(item){if(variableBusy||!confirm((ru?'Удалить переменную ':'Delete variable ')+item.name+'?'))return;variableBusy=true;const r=await deleteProjectEnvironmentVariable(projectId,environmentId,item.name);variableBusy=false;if(r.ok){notify(ru?'Переменная удалена':'Variable deleted','success');await load()}else notify(r.error||'Не удалось удалить переменную','error')}
+ async function saveEnvironment(){if(busy||!environment)return;busy=true;const r=await updateProjectEnvironment(projectId,environmentId,editName,editDescription);busy=false;if(r.ok){notify('Окружение обновлено','success');await load()}else notify(r.error||'Не удалось обновить окружение','error')}
  async function removeEnvironment(){if(busy||!environment||environment.is_protected)return;if(!confirm('Удалить окружение? Привязки приложений к нему будут удалены, сами приложения останутся.'))return;busy=true;const r=await deleteProjectEnvironment(projectId,environmentId);busy=false;if(r.ok){notify('Окружение удалено','success');goto('/projects/'+projectId)}else notify(r.error||'Не удалось удалить окружение','error')}
 
  async function attach(){if(!selected||busy)return;const [device,site]=selected.split(':');busy=true;const r=await attachEnvironmentSite(projectId,environmentId,Number(device),site);busy=false;if(r.ok){notify('Application добавлено в окружение','success');selected='';await load()}else notify(r.error||'Не удалось добавить сайт','error')}
