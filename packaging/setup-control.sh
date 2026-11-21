@@ -5,6 +5,8 @@ PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 cd "$HOME" 2>/dev/null || cd "$PREFIX"
 DATA_ROOT="${YEVQO_DATA_ROOT:-${VELTRIX_DATA_ROOT:-/sdcard/yevqo}}"
 LEGACY_DATA_ROOT="/sdcard/veltrix-control"
+log(){ printf '==> %s\n' "$*"; }
+warn(){ printf 'WARNING: %s\n' "$*" >&2; }
 if [ ! -d /sdcard ]; then
   echo "Shared storage is not available. Run termux-setup-storage and grant permission first." >&2
   exit 1
@@ -37,8 +39,6 @@ fi
 
 CONFIG_FILE="$DATA_ROOT/config/config.json"
 SERVICE_DIR="$PREFIX/var/service/yevqo-control"
-log(){ printf '==> %s\n' "$*"; }
-warn(){ printf 'WARNING: %s\n' "$*" >&2; }
 command -v mysql >/dev/null 2>&1 || { echo "MariaDB client missing; install package mariadb first" >&2; exit 1; }
 mkdir -p "$DATA_ROOT"/{config,logs,data,migrations,public,backups}
 if [ ! -d "$PREFIX/var/lib/mysql/mysql" ]; then
