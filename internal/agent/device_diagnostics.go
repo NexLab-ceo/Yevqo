@@ -79,7 +79,7 @@ func readListeningPorts() []int {
 
 func primaryLocalIP() string {
  addrs,err:=net.InterfaceAddrs();if err!=nil{return ""}
- for _,addr:=range addrs { ipnet,ok:=addr.(*net.IPNet);if !ok||ipnet.IP.IsLoopback(){continue};if ip4:=ipnet.IP.To4();ip4!=nil{return ip4.String()} }
+ for _,addr:=range addrs { ipnet,ok:=addr.(*net.IPNet);if !ok||ipnet.IP.IsLoopback(){continue};if ip4:=ipnet.IP.To4();ip4!=nil&&ip4.IsPrivate(){return ip4.String()} }
  return ""
 }
 
@@ -91,10 +91,11 @@ func readAgentLogs() string {
 }
 
 func collectDeviceDiagnostics() deviceDiagnostics {
+ batteryPercent,batteryStatus:=readBattery()
  return deviceDiagnostics{
   LocalIP:primaryLocalIP(),
-  BatteryPercent: func()*int{v,_:=readBattery();return v}(),
-  BatteryStatus: func()string{_,v:=readBattery();return v}(),
+  BatteryPercent:batteryPercent,
+  BatteryStatus:batteryStatus,
   DeviceUptimeSeconds:readDeviceUptime(),
   AgentUptimeSeconds:int64(time.Since(agentStartedAt).Seconds()),
   ListeningPorts:readListeningPorts(),
