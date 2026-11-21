@@ -22,7 +22,10 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	action := "environment.read"
-	if r.Method != http.MethodGet { action = "project.manage" }
+	if r.Method != http.MethodGet {
+		action = "project.manage"
+		if len(parts) == 4 && parts[3] == "sites" && r.Method == http.MethodPost { action = "environment.assign" }
+	}
 	ownerID, accessErr := s.authorizeProjectOwner(r.Context(), projectID, u.ID, action)
 	if accessErr != nil { apiError(w, accessErr); return }
 
