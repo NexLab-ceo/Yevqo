@@ -14,22 +14,40 @@ Create the App in GitHub Developer Settings and configure:
 
 The installation flow uses GitHub's official `/apps/{slug}/installations/new` page. The callback returns `installation_id`, `setup_action` and the one-time `state` created by the authenticated Control Plane session. The state expires after 10 minutes and is consumed once. The Control Plane verifies that the installation belongs to the configured App before showing it as connected.
 
-## Configure the Control Plane
+## Configure the Control Plane on Android / Termux
 
-Set these environment variables on the **Control Plane service**, not in frontend build arguments:
+The Termux installer creates a protected configuration directory at
+`$PREFIX/etc/yevqo` and never overwrites existing GitHub App credentials:
 
-| Variable | Purpose |
-|---|---|
-| `YEVQO_GITHUB_APP_ID` | Numeric GitHub App ID |
-| `YEVQO_GITHUB_APP_SLUG` | Public GitHub App slug used to build the installation URL |
-| `YEVQO_GITHUB_APP_PRIVATE_KEY` | RSA PEM private key; use real newlines or escaped `\n` |
-| `YEVQO_PUBLIC_URL` | Public HTTPS Control Plane origin (for example the Cloudflare Tunnel hostname); enables automatic push webhook registration |
+- `github-app.env` — App ID, slug and optional public URL (mode `0600`).
+- `github-app.pem` — RSA private key in PEM format (mode `0600`).
 
-Restart the Control Plane after setting the variables. The public config endpoint returns only whether the App is configured and its public slug. It never returns the App ID or private key.
+Edit `$PREFIX/etc/yevqo/github-app.env` and set:
 
-When a user completes installation, Yevqo verifies the installation using an RS256 App JWT, obtains an installation access token, and stores the installation ID and credentials encrypted with the Control Plane credential key. Short-lived installation tokens are requested on demand and are not persisted.
+```sh
+YEVQO_GITHUB_APP_ID=YOUR_NUMERIC_APP_ID
+YEVQO_GITHUB_APP_SLUG=your-app-slug
+YEVQO_PUBLIC_URL=https://your-public-panel-host
+```
 
-If these variables are absent, the UI shows an explicit not-configured state. It does not show a false Connected state.
+Place the downloaded GitHub App private key at
+`$PREFIX/etc/yevqo/github-app.pem`. Do not paste the PEM into the env file,
+browser, shell command arguments or chat. Restrict access to both files.
+
+The `yevqo-control` runit service loads the env file and reads the PEM file
+into the Control Plane process environment on every start. The key is not
+printed or returned to the browser. Restart the service after editing either
+file:
+
+```sh
+sv restart yevqo-control
+sv status yevqo-control
+```
+
+For non-Termux deployments, set the same server-side environment variables
+directly on the Control Plane service. The public config endpoint returns only
+whether the App is configured and its public slug; it never returns the App ID
+or private key.
 
 ## Disconnect and permissions
 
