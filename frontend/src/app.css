@@ -46,11 +46,11 @@
 
 /* Dokploy-inspired VELTRIX control panel baseline */
 :root{
- --bg-base:#09090b;--bg-sidebar:#09090b;--bg-card:#18181b;--bg-elevated:#18181b;
- --bg-hover:#27272a;--bg-input:#09090b;--border:#27272a;--border-hover:#3f3f46;
- --text-main:#fafafa;--text-muted:#a1a1aa;--text-dim:#71717a;
- --accent:#fafafa;--accent-hover:#e4e4e7;--accent-soft:#27272a;--accent-fg:#09090b;
- --radius:8px
+ --bg-base:#080A09;--bg-sidebar:#080A09;--bg-card:#101611;--bg-elevated:#18221A;
+ --bg-hover:#18221A;--bg-input:#101611;--border:#2C392D;--border-hover:#78C85A;
+ --text-main:#E9EEE8;--text-muted:#929D91;--text-dim:#929D91;
+ --accent:#A5EC79;--accent-hover:#78C85A;--accent-soft:#18221A;--accent-fg:#080A09;
+ --radius:10px
 }
 html,body{font-size:14px}
 .btn{border-radius:6px;font-size:12px;font-weight:500;padding:7px 12px;box-shadow:none}
