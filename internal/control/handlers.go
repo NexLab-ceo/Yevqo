@@ -584,7 +584,10 @@ func parsePayload(action string, raw json.RawMessage) (interface{}, error) {
 			return nil, err
 		}
 		return &p, nil
-	case "get_device_diagnostics":
+	case "restart_agent":
+  var p shared.RestartAgent
+  if err:=json.Unmarshal(raw,&p);err!=nil{return nil,err};return &p,nil
+ case "get_device_diagnostics":
   var p shared.GetDeviceDiagnostics
   if err:=json.Unmarshal(raw,&p);err!=nil{return nil,err};return &p,nil
  case "check_device_port":
