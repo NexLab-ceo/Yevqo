@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+ "os"
+ "os/exec"
 	"time"
 
 	"veltrix/internal/shared"
@@ -68,7 +70,9 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleRestoreDatabaseBackup(cmd)
 	case "test_database_connection":
 		return h.handleTestDatabaseConnection(cmd)
-	case "get_device_diagnostics":
+	case "restart_agent":
+  return h.handleRestartAgent(cmd)
+ case "get_device_diagnostics":
   return h.handleGetDeviceDiagnostics(cmd)
  case "check_device_port":
   return h.handleCheckDevicePort(cmd)
@@ -161,6 +165,19 @@ func (h *CommandHandler) handleCreateSiteBackup(cmd *shared.Command) *shared.Res
 	payload, err := shared.Marshal(result)
 	if err != nil { return errorResult(cmd.Id, "could not encode backup result") }
 	return &shared.Result{Id:cmd.Id,Ok:true,Message:"site backup completed",Payload:payload}
+}
+
+func (h *CommandHandler) handleRestartAgent(cmd *shared.Command) *shared.Result {
+ prefix:=os.Getenv("PREFIX");if prefix==""{prefix="/data/data/com.termux/files/usr"}
+ service:="yevqo"
+ if _,err:=os.Stat(prefix+"/var/service/yevqo");err!=nil {
+  if _,agentErr:=os.Stat(prefix+"/var/service/yevqo-agent");agentErr==nil{service="yevqo-agent"}else{return errorResult(cmd.Id,"runit Agent service was not found")}
+ }
+ // Delay the supervisor restart until after the acknowledgement can be sent.
+ script:="(sleep 2; sv restart "+service+") >/dev/null 2>&1 &"
+ process:=exec.Command("sh","-c",script)
+ if err:=process.Start();err!=nil{return errorResult(cmd.Id,"could not schedule Agent restart")}
+ return &shared.Result{Id:cmd.Id,Ok:true,Message:"Agent restart scheduled"}
 }
 
 func (h *CommandHandler) handleGetDeviceDiagnostics(cmd *shared.Command) *shared.Result {
