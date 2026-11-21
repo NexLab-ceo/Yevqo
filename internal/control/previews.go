@@ -50,7 +50,11 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 		apiError(w, shared.ErrForbidden("Preview Deployments are available only on Android/Termux devices"))
 		return
 	}
-	if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
+	projectID, scopeErr := s.siteProjectScope(r.Context(), dev.UserID, deviceID, siteID)
+	if scopeErr != nil { apiError(w, scopeErr); return }
+	if projectID > 0 {
+		if _, err := s.authorizeProjectOwner(r.Context(), projectID, user.ID, "device.read"); err != nil { apiError(w, err); return }
+	} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
 	ownerID := dev.UserID
 
 	sites, err := s.db.ListSitesByDevice(r.Context(), deviceID)
@@ -72,7 +76,9 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 			writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"previews":items})
 			return
 		case http.MethodPost:
-			if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "preview.deploy"); err != nil { apiError(w, err); return }
+			if projectID > 0 {
+				if _, err := s.authorizeProjectOwner(r.Context(), projectID, user.ID, "preview.deploy"); err != nil { apiError(w, err); return }
+			} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "preview.deploy"); err != nil { apiError(w, err); return }
 			var in previewCreateInput
 			if err := decodeJSON(r,&in); err != nil { apiError(w,shared.ErrBadRequest("invalid JSON")); return }
 			if !in.AllowProjectCode { apiError(w,shared.ErrBadRequest("explicit project-code consent is required before creating a preview")); return }
@@ -115,7 +121,9 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 	}
 
 	if r.Method != http.MethodDelete { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
-	if err := s.authorizeWorkspace(r.Context(),dev.UserID,user.ID,"preview.delete"); err != nil { apiError(w,err); return }
+	if projectID > 0 {
+		if _, err := s.authorizeProjectOwner(r.Context(), projectID, user.ID, "preview.delete"); err != nil { apiError(w, err); return }
+	} else if err := s.authorizeWorkspace(r.Context(),dev.UserID,user.ID,"preview.delete"); err != nil { apiError(w,err); return }
 	if len(previewKey)!=32 { apiError(w,shared.ErrBadRequest("invalid preview key")); return }
 	var status string
 	err=s.db.conn.QueryRowContext(r.Context(),`SELECT status FROM preview_deployments WHERE user_id=? AND device_id=? AND site_id=? AND preview_key=?`,ownerID,deviceID,siteID,previewKey).Scan(&status)
