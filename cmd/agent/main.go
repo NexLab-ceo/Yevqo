@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"flag"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -34,6 +35,14 @@ func main() {
 	cfg, err := agent.LoadConfig(*configPath)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
+	}
+
+	logFile, logErr := agent.OpenAgentLog(cfg.DataRoot)
+	if logErr != nil {
+		log.Printf("warning: could not open private Agent log: %v", logErr)
+	} else {
+		log.SetOutput(io.MultiWriter(os.Stderr, logFile))
+		defer logFile.Close()
 	}
 
 	log.Printf("Yevqo Agent v%s", agent.Version)
