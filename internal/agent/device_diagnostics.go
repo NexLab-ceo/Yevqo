@@ -31,14 +31,17 @@ func OpenAgentLog(dataRoot string) (*os.File,error) {
  dir:=filepath.Join(dataRoot,"logs")
  if err:=os.MkdirAll(dir,0700);err!=nil{return nil,err}
  info,err:=os.Lstat(dir);if err!=nil{return nil,err};if !info.IsDir()||info.Mode()&os.ModeSymlink!=0{return nil,fmt.Errorf("Agent log directory is not a safe directory")}
+ if err:=os.Chmod(dir,0700);err!=nil{return nil,err}
  path:=filepath.Join(dir,"agent.log")
  if info,err:=os.Lstat(path);err==nil {
   if !info.Mode().IsRegular()||info.Mode()&os.ModeSymlink!=0{return nil,fmt.Errorf("Agent log is not a regular file")}
   if info.Size()>5<<20 {
    rotated:=path+".1";if old,e:=os.Lstat(rotated);e==nil {if !old.Mode().IsRegular()||old.Mode()&os.ModeSymlink!=0{return nil,fmt.Errorf("rotated Agent log is not a regular file")};if e=os.Remove(rotated);e!=nil{return nil,e}}
    if err:=os.Rename(path,rotated);err!=nil{return nil,err}
+   if err:=os.Chmod(rotated,0600);err!=nil{return nil,err}
   }
  } else if !os.IsNotExist(err){return nil,err}
+ if err:=os.Chmod(path,0600);err!=nil&&!os.IsNotExist(err){return nil,err}
  return os.OpenFile(path,os.O_CREATE|os.O_APPEND|os.O_WRONLY,0600)
 }
 
