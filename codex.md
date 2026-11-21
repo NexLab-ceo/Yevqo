@@ -104,7 +104,7 @@ This is a conservative starting snapshot based on the repository documentation a
 
 | Phase / area | Initial status | Notes |
 |---|---|---|
-| P0 — Go Control Plane and Agent foundation | PARTIAL | Core services and Android/Termux packaging are present; re-check full install/upgrade and device runtime coverage. |
+| P0 — Go Control Plane and Agent foundation | PARTIAL | Core services and Android/Termux packaging are present. The Termux Control Plane runner now writes bounded private stdout/stderr logs to `$DATA_ROOT/logs/control.log`, independently of runit `svlogd`; current package/CI and physical Android verification remain pending. |
 | P0 — Android package build and CI | PARTIAL | Android packages and setup scripts are present. Setup launchers now switch to a stable Termux working directory before setup; this prevents a legacy data-root migration or package operation from leaving child service commands in a deleted cwd. Shell/CI and physical Android startup verification remain pending. |
 | P0 — Automatic package updates and VELTRIX Dock releases | PARTIAL | Both package updaters now target the public `NexLab-ceo/veltrix-dock` releases, compare installed versions, verify SHA-256/package metadata and install newer `.deb` files. Debian post-install enables a six-hour Termux updater service. The build workflow publishes both packages and `SHA256SUMS` on version tags using `PUBLIC_RELEASE_TOKEN`; token permissions, current CI, first release and physical Android/background execution remain unverified. |
 | P0 — Agent pairing token separation | PARTIAL | Dedicated 256-bit random token is issued from Profile, stored only as SHA-256, and checked by WebSocket auth; public referral codes remain for referrals. Rotation revokes the previous token. Existing Agent configs must be re-paired; physical-device verification and multi-device token management remain open. |
@@ -142,6 +142,8 @@ Before finishing every task:
 7. Keep the ledger concise and current. Do not append repetitive logs; update existing rows and add only meaningful history entries.
 
 ### Progress history
+
+- 2026-11-21 — Added independent Control Plane service logging to the Termux runner on `main`: stdout/stderr are redirected to `$DATA_ROOT/logs/control.log` with a private directory/file (0700/0600), symlink/non-regular-file checks and startup rotation above 5 MiB. This bypasses a missing or broken nested runit logger without changing GitHub App credentials or database state. CI and physical Android verification pending.
 
 - 2026-11-21 — Fixed a Termux installer working-directory hazard on `main`: the combined, Control Plane and Agent setup scripts now move to `$HOME` (or `$PREFIX`) before performing setup, so a data-root migration cannot leave subsequent `sv`/service commands running from a directory that was moved. Also moved Control Plane log helpers before the legacy migration branch so migration diagnostics are callable. Existing configs and database data are preserved; shell/CI and physical-device verification remain pending.
 
