@@ -21,9 +21,17 @@ import (
 func (s *Server) handleSiteWebhookSettings(w http.ResponseWriter, r *http.Request, user *shared.User, deviceID int64, siteID string) {
 	dev, err := s.db.GetDeviceByID(r.Context(), deviceID)
 	if err != nil { apiError(w, shared.ErrNotFound("site not found")); return }
-	if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
-	if r.Method != http.MethodGet {
-		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
+	projectID, scopeErr := s.siteProjectScope(r.Context(), dev.UserID, deviceID, siteID)
+	if scopeErr != nil { apiError(w, scopeErr); return }
+	if projectID > 0 {
+		action := "project.read"
+		if r.Method != http.MethodGet { action = "project.manage" }
+		if _, err := s.authorizeProjectOwner(r.Context(), projectID, user.ID, action); err != nil { apiError(w, err); return }
+	} else {
+		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
+		if r.Method != http.MethodGet {
+			if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
+		}
 	}
 	switch r.Method {
 	case http.MethodGet:
