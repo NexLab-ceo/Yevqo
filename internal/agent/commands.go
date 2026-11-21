@@ -70,7 +70,9 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleRestoreDatabaseBackup(cmd)
 	case "test_database_connection":
 		return h.handleTestDatabaseConnection(cmd)
-	case "restart_agent":
+	case "update_agent":
+  return h.handleUpdateAgent(cmd)
+ case "restart_agent":
   return h.handleRestartAgent(cmd)
  case "get_device_diagnostics":
   return h.handleGetDeviceDiagnostics(cmd)
@@ -165,6 +167,16 @@ func (h *CommandHandler) handleCreateSiteBackup(cmd *shared.Command) *shared.Res
 	payload, err := shared.Marshal(result)
 	if err != nil { return errorResult(cmd.Id, "could not encode backup result") }
 	return &shared.Result{Id:cmd.Id,Ok:true,Message:"site backup completed",Payload:payload}
+}
+
+func (h *CommandHandler) handleUpdateAgent(cmd *shared.Command) *shared.Result {
+ prefix:=os.Getenv("PREFIX");if prefix==""{prefix="/data/data/com.termux/files/usr"}
+ updater:=prefix+"/bin/yevqo-update"
+ if _,err:=os.Stat(updater);err!=nil{return errorResult(cmd.Id,"Yevqo updater command is not installed on this device")}
+ script:="sleep 2; exec "+updater
+ process:=exec.Command("sh","-c",script)
+ if err:=process.Start();err!=nil{return errorResult(cmd.Id,"could not schedule Agent update")}
+ return &shared.Result{Id:cmd.Id,Ok:true,Message:"Agent update check scheduled; the service may restart during installation"}
 }
 
 func (h *CommandHandler) handleRestartAgent(cmd *shared.Command) *shared.Result {
