@@ -143,6 +143,8 @@ Before finishing every task:
 
 ### Progress history
 
+- 2026-11-21 — Added credential-safe GitHub App failure logging and corrected stage attribution for transport errors: installation lookup and installation-token creation now have distinct wrapped errors, and the authenticated callback logs the server-side request/transport diagnostic plus installation ID without logging JWTs, PEM contents or installation tokens. Added a regression test for token-creation timeout messaging. CI and physical Android verification pending.
+
 - 2026-11-21 — Added independent Control Plane service logging to the Termux runner on `main`: stdout/stderr are redirected to `$DATA_ROOT/logs/control.log` with a private directory/file (0700/0600), symlink/non-regular-file checks and startup rotation above 5 MiB. This bypasses a missing or broken nested runit logger without changing GitHub App credentials or database state. CI and physical Android verification pending.
 
 - 2026-11-21 — Fixed a Termux installer working-directory hazard on `main`: the combined, Control Plane and Agent setup scripts now move to `$HOME` (or `$PREFIX`) before performing setup, so a data-root migration cannot leave subsequent `sv`/service commands running from a directory that was moved. Also moved Control Plane log helpers before the legacy migration branch so migration diagnostics are callable. Existing configs and database data are preserved; shell/CI and physical-device verification remain pending.
