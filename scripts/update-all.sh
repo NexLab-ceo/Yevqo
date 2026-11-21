@@ -1,23 +1,49 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
-REPO="NexLab-ceo/veltrix"
+REPO="NexLab-ceo/veltrix-dock"
 API="https://api.github.com/repos/$REPO/releases/latest"
-TOKEN_FILE="/sdcard/yevqo/config/github-token"
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+PACKAGE="yevqo-all"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-command -v curl >/dev/null || { echo "Install curl: pkg install curl"; exit 1; }
-command -v jq >/dev/null || { echo "Install jq: pkg install jq"; exit 1; }
-[ "$(uname -m)" = "aarch64" ] || { echo "YEVQO All package requires Android ARM64"; exit 1; }
-[ -s "$TOKEN_FILE" ] || { echo "Private GitHub token missing: $TOKEN_FILE"; echo "Create it with: mkdir -p $(dirname '$TOKEN_FILE'); nano '$TOKEN_FILE'"; exit 1; }
-TOKEN="$(cat "$TOKEN_FILE")"
-AUTH="Authorization: Bearer $TOKEN"
-URL="$(curl -fsSL -H "$AUTH" -H 'Accept: application/vnd.github+json' "$API" | jq -r '.assets[] | select(.name | startswith("yevqo-all_") and endswith("_aarch64.deb")) | .browser_download_url' | head -n1)"
-[ -n "$URL" ] && [ "$URL" != "null" ] || { echo "No yevqo-all .deb in latest private release"; exit 1; }
+command -v curl >/dev/null || { echo "Install curl: pkg install curl" >&2; exit 1; }
+command -v jq >/dev/null || { echo "Install jq: pkg install jq" >&2; exit 1; }
+command -v dpkg-deb >/dev/null || { echo "dpkg-deb is unavailable" >&2; exit 1; }
+[ "$(uname -m)" = "aarch64" ] || { echo "Yevqo All requires Android ARM64" >&2; exit 1; }
 
-curl -fL --progress-bar -H "$AUTH" "$URL" -o "$TMP/yevqo-all.deb"
-dpkg-deb --field "$TMP/yevqo-all.deb" Package | grep -qx yevqo-all
-dpkg-deb --field "$TMP/yevqo-all.deb" Architecture | grep -qx aarch64
-dpkg -i "$TMP/yevqo-all.deb"
-echo "YEVQO All updated. Control/Agent configs and /sdcard data remain in place."
+CURRENT="$(dpkg-query -W -f='${Version}' "$PACKAGE" 2>/dev/null || true)"
+curl -fsSL --retry 3 -H 'Accept: application/vnd.github+json' -H 'User-Agent: Yevqo-Updater' "$API" -o "$TMP/release.json"
+LATEST="$(jq -er '.tag_name | sub("^v"; "")' "$TMP/release.json")"
+ASSET="${PACKAGE}_${LATEST}_aarch64.deb"
+URL="$(jq -er --arg name "$ASSET" '.assets[] | select(.name == $name) | .browser_download_url' "$TMP/release.json")"
+CHECKSUM_URL="$(jq -er '.assets[] | select(.name == "SHA256SUMS") | .browser_download_url' "$TMP/release.json")"
+
+if [ -n "$CURRENT" ] && dpkg --compare-versions "$LATEST" le "$CURRENT"; then
+  echo "Yevqo All is up to date ($CURRENT)."
+  exit 0
+fi
+
+curl -fL --retry 3 --progress-bar "$URL" -o "$TMP/$ASSET"
+curl -fsSL --retry 3 "$CHECKSUM_URL" -o "$TMP/SHA256SUMS"
+EXPECTED="$(awk -v file="$ASSET" '$2 == file { print $1; exit }' "$TMP/SHA256SUMS")"
+ACTUAL="$(sha256sum "$TMP/$ASSET" | awk '{ print $1 }')"
+[ -n "$EXPECTED" ] && [ "$EXPECTED" = "$ACTUAL" ] || { echo "Yevqo All package checksum verification failed" >&2; exit 1; }
+
+dpkg-deb --field "$TMP/$ASSET" Package | grep -Fx "$PACKAGE" >/dev/null
+dpkg-deb --field "$TMP/$ASSET" Architecture | grep -Fx aarch64 >/dev/null
+dpkg-deb --field "$TMP/$ASSET" Version | grep -Fx "$LATEST" >/dev/null
+
+echo "Installing Yevqo All $LATEST (current: ${CURRENT:-not registered})"
+YEVQO_NONINTERACTIVE=1 dpkg -i "$TMP/$ASSET"
+
+if command -v sv >/dev/null 2>&1; then
+  for service in yevqo-control yevqo-agent yevqo; do
+    if [ -d "$PREFIX/var/service/$service" ] || [ -L "$PREFIX/var/service/$service" ]; then
+      sv restart "$service" >/dev/null 2>&1 || sv up "$service" >/dev/null 2>&1 || true
+    fi
+  done
+fi
+
+echo "Yevqo All updated to $LATEST. Existing configuration, database and /sdcard data were preserved."
