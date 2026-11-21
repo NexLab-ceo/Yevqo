@@ -53,7 +53,7 @@ Environment application assignments must refer to applications already attached 
 
 A project can assign an explicit role to an existing active workspace member. Available project roles are **Admin**, **Developer**, and **Viewer**. An explicit project role overrides the member's workspace role only for project-scoped API operations; when no project role is assigned, the workspace role is inherited. The project Owner always retains full control. Viewer is read-only. Project membership does not create a separate Yevqo account or send an email invitation; the person must already be an active member of the workspace.
 
-Project roles are checked server-side for project detail, environment/resource management, project deployment/repository endpoints, and device commands explicitly sent with the project ID. Workspace-level operations outside a project continue to use workspace RBAC.
+Project roles are checked server-side for project detail, environment/resource management, project deployment/repository endpoints, project-scoped device commands, and site lifecycle/deployment actions opened from a project. Workspace-level operations outside a project continue to use workspace RBAC.
 
 ### Per-environment variables and secrets
 
@@ -62,6 +62,8 @@ Each environment has its own variable namespace at `/projects/{projectId}/enviro
 At application start and deployment, the selected project's environment values are injected into the Agent runtime. Precedence is: project environment values, then application-specific values, then Yevqo-managed database connection values (highest priority). Reserved process, port/host, DB and Yevqo keys cannot be overridden. A site's environment assignment is now resolved even when it has no database connection, so application configuration is not coupled to database provisioning.
 
 ## Project dashboard sections
+
+The Overview includes resource counts plus attached devices, applications, database servers, each project environment, and recent deployment runs. Project Activity combines project-filtered audit events (where the effective project role permits audit access) with operational logs for roles without audit access.
 
 The project detail page separates the resource summary, project-owned environments, applications, deployments, activity, source repository, and settings.
 
