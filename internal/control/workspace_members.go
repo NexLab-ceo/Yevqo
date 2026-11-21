@@ -114,10 +114,15 @@ func (s *Server) handleWorkspaceMemberByID(w http.ResponseWriter,r *http.Request
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"workspace_member_role_updated",Details:map[string]interface{}{"workspace_owner_id":ownerID,"membership_id":id,"role":in.Role},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"role":in.Role});return
 	}
+	var memberUserID int64
+	if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT member_user_id FROM workspace_members WHERE id=? AND owner_user_id=?`,id,ownerID).Scan(&memberUserID);err!=nil{apiError(w,shared.ErrNotFound("workspace member not found"));return}
 	result,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM workspace_members WHERE id=? AND owner_user_id=?`,id,ownerID)
 	if err!=nil{apiError(w,shared.ErrInternal("could not remove workspace member"));return}
 	affected,_:=result.RowsAffected()
 	if affected==0{apiError(w,shared.ErrNotFound("workspace member not found"));return}
+	// A removed workspace member must not retain a dormant project role that
+	// would silently become active if they are invited again later.
+	if _,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM project_members WHERE member_user_id=? AND project_id IN (SELECT id FROM projects WHERE user_id=?)`,memberUserID,ownerID);err!=nil{apiError(w,shared.ErrInternal("workspace member removed but project role cleanup failed"));return}
 	_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(user.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),Action:"workspace_member_removed",Details:map[string]interface{}{"workspace_owner_id":ownerID,"membership_id":id},IP:clientIP(r)})
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true})
 }
