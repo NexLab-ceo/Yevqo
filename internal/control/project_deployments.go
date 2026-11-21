@@ -131,7 +131,7 @@ func (s *Server) queueProjectDeployment(ctx context.Context,actorID,ownerID,proj
 	err:=s.db.conn.QueryRowContext(ctx,`SELECT pr.full_name,prs.deploy_branch FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id WHERE prs.project_id=? AND prs.device_id=? AND prs.site_id=?`,projectID,in.DeviceID,in.SiteID).Scan(&fullName,&branch)
 	if err!=nil{return 0,shared.ErrBadRequest("connect this project repository to the selected site first")}
 	if strings.TrimSpace(in.Branch)!=""{branch=strings.TrimSpace(in.Branch)}
-	if !gitBranchPattern.MatchString(branch)||strings.Contains(branch,"..")||strings.Contains(branch,"@{")||strings.HasSuffix(branch,"/")||strings.HasSuffix(branch,"."){return 0,shared.ErrBadRequest("invalid deployment branch")}
+	if !validateGitBranchName(branch){return 0,shared.ErrBadRequest("invalid deployment branch")}
 	if in.Commit!=""&&!releaseCommitPattern.MatchString(in.Commit){return 0,shared.ErrBadRequest("invalid commit SHA")}
 	owner,name,_,err:=parseGitHubRepositoryName(fullName);if err!=nil{return 0,shared.ErrBadRequest("invalid connected repository")}
 	token,_,_,_,err:=s.projectRepositoryToken(ctx,ownerID,projectID);if err!=nil{return 0,shared.ErrForbidden("GitHub App installation is unavailable")}
