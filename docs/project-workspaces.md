@@ -49,6 +49,12 @@ Environment application assignments must refer to applications already attached 
 
 **Important limitation:** environment assignments currently organize project resources; they do not create separate database instances, clone application files, or automatically switch a site's database connection. Runtime isolation and environment-aware deployment promotion still require further implementation.
 
+### Per-environment variables and secrets
+
+Each environment has its own variable namespace at `/projects/{projectId}/environments/{environmentId}/variables`. Values are encrypted with the Control Plane credential key (AES-GCM) before persistence; the API returns names and masked state only, never plaintext values. Saving an existing key rotates its value; deleting a key removes only that environment's entry.
+
+At application start and deployment, the selected project's environment values are injected into the Agent runtime. Precedence is: project environment values, then application-specific values, then Yevqo-managed database connection values (highest priority). Reserved process, port/host, DB and Yevqo keys cannot be overridden. A site's environment assignment is now resolved even when it has no database connection, so application configuration is not coupled to database provisioning.
+
 ## Project dashboard sections
 
 The project detail page separates the resource summary, project-owned environments, applications, deployments, activity, source repository, and settings.
