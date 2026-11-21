@@ -505,6 +505,8 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 			if err := s.requireProjectSite(r.Context(), req.ProjectID, dev.ID, p.SiteId); err != nil { apiError(w, err); return }
 		case *shared.StopSite:
 			if err := s.requireProjectSite(r.Context(), req.ProjectID, dev.ID, p.SiteId); err != nil { apiError(w, err); return }
+		case *shared.AndroidBuildSite:
+			if err := s.requireProjectSite(r.Context(), req.ProjectID, dev.ID, p.SiteId); err != nil { apiError(w, err); return }
 		}
 	} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, req.Action); err != nil {
 		apiError(w, err)
@@ -521,6 +523,13 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 		env, envErr := s.siteRuntimeEnvironment(ctx, dev.UserID, dev.ID, start.SiteId, projectID, environmentID)
 		if envErr != nil { apiError(w, envErr); return }
 		start.Env = env
+	}
+	if build, ok := payload.(*shared.AndroidBuildSite); ok {
+		projectID, environmentID, scopeErr := s.siteEnvironmentScope(ctx, dev.UserID, dev.ID, build.SiteId)
+		if scopeErr != nil { apiError(w, scopeErr); return }
+		env, envErr := s.siteRuntimeEnvironment(ctx, dev.UserID, dev.ID, build.SiteId, projectID, environmentID)
+		if envErr != nil { apiError(w, envErr); return }
+		build.Environment = env
 	}
 
 	result, err := conn.SendCommand(ctx, req.Action, payload)
