@@ -49,6 +49,12 @@ Environment application assignments must refer to applications already attached 
 
 **Important limitation:** environment assignments currently organize project resources; they do not create separate database instances, clone application files, or automatically switch a site's database connection. Runtime isolation and environment-aware deployment promotion still require further implementation.
 
+### Project-level membership and roles
+
+A project can assign an explicit role to an existing active workspace member. Available project roles are **Admin**, **Developer**, and **Viewer**. An explicit project role overrides the member's workspace role only for project-scoped API operations; when no project role is assigned, the workspace role is inherited. The project Owner always retains full control. Viewer is read-only. Project membership does not create a separate Yevqo account or send an email invitation; the person must already be an active member of the workspace.
+
+Project roles are checked server-side for project detail, environment/resource management, project deployment/repository endpoints, and device commands explicitly sent with the project ID. Workspace-level operations outside a project continue to use workspace RBAC.
+
 ### Per-environment variables and secrets
 
 Each environment has its own variable namespace at `/projects/{projectId}/environments/{environmentId}/variables`. Values are encrypted with the Control Plane credential key (AES-GCM) before persistence; the API returns names and masked state only, never plaintext values. Saving an existing key rotates its value; deleting a key removes only that environment's entry.
