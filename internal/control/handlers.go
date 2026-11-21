@@ -457,8 +457,16 @@ func (s *Server) handleDeleteDevice(w http.ResponseWriter, r *http.Request, dev 
 }
 
 type sendCommandRequest struct {
-	Action  string          `json:"action"`
-	Payload json.RawMessage `json:"payload,omitempty"`
+	Action    string          `json:"action"`
+	Payload   json.RawMessage `json:"payload,omitempty"`
+	ProjectID int64           `json:"project_id,omitempty"`
+}
+
+func (s *Server) requireProjectSite(ctx context.Context, projectID, deviceID int64, siteID string) error {
+	var count int
+	if err := s.db.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=? AND site_id=?", projectID, deviceID, siteID).Scan(&count); err != nil { return shared.ErrInternal("could not verify project application") }
+	if count != 1 { return shared.ErrForbidden("application is not assigned to this project") }
+	return nil
 }
 
 func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *shared.Device) {
@@ -484,7 +492,21 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 		apiError(w, shared.ErrUnauthorized("not logged in"))
 		return
 	}
-	if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, req.Action); err != nil {
+	if req.ProjectID > 0 {
+		ownerID, authErr := s.authorizeProjectOwner(r.Context(), req.ProjectID, user.ID, req.Action)
+		if authErr != nil { apiError(w, authErr); return }
+		if ownerID != dev.UserID { apiError(w, shared.ErrForbidden("device does not belong to this project workspace")); return }
+		var assigned int
+		if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM project_devices WHERE project_id=? AND device_id=?", req.ProjectID, dev.ID).Scan(&assigned); err != nil || assigned != 1 {
+			apiError(w, shared.ErrForbidden("device is not assigned to this project")); return
+		}
+		switch p := payload.(type) {
+		case *shared.StartSite:
+			if err := s.requireProjectSite(r.Context(), req.ProjectID, dev.ID, p.SiteId); err != nil { apiError(w, err); return }
+		case *shared.StopSite:
+			if err := s.requireProjectSite(r.Context(), req.ProjectID, dev.ID, p.SiteId); err != nil { apiError(w, err); return }
+		}
+	} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, req.Action); err != nil {
 		apiError(w, err)
 		return
 	}
