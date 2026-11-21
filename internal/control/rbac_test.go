@@ -8,6 +8,7 @@ func TestCanWorkspaceActionRoleMatrix(t *testing.T) {
 		{"Admin","device.delete",true},
 		{"Developer","project.read",true},
 		{"Developer","environment.read",true},
+		{"Developer","environment.assign",true},
 		{"Developer","project.manage",false},
 		{"Developer","device.read",true},
 		{"Developer","get_device_diagnostics",true},
