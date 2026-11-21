@@ -49,6 +49,18 @@ Environment application assignments must refer to applications already attached 
 
 **Important limitation:** environment assignments currently organize project resources; they do not create separate database instances, clone application files, or automatically switch a site's database connection. Runtime isolation and environment-aware deployment promotion still require further implementation.
 
+## Project dashboard sections
+
+The project detail page separates the resource summary, project-owned environments, applications, deployments, activity, source repository, and settings.
+
+- **Overview** summarizes the devices, applications, database servers, environments, and deployment runs currently linked to this project.
+- **Environments** lists only the environments whose `project_id` is this project. Production, Development, Staging, and custom environments are not global/shared records. Each environment has its own application and database-server/database assignments and its own settings page.
+- **Applications** can scaffold a new site on an online device already attached to this project using the Agent's typed `create_site` command, then attach the resulting site to this project. Existing sites can also be attached. Creating a site does not start it or deploy arbitrary repository code.
+- **Activity** reads the project-filtered audit log.
+- **Settings** shows the project configuration and workspace members/roles inherited by this project. Project-specific member grants are not implemented; server-side workspace RBAC remains authoritative.
+
+Creating an application requires a manageable project and an attached device. The Agent must be online. If site creation succeeds but the subsequent project association fails, the UI reports that partial outcome rather than claiming the application was attached.
+
 ## Database and backup access
 
 Database-server inventory and lifecycle, database inventory and creation, database roles/privileges, site connection links, backup inventory, backup creation, restore, transfer, chunk download, and schedules are scoped to the workspace owner and role.
