@@ -120,6 +120,7 @@ else
 fi
 # Extend the previously generated generic hook so a standalone Agent is also started after reboot.
 if [ -s "$BOOT_DIR/00-yevqo" ]; then
+  sed -i 's/for service in yevqo-control yevqo-agent yevqo;/for service in yevqo-control yevqo-agent yevqo yevqo-updater;/' "$BOOT_DIR/00-yevqo"
   sed -i 's/for service in yevqo-control yevqo-agent;/for service in yevqo-control yevqo-agent yevqo yevqo-updater;/' "$BOOT_DIR/00-yevqo"
 fi
 if command -v sv >/dev/null 2>&1; then sv up "$SERVICE_NAME" || warn "Could not start Yevqo service now"; fi
