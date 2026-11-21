@@ -524,8 +524,9 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	args := []interface{}{ownerID}
 	if projectID > 0 {
 		query += ` AND (EXISTS (SELECT 1 FROM project_devices pd WHERE pd.project_id=? AND pd.device_id=l.device_id)
-			OR EXISTS (SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=l.device_id))`
-		args = append(args, projectID, projectID)
+			OR EXISTS (SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=l.device_id)
+			OR (l.device_id IS NULL AND CAST(JSON_UNQUOTE(JSON_EXTRACT(l.details,'$.project_id')) AS UNSIGNED)=?))`
+		args = append(args, projectID, projectID, projectID)
 	}
 	query += " ORDER BY l.id DESC LIMIT ?"
 	args = append(args, limit)
