@@ -661,7 +661,7 @@
             allow_project_code: true,
             timeout_seconds: 1200,
             max_log_bytes: 10485760
-        });
+        }, projectId);
         buildRunning = false;
         if (!res.ok || !res.data) {
             notify(res.error || 'Не удалось выполнить сборку', 'error');
