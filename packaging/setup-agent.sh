@@ -1,6 +1,8 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+# Avoid inheriting a working directory removed by an install or migration.
+cd "$HOME" 2>/dev/null || cd "$PREFIX"
 DATA_ROOT="${VELTRIX_AGENT_DATA_ROOT:-/sdcard/yevqo-agent}"
 PRIVATE_DATA_ROOT="$PREFIX/var/lib/veltrix-agent"
 CONFIG_DIR="$PRIVATE_DATA_ROOT/config"
