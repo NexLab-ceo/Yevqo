@@ -147,7 +147,7 @@ Before finishing every task:
 
 - 2026-11-21 — Extended Project Applications on `main` (commit `0fe5035`): new sites are scaffolded by the selected attached Agent, optionally assigned to the selected project-owned environment (Production by default), and existing applications expose Agent-backed start/stop actions plus open/detach controls. Project Activity now selects the audit-log payload correctly for Owners/Admins while Developers retain operational logs; workspace-member reads are gated to roles allowed to manage membership. Follow-up CI for the Svelte page is pending; no migration or production data/service was changed.
 
-- 2026-11-21 — Finalized the project tab structure on `main` (commit `a6ea655`) after the initial CI runs exposed Svelte template parsing issues. Environment and Applications are now separate conditional sections; the application flow includes project-owned environment selection and Agent-backed start/stop controls. CI for this revision is running. No database migration, project data, Agent installation or production service was changed.
+- 2026-11-21 — Finalized the project tab structure on `main` (commit `032cfa7`) after CI caught a missing closing `section` around the Applications panel. Environment and Applications are separate sections; the application flow includes project-owned environment selection and Agent-backed start/stop controls. CI for this revision is running. No database migration, project data, Agent installation or production service was changed.
 
 ### Progress history
 
