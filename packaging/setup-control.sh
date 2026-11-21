@@ -125,6 +125,31 @@ exec 2>&1
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 BIN="$PREFIX/bin/yevqo-control"
 DATA_ROOT="${YEVQO_DATA_ROOT:-${VELTRIX_DATA_ROOT:-/sdcard/yevqo}}"
+umask 077
+LOG_DIR="$DATA_ROOT/logs"
+if [ -L "$DATA_ROOT" ] || [ -L "$LOG_DIR" ]; then
+  echo "Unsafe Control Plane log directory; refusing to follow symlinks"
+  exit 1
+fi
+mkdir -p "$LOG_DIR"
+[ -d "$LOG_DIR" ] || { echo "Control Plane log path is not a directory"; exit 1; }
+chmod 700 "$LOG_DIR"
+LOG_FILE="$LOG_DIR/control.log"
+if [ -e "$LOG_FILE" ]; then
+  [ -f "$LOG_FILE" ] && [ ! -L "$LOG_FILE" ] || { echo "Unsafe Control Plane log file"; exit 1; }
+  if [ "$(wc -c < "$LOG_FILE")" -gt 5242880 ]; then
+    ROTATED_LOG="$LOG_FILE.1"
+    if [ -e "$ROTATED_LOG" ]; then
+      [ -f "$ROTATED_LOG" ] && [ ! -L "$ROTATED_LOG" ] || { echo "Unsafe rotated Control Plane log file"; exit 1; }
+      rm -f "$ROTATED_LOG"
+    fi
+    mv "$LOG_FILE" "$ROTATED_LOG"
+    chmod 600 "$ROTATED_LOG"
+  fi
+fi
+: >> "$LOG_FILE"
+chmod 600 "$LOG_FILE"
+exec >> "$LOG_FILE" 2>&1
 GITHUB_CONFIG_DIR="$PREFIX/etc/yevqo"
 GITHUB_ENV_FILE="$GITHUB_CONFIG_DIR/github-app.env"
 GITHUB_KEY_FILE="$GITHUB_CONFIG_DIR/github-app.pem"
