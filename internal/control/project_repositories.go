@@ -153,7 +153,7 @@ func (s *Server) handleProjectRepository(w http.ResponseWriter, r *http.Request)
 		repository, err := s.fetchGitHubRepository(ctx,token,owner,name)
 		if err != nil { apiError(w,shared.ErrBadRequest("GitHub repository could not be verified with this installation")); return }
 		branch := strings.TrimSpace(in.Branch); if branch == "" { branch = repository.DefaultBranch }
-		if !gitBranchPattern.MatchString(branch) || strings.Contains(branch,"..") || strings.Contains(branch,"@{") || strings.HasSuffix(branch,"/") || strings.HasSuffix(branch,".") {
+		if !validateGitBranchName(branch) {
 			apiError(w,shared.ErrBadRequest("invalid deployment branch")); return
 		}
 		branchDetails, err := s.fetchGitHubBranch(ctx,token,owner,name,branch)
@@ -265,7 +265,7 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		var mappedProjectID int64
 		mapErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT project_id FROM project_repository_sites WHERE device_id=? AND site_id=?`,in.DeviceID,in.SiteID).Scan(&mappedProjectID)
 		if mapErr==nil&&mappedProjectID!=projectID{apiError(w,shared.ErrBadRequest("this site is already linked to another project's repository"));return}else if mapErr!=nil&&!errors.Is(mapErr,sql.ErrNoRows){apiError(w,shared.ErrInternal("could not inspect existing site repository mapping"));return}
-		if strings.TrimSpace(in.Branch)!="" { branch=strings.TrimSpace(in.Branch) }; if !gitBranchPattern.MatchString(branch)||strings.Contains(branch,"..")||strings.Contains(branch,"@{")||strings.HasSuffix(branch,"/")||strings.HasSuffix(branch,"."){apiError(w,shared.ErrBadRequest("invalid deployment branch"));return}; if in.AutoDeploy&&!in.AllowProjectCode{apiError(w,shared.ErrForbidden("explicit consent to automatically execute repository code is required"));return}
+		if strings.TrimSpace(in.Branch)!="" { branch=strings.TrimSpace(in.Branch) }; if !validateGitBranchName(branch){apiError(w,shared.ErrBadRequest("invalid deployment branch"));return}; if in.AutoDeploy&&!in.AllowProjectCode{apiError(w,shared.ErrForbidden("explicit consent to automatically execute repository code is required"));return}
 		ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
 		token,repoName,_,_,tokenErr:=s.projectRepositoryToken(ctx,ownerID,projectID);if tokenErr!=nil{apiError(w,shared.ErrForbidden("GitHub App installation is unavailable"));return}
 		owner,name,_,parseErr:=parseGitHubRepositoryName(repoName);if parseErr!=nil{apiError(w,shared.ErrBadRequest("invalid connected repository"));return}
