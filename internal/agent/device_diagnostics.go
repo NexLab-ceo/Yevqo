@@ -115,7 +115,7 @@ func readAgentLogs(dataRoot string) string {
  out,err:=exec.Command(binary,service).CombinedOutput();text:=strings.TrimSpace(string(out));if len(text)>24000{text=text[len(text)-24000:]};if err!=nil&&text==""{return "Логи сервиса пока недоступны"};return text
 }
 
-func collectDeviceDiagnostics() deviceDiagnostics {
+func collectDeviceDiagnostics(dataRoot string) deviceDiagnostics {
  batteryPercent,batteryStatus:=readBattery()
  return deviceDiagnostics{
   LocalIP:primaryLocalIP(),
