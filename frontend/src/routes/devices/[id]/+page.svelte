@@ -30,6 +30,7 @@
     async function loadDiagnostics(){if(!online)return;diagnosticsBusy=true;const r=await sendCommand(device.id,'get_device_diagnostics',{});if(r.ok&&r.data?.ok)diagnostics=decodePayload(r.data.payload);else notify(r.error||r.data?.message||'Не удалось получить диагностику','error');diagnosticsBusy=false;}
     async function refreshMetrics(){const r=await refreshDeviceMetrics(device.id);if(r.ok)metrics=r.data.metrics||null;else notify(r.error||'Не удалось обновить метрики','error');}
     async function checkPort(){const port=Number(portInput);if(!Number.isInteger(port)||port<1||port>65535){notify('Укажи порт от 1 до 65535','error');return}portBusy=true;const r=await sendCommand(device.id,'check_device_port',{port});if(r.ok&&r.data?.ok)portResult=decodePayload(r.data.payload);else notify(r.error||r.data?.message||'Проверка порта не удалась','error');portBusy=false;}
+    async function runAgentAction(action){if(!confirm(action==='update_agent'?'Запустить проверку и установку обновления Agent?':'Перезапустить Agent на устройстве?'))return;busy=true;const r=await sendCommand(device.id,action,{});busy=false;if(r.ok&&r.data?.ok){notify(r.data.message||'Команда отправлена','success')}else notify(r.error||r.data?.message||'Команда не выполнена','error');}
 
     // Форма нового сайта. Шаблоны используют существующий безопасный Agent create_site lifecycle.
     let newSite = { site_id: '', port: 8000, template_id: 'php-basic' };
@@ -275,6 +276,14 @@
       <div class="package-grid">{#each ['php','node','git','cloudflared'] as pkg}<div class="package-row"><span>{pkg}</span><strong>{diagnostics?.packages?.[pkg]?.installed?(diagnostics.packages[pkg].version||'Установлен'):'Не установлен'}</strong></div>{/each}</div>
     </section>
     <section class="device-section">
+      <div class="section-header"><div><h2 class="section-title">Управление Agent</h2><p class="page-desc">Обновление и перезапуск службы на телефоне</p></div></div>
+      <div class="agent-actions"><Button size="sm" variant="primary" disabled={!online||busy} on:click={()=>runAgentAction('update_agent')}>Обновить Agent</Button><Button size="sm" disabled={!online||busy} on:click={()=>runAgentAction('restart_agent')}>Перезапустить Agent</Button></div>
+    </section>
+    <section class="device-section">
+      <div class="section-header"><div><h2 class="section-title">Логи Agent</h2><p class="page-desc">Последние записи службы runit</p></div><Button size="sm" disabled={!online||diagnosticsBusy} on:click={loadDiagnostics}>Обновить логи</Button></div>
+      <pre class="agent-log">{diagnostics?.agent_logs||'Логи пока недоступны. Проверь наличие svlogtail в Termux.'}</pre>
+    </section>
+    <section class="device-section">
       <div class="section-header"><div><h2 class="section-title">Порты</h2><p class="page-desc">Список TCP-портов в состоянии LISTEN</p></div></div>
       <div class="ports-list">{#if diagnostics?.listening_ports?.length}{#each diagnostics.listening_ports as port}<span class="port-chip">{port}</span>{/each}{:else}<span class="muted">Нет доступных данных о слушающих портах</span>{/if}</div>
       <div class="port-check"><input class="input" type="number" min="1" max="65535" bind:value={portInput} placeholder="Например, 8080"/><Button size="sm" disabled={!online||portBusy} on:click={checkPort}>{portBusy?'Проверяем…':'Проверить порт'}</Button>{#if portResult}<span class:port-open={portResult.listening} class:port-closed={!portResult.listening}>:{portResult.port} — {portResult.listening?'слушается':'свободен'}</span>{/if}</div>
@@ -406,6 +415,7 @@
 {/if}
 
 <style>
+.agent-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.agent-log{margin-top:12px;padding:12px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg-base);border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font:9px/1.6 var(--mono)}
 .device-info-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}.info-card,.device-section{min-width:0;background:var(--bg-card);border:1px solid var(--border);border-radius:11px;padding:14px}.info-label,.resource-tile>span{font-size:8px;letter-spacing:.1em;font-weight:750;color:var(--text-muted)}.info-value{display:block;margin:9px 0 4px;font-size:18px;letter-spacing:-.03em;color:var(--text-main)}.info-card small{display:block;font-size:9px;color:var(--text-muted);margin-bottom:8px}.mono{font-family:var(--mono)}.device-section{margin:12px 0}.resource-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:13px}.resource-tile{padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-base);min-width:0}.resource-tile strong{display:block;margin:8px 0;font-size:14px;overflow-wrap:anywhere}.resource-tile small{font-size:8px;color:var(--text-muted)}.meter{height:4px;background:var(--bg-elevated);border-radius:5px;overflow:hidden}.meter i{display:block;height:100%;background:var(--accent);border-radius:5px;max-width:100%}.package-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}.package-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:10px}.package-row strong{font-size:9px;color:var(--text-muted);font-weight:500;text-align:right;overflow-wrap:anywhere}.ports-list{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.port-chip{padding:5px 8px;border:1px solid var(--border);border-radius:6px;color:var(--accent);font:9px var(--mono)}.port-check{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.port-check input{max-width:170px}.port-open{font-size:9px;color:var(--accent)}.port-closed,.muted{font-size:9px;color:var(--text-muted)}.section-header{display:flex;align-items:center;justify-content:space-between;gap:10px}.section-header .page-desc{margin-top:4px}
 @media(max-width:760px){.device-info-grid{grid-template-columns:1fr 1fr}.resource-grid{grid-template-columns:1fr 1fr}}@media(max-width:480px){.device-info-grid,.resource-grid,.package-grid{grid-template-columns:1fr}}
 </style>
