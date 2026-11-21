@@ -492,21 +492,28 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 		apiError(w, shared.ErrUnauthorized("not logged in"))
 		return
 	}
-	if req.ProjectID > 0 {
-		ownerID, authErr := s.authorizeProjectOwner(r.Context(), req.ProjectID, user.ID, req.Action)
+	effectiveProjectID := req.ProjectID
+	siteID := ""
+	switch p := payload.(type) {
+	case *shared.StartSite: siteID = p.SiteId
+	case *shared.StopSite: siteID = p.SiteId
+	case *shared.AndroidBuildSite: siteID = p.SiteId
+	}
+	if effectiveProjectID == 0 && siteID != "" {
+		resolved, resolveErr := s.siteProjectScope(r.Context(), dev.UserID, dev.ID, siteID)
+		if resolveErr != nil { apiError(w, resolveErr); return }
+		effectiveProjectID = resolved
+	}
+	if effectiveProjectID > 0 {
+		ownerID, authErr := s.authorizeProjectOwner(r.Context(), effectiveProjectID, user.ID, req.Action)
 		if authErr != nil { apiError(w, authErr); return }
 		if ownerID != dev.UserID { apiError(w, shared.ErrForbidden("device does not belong to this project workspace")); return }
 		var assigned int
-		if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM project_devices WHERE project_id=? AND device_id=?", req.ProjectID, dev.ID).Scan(&assigned); err != nil || assigned != 1 {
+		if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM project_devices WHERE project_id=? AND device_id=?", effectiveProjectID, dev.ID).Scan(&assigned); err != nil || assigned != 1 {
 			apiError(w, shared.ErrForbidden("device is not assigned to this project")); return
 		}
-		switch p := payload.(type) {
-		case *shared.StartSite:
-			if err := s.requireProjectSite(r.Context(), req.ProjectID, dev.ID, p.SiteId); err != nil { apiError(w, err); return }
-		case *shared.StopSite:
-			if err := s.requireProjectSite(r.Context(), req.ProjectID, dev.ID, p.SiteId); err != nil { apiError(w, err); return }
-		case *shared.AndroidBuildSite:
-			if err := s.requireProjectSite(r.Context(), req.ProjectID, dev.ID, p.SiteId); err != nil { apiError(w, err); return }
+		if siteID != "" {
+			if err := s.requireProjectSite(r.Context(), effectiveProjectID, dev.ID, siteID); err != nil { apiError(w, err); return }
 		}
 	} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, req.Action); err != nil {
 		apiError(w, err)
