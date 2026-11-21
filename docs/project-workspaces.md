@@ -55,8 +55,8 @@ The project detail page separates the resource summary, project-owned environmen
 
 - **Overview** summarizes the devices, applications, database servers, environments, and deployment runs currently linked to this project.
 - **Environments** lists only the environments whose `project_id` is this project. Production, Development, Staging, and custom environments are not global/shared records. Each environment has its own application and database-server/database assignments and its own settings page.
-- **Applications** can scaffold a new site on an online device already attached to this project using the Agent's typed `create_site` command, then attach the resulting site to this project. Existing sites can also be attached. Creating a site does not start it or deploy arbitrary repository code.
-- **Activity** reads the project-filtered audit log.
+- **Applications** can scaffold a new site on an online device already attached to this project using the Agent's typed `create_site` command, attach the resulting site to this project, and optionally assign it to one of that project's environments (Production is the default). Existing sites can also be attached. The Applications tab shows the site's runtime/status and can start or stop it through typed Agent commands. Scaffolding does not deploy arbitrary repository code.
+- **Activity** shows project-filtered audit events to Owners/Admins and project-filtered operational logs to Developers, respecting the existing role policy.
 - **Settings** shows the project configuration and workspace members/roles inherited by this project. Project-specific member grants are not implemented; server-side workspace RBAC remains authoritative.
 
 Creating an application requires a manageable project and an attached device. The Agent must be online. If site creation succeeds but the subsequent project association fails, the UI reports that partial outcome rather than claiming the application was attached.
