@@ -107,7 +107,7 @@ mkdir -p "$LOG_DIR"
 exec >>"$LOG_DIR/yevqo-boot.log" 2>&1
 echo "[$(date -Iseconds)] Yevqo boot hook started"
 command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock || true
-for service in yevqo-control yevqo-agent yevqo; do
+for service in yevqo-control yevqo-agent yevqo yevqo-updater; do
   if [ -d "$PREFIX/var/service/$service" ] || [ -L "$PREFIX/var/service/$service" ]; then
     sv up "$service" || echo "Could not start $service"
   fi
@@ -120,7 +120,7 @@ else
 fi
 # Extend the previously generated generic hook so a standalone Agent is also started after reboot.
 if [ -s "$BOOT_DIR/00-yevqo" ]; then
-  sed -i 's/for service in yevqo-control yevqo-agent;/for service in yevqo-control yevqo-agent yevqo;/' "$BOOT_DIR/00-yevqo"
+  sed -i 's/for service in yevqo-control yevqo-agent;/for service in yevqo-control yevqo-agent yevqo yevqo-updater;/' "$BOOT_DIR/00-yevqo"
 fi
 if command -v sv >/dev/null 2>&1; then sv up "$SERVICE_NAME" || warn "Could not start Yevqo service now"; fi
 
