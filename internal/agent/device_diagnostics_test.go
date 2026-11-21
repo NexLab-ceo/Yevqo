@@ -26,7 +26,7 @@ func TestCheckLocalPortRejectsInvalidPort(t *testing.T) {
 }
 
 func TestDeviceDiagnosticsReturnsPackageInventoryAndUptime(t *testing.T) {
- got:=collectDeviceDiagnostics()
+ got:=collectDeviceDiagnostics(t.TempDir())
  if got.Packages==nil{t.Fatal("package inventory must always be present")}
  for _,name:=range []string{"php","node","git","cloudflared"}{
   if _,ok:=got.Packages[name];!ok{t.Errorf("missing package %q",name)}
