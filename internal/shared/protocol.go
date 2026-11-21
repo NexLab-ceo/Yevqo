@@ -240,6 +240,7 @@ type AndroidBuildSite struct {
 	AllowProjectCode bool `json:"allow_project_code"`
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 	MaxLogBytes int `json:"max_log_bytes,omitempty"`
+	Environment map[string]string `json:"environment,omitempty"`
 }
 
 type ListBuildHistory struct {
