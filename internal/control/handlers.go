@@ -871,11 +871,15 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			switch scoped := payload.(type) {
 			case *shared.SiteAction, *shared.RollbackSiteRelease:
 				projectID, environmentID := in.ProjectID, in.EnvironmentID
-				if projectID == 0 {
-					var scopeErr error
-					projectID, environmentID, scopeErr = s.siteEnvironmentScope(r.Context(), dev.UserID, deviceID, siteID)
+				if projectID == 0 || environmentID == 0 {
+					resolvedProjectID, resolvedEnvironmentID, scopeErr := s.siteEnvironmentScope(r.Context(), dev.UserID, deviceID, siteID)
 					if scopeErr != nil { apiError(w, scopeErr); return }
+					if projectID == 0 { projectID = resolvedProjectID }
+					if environmentID == 0 { environmentID = resolvedEnvironmentID }
 				}
+				// A project can own an application that has not yet been assigned
+				// to an environment; in that case no project-level variables apply.
+				if environmentID == 0 { projectID = 0 }
 				env, envErr := s.siteRuntimeEnvironment(r.Context(), dev.UserID, deviceID, siteID, projectID, environmentID)
 				if envErr != nil { apiError(w, envErr); return }
 				switch target := scoped.(type) {
