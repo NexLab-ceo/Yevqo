@@ -208,6 +208,9 @@ type SiteBackupResult struct {
 	SizeBytes int64 `json:"size_bytes"`
 }
 
+type GetDeviceDiagnostics struct{}
+type CheckDevicePort struct { Port int `json:"port"` }
+
 type GetMetrics struct{}
 
 type MetricsResult struct {
