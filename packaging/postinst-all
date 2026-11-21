@@ -1,9 +1,24 @@
 #!/data/data/com.termux/files/usr/bin/sh
 set -e
 PREFIX="/data/data/com.termux/files/usr"
-if [ -r /dev/tty ]; then
+SERVICE_DIR="$PREFIX/var/service/yevqo-updater"
+mkdir -p "$SERVICE_DIR"
+cat > "$SERVICE_DIR/run" <<'RUN'
+#!/data/data/com.termux/files/usr/bin/sh
+set -e
+exec 2>&1
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+exec "$PREFIX/bin/yevqo-auto-update-service"
+RUN
+chmod 700 "$SERVICE_DIR/run"
+if command -v sv-enable >/dev/null 2>&1; then sv-enable yevqo-updater >/dev/null 2>&1 || true; fi
+if command -v sv >/dev/null 2>&1; then sv up yevqo-updater >/dev/null 2>&1 || true; fi
+
+if [ "${YEVQO_NONINTERACTIVE:-0}" = "1" ]; then
+  echo "Yevqo All installed; background updates are enabled. Run yevqo-setup when ready to configure services."
+elif [ -r /dev/tty ]; then
   "$PREFIX/bin/yevqo-setup" </dev/tty >/dev/tty 2>&1
 else
-  echo "YEVQO all installed. Run: yevqo-setup (choose server, agent or both)."
+  echo "Yevqo All installed. Run: yevqo-setup (choose server, agent or both)."
 fi
 exit 0
