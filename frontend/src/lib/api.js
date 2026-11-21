@@ -194,6 +194,9 @@ export async function listProjectEnvironments(id) { return request('GET', `/api/
 export async function createProjectEnvironment(id, name, description = '') { return request('POST', `/api/projects/${id}/environments`, { name, description }); }
 export async function updateProjectEnvironment(projectId, environmentId, name, description = '') { return request('PATCH', `/api/projects/${projectId}/environments/${environmentId}`, { name, description }); }
 export async function deleteProjectEnvironment(projectId, environmentId) { return request('DELETE', `/api/projects/${projectId}/environments/${environmentId}`); }
+export async function listProjectEnvironmentVariables(projectId, environmentId) { return request('GET', `/api/projects/${projectId}/environments/${environmentId}/variables`); }
+export async function saveProjectEnvironmentVariable(projectId, environmentId, name, value) { return request('POST', `/api/projects/${projectId}/environments/${environmentId}/variables`, { name, value }); }
+export async function deleteProjectEnvironmentVariable(projectId, environmentId, name) { return request('DELETE', `/api/projects/${projectId}/environments/${environmentId}/variables?name=${encodeURIComponent(name)}`); }
 export async function listEnvironmentSites(projectId, environmentId) { return request('GET', `/api/projects/${projectId}/environments/${environmentId}/sites`); }
 export async function attachEnvironmentSite(projectId, environmentId, deviceId, siteId) { return request('POST', `/api/projects/${projectId}/environments/${environmentId}/sites`, { device_id: deviceId, site_id: siteId }); }
 export async function detachEnvironmentSite(projectId, environmentId, deviceId, siteId) { return request('DELETE', `/api/projects/${projectId}/environments/${environmentId}/sites`, { device_id: deviceId, site_id: siteId }); }
