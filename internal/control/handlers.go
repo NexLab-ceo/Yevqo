@@ -584,7 +584,13 @@ func parsePayload(action string, raw json.RawMessage) (interface{}, error) {
 			return nil, err
 		}
 		return &p, nil
-	case "get_logs":
+	case "get_device_diagnostics":
+  var p shared.GetDeviceDiagnostics
+  if err:=json.Unmarshal(raw,&p);err!=nil{return nil,err};return &p,nil
+ case "check_device_port":
+  var p shared.CheckDevicePort
+  if err:=json.Unmarshal(raw,&p);err!=nil{return nil,err};return &p,nil
+ case "get_logs":
 		var p shared.GetLogs
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
