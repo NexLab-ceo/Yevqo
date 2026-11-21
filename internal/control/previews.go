@@ -79,7 +79,7 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 			cfg, err := s.siteGitSettings(r.Context(),deviceID,siteID)
 			if err != nil || strings.TrimSpace(cfg.GitURL)=="" { apiError(w,shared.ErrBadRequest("connect a Git repository before creating a preview")); return }
 			branch:=strings.TrimSpace(in.Branch); if branch=="" { branch=cfg.GitBranch }; if branch=="" { branch="main" }
-			if !gitBranchPattern.MatchString(branch) || strings.Contains(branch,"..") || strings.Contains(branch,"@{") || strings.HasSuffix(branch,"/") || strings.HasSuffix(branch,".") { apiError(w,shared.ErrBadRequest("invalid Git branch")); return }
+			if !validateGitBranchName(branch) { apiError(w,shared.ErrBadRequest("invalid Git branch")); return }
 			if in.Commit!="" && !releaseCommitPattern.MatchString(in.Commit) { apiError(w,shared.ErrBadRequest("invalid Git commit SHA")); return }
 			if dev.Status != shared.DeviceOnline { apiError(w,shared.ErrBadRequest("Android device is offline")); return }
 			conn,online:=s.hub.Get(deviceID); if !online { apiError(w,shared.ErrBadRequest("Android device is offline")); return }
