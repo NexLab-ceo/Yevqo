@@ -4,7 +4,7 @@
     import { locale } from '$lib/i18n.js';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, deleteDevice, deleteSite, sendCommand, listAppTemplates, attachProjectSite, listLogs } from '$lib/api.js';
+    import { getDevice, deleteDevice, deleteSite, sendCommand, listAppTemplates, attachProjectSite, listLogs, refreshDeviceMetrics } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -24,6 +24,12 @@
     let currentLogs = '';
     let logsSiteId = '';
     let busy = false;
+    let metrics=null, diagnostics=null, diagnosticsBusy=false, portInput='8080', portResult=null, portBusy=false;
+    function decodePayload(payload){try{return typeof payload==='string'?JSON.parse(atob(payload)):payload||{}}catch{return {}}}
+    function formatDuration(seconds){if(!seconds)return '—';const days=Math.floor(seconds/86400),hours=Math.floor(seconds%86400/3600),minutes=Math.floor(seconds%3600/60);return [days?days+' д.':'',hours?hours+' ч.':'',minutes+' мин.'].filter(Boolean).join(' ')||'< 1 мин.';}
+    async function loadDiagnostics(){if(!online)return;diagnosticsBusy=true;const r=await sendCommand(device.id,'get_device_diagnostics',{});if(r.ok&&r.data?.ok)diagnostics=decodePayload(r.data.payload);else notify(r.error||r.data?.message||'Не удалось получить диагностику','error');diagnosticsBusy=false;}
+    async function refreshMetrics(){const r=await refreshDeviceMetrics(device.id);if(r.ok)metrics=r.data.metrics||null;else notify(r.error||'Не удалось обновить метрики','error');}
+    async function checkPort(){const port=Number(portInput);if(!Number.isInteger(port)||port<1||port>65535){notify('Укажи порт от 1 до 65535','error');return}portBusy=true;const r=await sendCommand(device.id,'check_device_port',{port});if(r.ok&&r.data?.ok)portResult=decodePayload(r.data.payload);else notify(r.error||r.data?.message||'Проверка порта не удалась','error');portBusy=false;}
 
     // Форма нового сайта. Шаблоны используют существующий безопасный Agent create_site lifecycle.
     let newSite = { site_id: '', port: 8000, template_id: 'php-basic' };
@@ -51,6 +57,7 @@
         device = res.data.device;
         sites = res.data.sites || [];
         online = res.data.online;
+        if(online){await Promise.all([refreshMetrics(),loadDiagnostics()]);}
     }
 
     async function selectTab(tab){activeTab=tab;if(tab==='activity'&&!deviceLogs.length){logsLoading=true;const r=await listLogs(100);if(r.ok)deviceLogs=(r.data.logs||[]).filter(x=>x.device===device?.hostname);else notify(r.error||'Could not load device activity','error');logsLoading=false}}
@@ -245,6 +252,34 @@
         {/each}
     </div>
 
+    <section class="device-info-grid">
+      <article class="info-card"><div class="info-label">ЛОКАЛЬНЫЙ IP</div><strong class="info-value mono">{diagnostics?.local_ip||device.tailscale_ip||'—'}</strong><small>Адрес Android-устройства</small></article>
+      <article class="info-card"><div class="info-label">AGENT VERSION</div><strong class="info-value">{device.agent_version||'—'}</strong><small>Последний heartbeat: {device.last_seen?formatDate(device.last_seen):'—'}</small></article>
+      <article class="info-card"><div class="info-label">UPTIME ТЕЛЕФОНА</div><strong class="info-value">{formatDuration(diagnostics?.device_uptime_seconds)}</strong><small>Работа агента: {formatDuration(diagnostics?.agent_uptime_seconds)}</small></article>
+    </section>
+    <section class="device-section">
+      <div class="section-header"><div><h2 class="section-title">Ресурсы устройства</h2><p class="page-desc">Данные, полученные непосредственно от Agent</p></div><Button size="sm" disabled={!online||diagnosticsBusy} on:click={()=>{refreshMetrics();loadDiagnostics()}}>Обновить</Button></div>
+      <div class="resource-grid">
+       <div class="resource-tile"><span>CPU</span><strong>{metrics?.cpu_percent!=null?metrics.cpu_percent.toFixed(1)+'%':'—'}</strong><div class="meter"><i style:width={(metrics?.cpu_percent||0)+'%'}></i></div></div>
+       <div class="resource-tile"><span>RAM</span><strong>{metrics?.memory_total_bytes?((metrics.memory_total_bytes-metrics.memory_available_bytes)/1073741824).toFixed(2)+' / '+(metrics.memory_total_bytes/1073741824).toFixed(2)+' GB':'—'}</strong><div class="meter"><i style:width={(metrics?.memory_total_bytes?100*(metrics.memory_total_bytes-metrics.memory_available_bytes)/metrics.memory_total_bytes:0)+'%'}></i></div></div>
+       <div class="resource-tile"><span>ДИСК</span><strong>{metrics?.storage_total_bytes?((metrics.storage_total_bytes-metrics.storage_available_bytes)/1073741824).toFixed(2)+' / '+(metrics.storage_total_bytes/1073741824).toFixed(2)+' GB':'—'}</strong><div class="meter"><i style:width={(metrics?.storage_total_bytes?100*(metrics.storage_total_bytes-metrics.storage_available_bytes)/metrics.storage_total_bytes:0)+'%'}></i></div></div>
+       <div class="resource-tile"><span>ТЕМПЕРАТУРА</span><strong>{metrics?.temperature_celsius!=null?metrics.temperature_celsius.toFixed(1)+' °C':'Нет датчика'}</strong><small>Зависит от доступности sysfs</small></div>
+      </div>
+    </section>
+    <section class="device-info-grid">
+      <article class="info-card battery-card"><div class="info-label">БАТАРЕЯ</div><strong class="info-value">{diagnostics?.battery_percent!=null?diagnostics.battery_percent+'%':'Недоступно'}</strong><small>{diagnostics?.battery_status||'Состояние не определено'}</small></article>
+      <article class="info-card"><div class="info-label">ДИАГНОСТИКА</div><strong class="info-value">{online?'Agent отвечает':'Устройство офлайн'}</strong><small>Проверка связи с Control Plane выполняется через WebSocket-команду</small><Button size="sm" disabled={!online||diagnosticsBusy} on:click={loadDiagnostics}>{diagnosticsBusy?'Проверяем…':'Проверить связь'}</Button></article>
+    </section>
+    <section class="device-section">
+      <div class="section-header"><div><h2 class="section-title">Установленные пакеты</h2><p class="page-desc">Версии, найденные в PATH Android / Termux</p></div></div>
+      <div class="package-grid">{#each ['php','node','git','cloudflared'] as pkg}<div class="package-row"><span>{pkg}</span><strong>{diagnostics?.packages?.[pkg]?.installed?(diagnostics.packages[pkg].version||'Установлен'):'Не установлен'}</strong></div>{/each}</div>
+    </section>
+    <section class="device-section">
+      <div class="section-header"><div><h2 class="section-title">Порты</h2><p class="page-desc">Список TCP-портов в состоянии LISTEN</p></div></div>
+      <div class="ports-list">{#if diagnostics?.listening_ports?.length}{#each diagnostics.listening_ports as port}<span class="port-chip">{port}</span>{/each}{:else}<span class="muted">Нет доступных данных о слушающих портах</span>{/if}</div>
+      <div class="port-check"><input class="input" type="number" min="1" max="65535" bind:value={portInput} placeholder="Например, 8080"/><Button size="sm" disabled={!online||portBusy} on:click={checkPort}>{portBusy?'Проверяем…':'Проверить порт'}</Button>{#if portResult}<span class:port-open={portResult.listening} class:port-closed={!portResult.listening}>:{portResult.port} — {portResult.listening?'слушается':'свободен'}</span>{/if}</div>
+    </section>
+
     <!-- Сайты -->
     <div class="section-header">
         <h2 class="section-title">Сайты</h2>
@@ -371,6 +406,9 @@
 {/if}
 
 <style>
+.device-info-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:14px 0}.info-card,.device-section{min-width:0;background:var(--bg-card);border:1px solid var(--border);border-radius:11px;padding:14px}.info-label,.resource-tile>span{font-size:8px;letter-spacing:.1em;font-weight:750;color:var(--text-muted)}.info-value{display:block;margin:9px 0 4px;font-size:18px;letter-spacing:-.03em;color:var(--text-main)}.info-card small{display:block;font-size:9px;color:var(--text-muted);margin-bottom:8px}.mono{font-family:var(--mono)}.device-section{margin:12px 0}.resource-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:13px}.resource-tile{padding:12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-base);min-width:0}.resource-tile strong{display:block;margin:8px 0;font-size:14px;overflow-wrap:anywhere}.resource-tile small{font-size:8px;color:var(--text-muted)}.meter{height:4px;background:var(--bg-elevated);border-radius:5px;overflow:hidden}.meter i{display:block;height:100%;background:var(--accent);border-radius:5px;max-width:100%}.package-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}.package-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:10px}.package-row strong{font-size:9px;color:var(--text-muted);font-weight:500;text-align:right;overflow-wrap:anywhere}.ports-list{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.port-chip{padding:5px 8px;border:1px solid var(--border);border-radius:6px;color:var(--accent);font:9px var(--mono)}.port-check{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.port-check input{max-width:170px}.port-open{font-size:9px;color:var(--accent)}.port-closed,.muted{font-size:9px;color:var(--text-muted)}.section-header{display:flex;align-items:center;justify-content:space-between;gap:10px}.section-header .page-desc{margin-top:4px}
+@media(max-width:760px){.device-info-grid{grid-template-columns:1fr 1fr}.resource-grid{grid-template-columns:1fr 1fr}}@media(max-width:480px){.device-info-grid,.resource-grid,.package-grid{grid-template-columns:1fr}}
+</style>
 .device-tabs{display:flex;gap:4px;overflow-x:auto;padding:4px;margin-bottom:14px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card)}.device-tabs button{padding:7px 10px;white-space:nowrap;border:0;border-radius:6px;background:transparent;color:var(--text-muted);font-size:10px}.device-tabs button.active{background:var(--bg-elevated);color:var(--accent)}.device-tab-panel{padding:16px}.device-tab-panel h2{font-size:13px;margin-bottom:10px}.device-tab-panel p,.settings-note{font-size:10px;color:var(--text-muted);line-height:1.6}.device-tab-link{display:inline-block;margin-top:10px;color:var(--accent);font-size:10px}.device-log-row,.device-setting{padding:10px 0;border-bottom:1px solid var(--border)}.device-log-row{display:grid;gap:4px}.device-log-row strong,.device-setting strong{font-size:10px}.device-log-row small,.device-setting span{font-size:9px;color:var(--text-muted)}.device-log-row p{overflow-wrap:anywhere}.device-setting{display:flex;justify-content:space-between;gap:12px}.settings-note{margin:12px 0}
     .header-actions {
         display: flex;
