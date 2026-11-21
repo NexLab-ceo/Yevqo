@@ -1,21 +1,45 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -euo pipefail
 
-REPO="NexLab-ceo/veltrix"
+REPO="NexLab-ceo/veltrix-dock"
 API="https://api.github.com/repos/$REPO/releases/latest"
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+PACKAGE="yevqo"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-command -v curl >/dev/null || { echo "Install curl: pkg install curl"; exit 1; }
-command -v jq >/dev/null || { echo "Install jq: pkg install jq"; exit 1; }
-[ "$(uname -m)" = "aarch64" ] || { echo "Yevqo package requires Android ARM64"; exit 1; }
+command -v curl >/dev/null || { echo "Install curl: pkg install curl" >&2; exit 1; }
+command -v jq >/dev/null || { echo "Install jq: pkg install jq" >&2; exit 1; }
+command -v dpkg-deb >/dev/null || { echo "dpkg-deb is unavailable" >&2; exit 1; }
+[ "$(uname -m)" = "aarch64" ] || { echo "Yevqo requires Android ARM64" >&2; exit 1; }
 
-URL="$(curl -fsSL "$API" | jq -r '.assets[] | select(.name | startswith("yevqo_") and endswith("_aarch64.deb")) | .browser_download_url' | head -n1)"
-[ -n "$URL" ] && [ "$URL" != "null" ] || { echo "No Yevqo .deb in latest public release"; exit 1; }
+CURRENT="$(dpkg-query -W -f='${Version}' "$PACKAGE" 2>/dev/null || true)"
+curl -fsSL --retry 3 -H 'Accept: application/vnd.github+json' -H 'User-Agent: Yevqo-Updater' "$API" -o "$TMP/release.json"
+LATEST="$(jq -er '.tag_name | sub("^v"; "")' "$TMP/release.json")"
+ASSET="${PACKAGE}_${LATEST}_aarch64.deb"
+URL="$(jq -er --arg name "$ASSET" '.assets[] | select(.name == $name) | .browser_download_url' "$TMP/release.json")"
+CHECKSUM_URL="$(jq -er '.assets[] | select(.name == "SHA256SUMS") | .browser_download_url' "$TMP/release.json")"
 
-curl -fL --progress-bar "$URL" -o "$TMP/yevqo.deb"
-dpkg-deb --field "$TMP/yevqo.deb" Package | grep -qx yevqo
-dpkg-deb --field "$TMP/yevqo.deb" Architecture | grep -qx aarch64
-dpkg -i "$TMP/yevqo.deb"
-echo "Yevqo updated. Existing Agent config/data were not deleted."
+if [ -n "$CURRENT" ] && dpkg --compare-versions "$LATEST" le "$CURRENT"; then
+  echo "Yevqo Agent is up to date ($CURRENT)."
+  exit 0
+fi
+
+curl -fL --retry 3 --progress-bar "$URL" -o "$TMP/$ASSET"
+curl -fsSL --retry 3 "$CHECKSUM_URL" -o "$TMP/SHA256SUMS"
+EXPECTED="$(awk -v file="$ASSET" '$2 == file { print $1; exit }' "$TMP/SHA256SUMS")"
+ACTUAL="$(sha256sum "$TMP/$ASSET" | awk '{ print $1 }')"
+[ -n "$EXPECTED" ] && [ "$EXPECTED" = "$ACTUAL" ] || { echo "Yevqo Agent package checksum verification failed" >&2; exit 1; }
+
+dpkg-deb --field "$TMP/$ASSET" Package | grep -Fx "$PACKAGE" >/dev/null
+dpkg-deb --field "$TMP/$ASSET" Architecture | grep -Fx aarch64 >/dev/null
+dpkg-deb --field "$TMP/$ASSET" Version | grep -Fx "$LATEST" >/dev/null
+
+echo "Installing Yevqo Agent $LATEST (current: ${CURRENT:-not registered})"
+YEVQO_NONINTERACTIVE=1 dpkg -i "$TMP/$ASSET"
+
+if command -v sv >/dev/null 2>&1 && { [ -d "$PREFIX/var/service/yevqo" ] || [ -L "$PREFIX/var/service/yevqo" ]; }; then
+  sv restart yevqo >/dev/null 2>&1 || sv up yevqo >/dev/null 2>&1 || true
+fi
+
+echo "Yevqo Agent updated to $LATEST. Existing Agent configuration and data were preserved."
