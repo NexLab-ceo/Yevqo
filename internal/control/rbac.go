@@ -16,7 +16,7 @@ func CanWorkspaceAction(role, action string) bool {
 		return true
 	case "developer":
 		switch action {
-		case "project.read", "environment.read", "device.read", "device.metrics",
+		case "project.read", "environment.read", "device.read", "device.metrics", "get_device_diagnostics", "check_device_port",
 			"create_site", "start_site", "stop_site", "restart", "deploy", "rebuild", "stop", "rollback",
 			"git_pull", "get_logs", "get_metrics", "get_site_metrics", "analyze_site_build",
 			"build_site", "cancel_build", "list_build_history", "get_build_history", "get_site_restart_policy", "preview.deploy", "preview.delete", "list_site_releases", "rollback_site_release", "cancel_deployment_job":
