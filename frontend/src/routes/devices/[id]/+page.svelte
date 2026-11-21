@@ -24,10 +24,10 @@
     let currentLogs = '';
     let logsSiteId = '';
     let busy = false;
-    let metrics=null, diagnostics=null, diagnosticsBusy=false, portInput='8080', portResult=null, portBusy=false;
+    let metrics=null, diagnostics=null, diagnosticsBusy=false, portInput='8080', portResult=null, portBusy=false, controlPlaneLatencyMs=null;
     function decodePayload(payload){try{return typeof payload==='string'?JSON.parse(atob(payload)):payload||{}}catch{return {}}}
     function formatDuration(seconds){if(!seconds)return '—';const days=Math.floor(seconds/86400),hours=Math.floor(seconds%86400/3600),minutes=Math.floor(seconds%3600/60);return [days?days+' д.':'',hours?hours+' ч.':'',minutes+' мин.'].filter(Boolean).join(' ')||'< 1 мин.';}
-    async function loadDiagnostics(){if(!online)return;diagnosticsBusy=true;const r=await sendCommand(device.id,'get_device_diagnostics',{});if(r.ok&&r.data?.ok)diagnostics=decodePayload(r.data.payload);else notify(r.error||r.data?.message||'Не удалось получить диагностику','error');diagnosticsBusy=false;}
+    async function loadDiagnostics(){if(!online)return;diagnosticsBusy=true;const started=performance.now();const r=await sendCommand(device.id,'get_device_diagnostics',{});if(r.ok&&r.data?.ok){controlPlaneLatencyMs=Math.round(performance.now()-started);diagnostics=decodePayload(r.data.payload)}else notify(r.error||r.data?.message||'Не удалось получить диагностику','error');diagnosticsBusy=false;}
     async function refreshMetrics(){const r=await refreshDeviceMetrics(device.id);if(r.ok)metrics=r.data.metrics||null;else notify(r.error||'Не удалось обновить метрики','error');}
     async function checkPort(){const port=Number(portInput);if(!Number.isInteger(port)||port<1||port>65535){notify('Укажи порт от 1 до 65535','error');return}portBusy=true;const r=await sendCommand(device.id,'check_device_port',{port});if(r.ok&&r.data?.ok)portResult=decodePayload(r.data.payload);else notify(r.error||r.data?.message||'Проверка порта не удалась','error');portBusy=false;}
     async function runAgentAction(action){if(!confirm(action==='update_agent'?'Запустить проверку и установку обновления Agent?':'Перезапустить Agent на устройстве?'))return;busy=true;const r=await sendCommand(device.id,action,{});busy=false;if(r.ok&&r.data?.ok){notify(r.data.message||'Команда отправлена','success')}else notify(r.error||r.data?.message||'Команда не выполнена','error');}
@@ -269,7 +269,7 @@
     </section>
     <section class="device-info-grid">
       <article class="info-card battery-card"><div class="info-label">БАТАРЕЯ</div><strong class="info-value">{diagnostics?.battery_percent!=null?diagnostics.battery_percent+'%':'Недоступно'}</strong><small>{diagnostics?.battery_status||'Состояние не определено'}</small></article>
-      <article class="info-card"><div class="info-label">ДИАГНОСТИКА</div><strong class="info-value">{online?'Agent отвечает':'Устройство офлайн'}</strong><small>Проверка связи с Control Plane выполняется через WebSocket-команду</small><Button size="sm" disabled={!online||diagnosticsBusy} on:click={loadDiagnostics}>{diagnosticsBusy?'Проверяем…':'Проверить связь'}</Button></article>
+      <article class="info-card"><div class="info-label">ДИАГНОСТИКА</div><strong class="info-value">{online?(controlPlaneLatencyMs!=null?'Ответ за '+controlPlaneLatencyMs+' мс':'Agent отвечает'):'Устройство офлайн'}</strong><small>Проверка связи с Control Plane выполняется через WebSocket-команду</small><Button size="sm" disabled={!online||diagnosticsBusy} on:click={loadDiagnostics}>{diagnosticsBusy?'Проверяем…':'Проверить связь'}</Button></article>
     </section>
     <section class="device-section">
       <div class="section-header"><div><h2 class="section-title">Установленные пакеты</h2><p class="page-desc">Версии, найденные в PATH Android / Termux</p></div></div>
