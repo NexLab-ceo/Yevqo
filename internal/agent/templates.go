@@ -56,6 +56,22 @@ func (m *ProcessManager) CreateSiteFromTemplate(siteID string, port int, templat
 	case "nodejs-api":
 		starter = "const http = require('http');\nconst host = process.env.HOST || '127.0.0.1';\nconst port = Number(process.env.PORT || 3000);\nhttp.createServer((req, res) => {\n  res.setHeader('content-type', 'application/json; charset=utf-8');\n  if (req.url === '/health') { res.end(JSON.stringify({ ok: true, status: 'healthy' })); return; }\n  res.end(JSON.stringify({ ok: true, service: 'yevqo', message: 'Hello from Yevqo API' }));\n}).listen(port, host);\n"
 	}
+	if selectedValue.ID == "nextjs-app" {
+		root := filepath.Join(m.DataRoot, "sites", siteID)
+		files := map[string]string{
+			"package.json": "{\\n  \\"name\\": \\"yevqo-nextjs-app\\",\\n  \\"version\\": \\"1.0.0\\",\\n  \\"private\\": true,\\n  \\"scripts\\": { \\"dev\\": \\"next dev\\", \\"build\\": \\"next build\\", \\"start\\": \\"next start -H 127.0.0.1\\" },\\n  \\"dependencies\\": { \\"next\\": \\"^15.5.6\\", \\"react\\": \\"^19.1.1\\", \\"react-dom\\": \\"^19.1.1\\" }\\n}\\n",
+			"app/page.js": "export default function Home() {\\n  return (\\n    <main style={{ maxWidth: 720, margin: '15vh auto', padding: 24, fontFamily: 'system-ui' }}>\\n      <p style={{ color: '#39834a', fontWeight: 700 }}>YEVQO · NEXT.JS</p>\\n      <h1>Your Next.js app is ready.</h1>\\n      <p>Edit app/page.js to start building your project.</p>\\n      <a href='/api/health'>Check application health</a>\\n    </main>\\n  );\\n}\\n",
+			"app/layout.js": "export const metadata = { title: 'Yevqo Next.js App', description: 'A Next.js application hosted with Yevqo' };\\n\\nexport default function RootLayout({ children }) {\\n  return <html lang='en'><body>{children}</body></html>;\\n}\\n",
+			"app/api/health/route.js": "export async function GET() {\\n  return Response.json({ ok: true, status: 'healthy' });\\n}\\n",
+			"next.config.mjs": "/** @type {import('next').NextConfig} */\\nconst nextConfig = {\\n  poweredByHeader: false,\\n};\\n\\nexport default nextConfig;\\n",
+			".gitignore": "node_modules/\\n.next/\\nout/\\n.env*\\n!.env.example\\n",
+		}
+		for name, content := range files {
+			path := filepath.Join(root, filepath.FromSlash(name))
+			if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil { return fmt.Errorf("create %s directory: %w", name, err) }
+			if err := os.WriteFile(path, []byte(content), 0o640); err != nil { return fmt.Errorf("write %s starter: %w", name, err) }
+		}
+	}
 	if starter != "" {
 		root := filepath.Join(m.DataRoot, "sites", siteID)
 		if err := os.WriteFile(filepath.Join(root, selectedValue.EntryPoint), []byte(starter), 0o640); err != nil {
