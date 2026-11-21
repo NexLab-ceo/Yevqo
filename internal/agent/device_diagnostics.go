@@ -5,6 +5,7 @@ import (
  "fmt"
  "net"
  "os"
+ "path/filepath"
  "os/exec"
  "strconv"
  "strings"
@@ -24,6 +25,22 @@ type deviceDiagnostics struct {
  CapturedAt time.Time `json:"captured_at"`
 }
 var agentStartedAt = time.Now()
+
+// OpenAgentLog creates a private, bounded Agent log file without following symlinks.
+func OpenAgentLog(dataRoot string) (*os.File,error) {
+ dir:=filepath.Join(dataRoot,"logs")
+ if err:=os.MkdirAll(dir,0700);err!=nil{return nil,err}
+ info,err:=os.Lstat(dir);if err!=nil{return nil,err};if !info.IsDir()||info.Mode()&os.ModeSymlink!=0{return nil,fmt.Errorf("Agent log directory is not a safe directory")}
+ path:=filepath.Join(dir,"agent.log")
+ if info,err:=os.Lstat(path);err==nil {
+  if !info.Mode().IsRegular()||info.Mode()&os.ModeSymlink!=0{return nil,fmt.Errorf("Agent log is not a regular file")}
+  if info.Size()>5<<20 {
+   rotated:=path+".1";if old,e:=os.Lstat(rotated);e==nil {if !old.Mode().IsRegular()||old.Mode()&os.ModeSymlink!=0{return nil,fmt.Errorf("rotated Agent log is not a regular file")};if e=os.Remove(rotated);e!=nil{return nil,e}}
+   if err:=os.Rename(path,rotated);err!=nil{return nil,err}
+  }
+ } else if !os.IsNotExist(err){return nil,err}
+ return os.OpenFile(path,os.O_CREATE|os.O_APPEND|os.O_WRONLY,0600)
+}
 
 func commandVersion(binary string, args ...string) packageInfo {
  path, err := exec.LookPath(binary)
@@ -83,7 +100,12 @@ func primaryLocalIP() string {
  return ""
 }
 
-func readAgentLogs() string {
+func readAgentLogs(dataRoot string) string {
+ logPath:=filepath.Join(dataRoot,"logs","agent.log")
+ if info,err:=os.Lstat(logPath);err==nil&&info.Mode().IsRegular()&&info.Mode()&os.ModeSymlink==0 {
+  data,readErr:=os.ReadFile(logPath);if readErr==nil { lines:=strings.Split(strings.TrimRight(string(data),"\\n"),"\\n");if len(lines)>200{lines=lines[len(lines)-200:]};return strings.Join(lines,"\\n") }
+ }
+
  prefix:=os.Getenv("PREFIX");if prefix==""{prefix="/data/data/com.termux/files/usr"}
  service:="yevqo";if _,err:=os.Stat(prefix+"/var/service/yevqo");err!=nil{service="yevqo-agent"}
  binary,err:=exec.LookPath("svlogtail");if err!=nil{return "svlogtail недоступен в PATH"}
@@ -105,7 +127,7 @@ func collectDeviceDiagnostics() deviceDiagnostics {
    "git":commandVersion("git","--version"),
    "cloudflared":commandVersion("cloudflared","--version"),
   },
-  AgentLogs:readAgentLogs(),
+  AgentLogs:readAgentLogs(dataRoot),
   CapturedAt:time.Now().UTC(),
  }
 }
