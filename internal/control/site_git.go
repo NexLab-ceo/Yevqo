@@ -13,22 +13,7 @@ import (
 	"veltrix/internal/shared"
 )
 
-var gitBranchPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}package control
-
-import (
-	"context"
-	"database/sql"
-	"net/http"
-	"net/url"
-	"path"
-	"regexp"
-	"strconv"
-	"strings"
-
-	"veltrix/internal/shared"
-)
-
-)
+var gitBranchPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$`)
 
 // validateGitBranchName applies Git ref-format restrictions consistently before
 // a branch is persisted or passed to GitHub/Agent operations.
