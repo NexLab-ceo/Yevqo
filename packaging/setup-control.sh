@@ -84,20 +84,7 @@ else
   mysql -u root -e "CREATE DATABASE IF NOT EXISTS veltrix CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" || true
 fi
 
-# Optional private GitHub token for veltrix-all self-updates.
-TOKEN_FILE="$DATA_ROOT/config/github-token"
-if [ ! -s "$TOKEN_FILE" ]; then
-  printf '\nPrivate updater setup (optional)\n'
-  read -r -p 'GitHub token with Contents: read on NexLab-ceo/veltrix (leave blank to skip): ' -s GITHUB_TOKEN
-  printf '\n'
-  if [ -n "$GITHUB_TOKEN" ]; then
-    printf '%s' "$GITHUB_TOKEN" > "$TOKEN_FILE"
-    chmod 600 "$TOKEN_FILE"
-    log "Private updater token saved to $TOKEN_FILE"
-  else
-    log "Private updater token skipped; configure it later in $TOKEN_FILE"
-  fi
-fi
+# Updates are downloaded from the public VELTRIX Dock releases; no device-side GitHub token is needed.
 
 # Debian packages place the current Control Plane assets under share/yevqo.
 # Do not copy package migrations here: starting the server can apply pending
