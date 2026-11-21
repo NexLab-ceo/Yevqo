@@ -843,17 +843,24 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			if in.Action != "deploy" && in.Action != "rebuild" && in.Action != "restart" && in.Action != "stop" && in.Action != "rollback" {
 				apiError(w, shared.ErrBadRequest("unsupported site action")); return
 			}
-			if in.ProjectID > 0 {
-				projectOwnerID, projectErr := s.authorizeProjectOwner(r.Context(), in.ProjectID, user.ID, in.Action)
+			effectiveProjectID := in.ProjectID
+			if effectiveProjectID == 0 {
+				resolved, resolveErr := s.siteProjectScope(r.Context(), dev.UserID, deviceID, siteID)
+				if resolveErr != nil { apiError(w, resolveErr); return }
+				effectiveProjectID = resolved
+			}
+			if effectiveProjectID > 0 {
+				projectOwnerID, projectErr := s.authorizeProjectOwner(r.Context(), effectiveProjectID, user.ID, in.Action)
 				if projectErr != nil { apiError(w, projectErr); return }
 				if projectOwnerID != dev.UserID { apiError(w, shared.ErrNotFound("project not found")); return }
-				if projectErr := s.requireProjectSite(r.Context(), in.ProjectID, deviceID, siteID); projectErr != nil { apiError(w, projectErr); return }
+				if projectErr := s.requireProjectSite(r.Context(), effectiveProjectID, deviceID, siteID); projectErr != nil { apiError(w, projectErr); return }
 				if in.EnvironmentID > 0 {
 					var assigned int
-					if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM project_environment_sites WHERE project_id=? AND environment_id=? AND device_id=? AND site_id=?", in.ProjectID, in.EnvironmentID, deviceID, siteID).Scan(&assigned); err != nil || assigned != 1 {
+					if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM project_environment_sites WHERE project_id=? AND environment_id=? AND device_id=? AND site_id=?", effectiveProjectID, in.EnvironmentID, deviceID, siteID).Scan(&assigned); err != nil || assigned != 1 {
 						apiError(w, shared.ErrBadRequest("application is not assigned to the selected project environment")); return
 					}
 				}
+				in.ProjectID = effectiveProjectID
 			} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, in.Action); err != nil { apiError(w, err); return }
 			if (in.Action == "deploy" || in.Action == "rebuild") && !in.AllowProjectCode {
 				apiError(w, shared.ErrBadRequest("explicit project-code consent is required before deployment")); return
