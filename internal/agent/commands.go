@@ -245,7 +245,7 @@ func (h *CommandHandler) handleBuildSite(cmd *shared.Command) *shared.Result {
 	result := h.processes.BuildSite(AndroidBuildRequest{
 		SiteID: req.SiteId, RootDir: req.RootDir, Stack: req.Stack,
 		PackageTool: req.PackageTool, InstallCommand: req.InstallCommand, BuildCommand: req.BuildCommand,
-		AllowProjectCode: req.AllowProjectCode,
+		AllowProjectCode: req.AllowProjectCode, Environment: req.Environment,
 		Timeout: timeout, MaxLogBytes: req.MaxLogBytes,
 	})
 	payload, err := shared.Marshal(result)
