@@ -84,6 +84,7 @@ func (s *Server) handleProjectByID(w http.ResponseWriter,r *http.Request) {
 	if err==sql.ErrNoRows { apiError(w,shared.ErrNotFound("project not found"));return }; if err!=nil { apiError(w,shared.ErrInternal("could not load project"));return }
 	action := "project.manage"
 	if r.Method == http.MethodGet { action = "project.read" }
+	if len(parts) == 2 && parts[1] == "sites" && r.Method == http.MethodPost { action = "create_site" }
 	if _, err := s.authorizeProjectOwner(r.Context(), id, u.ID, action); err != nil { apiError(w, err); return }
 	if len(parts)==2 && parts[1]=="databases" && r.Method==http.MethodPost {
 		var in struct { ServerID int64 `json:"server_id"` }
