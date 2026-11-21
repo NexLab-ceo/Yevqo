@@ -41,8 +41,12 @@ printed or returned to the browser. Standard output and errors are written to
 a custom data root is configured). The log directory is private (0700), the
 file is private (0600), and the file is rotated at startup when it exceeds 5 MiB.
 This file is independent of the optional runit `svlogd` logger, so diagnostics
-remain available even when the nested runit logger is not running. Restart the
-service after editing either file:
+remain available even when the nested runit logger is not running. Failed GitHub
+App installation verification also writes a server-side diagnostic line with
+the installation ID and request/transport error; credentials and tokens are
+excluded. To inspect it on Termux, run
+`tail -n 80 /sdcard/yevqo/logs/control.log`. Restart the service after editing
+either file:
 
 ```sh
 sv restart yevqo-control
