@@ -125,7 +125,7 @@ jobs:
           Version: $VERSION
           Architecture: aarch64
           Maintainer: NexLab
-          Depends: mariadb, php, git, curl, jq, termux-services
+          Depends: mariadb, php, git, curl, jq, coreutils, termux-services
           Provides: veltrix-all
           Conflicts: veltrix-all, yevqo
           Replaces: veltrix-all
