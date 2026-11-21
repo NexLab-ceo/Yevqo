@@ -72,9 +72,16 @@ if [ ! -s "$TOKEN_FILE" ]; then
   fi
 fi
 
-SHARE="$PREFIX/share/veltrix"
-[ -d "$SHARE/migrations" ] && cp -an "$SHARE/migrations/." "$DATA_ROOT/migrations/" || true
-[ -d "$SHARE/public" ] && cp -a "$SHARE/public/." "$DATA_ROOT/public/" || true
+# Debian packages place the current Control Plane assets under share/yevqo.
+# Do not copy package migrations here: starting the server can apply pending
+# migrations to the existing database. This setup step only refreshes static UI.
+SHARE="$PREFIX/share/yevqo"
+if [ ! -s "$SHARE/public/index.html" ]; then
+  echo "Packaged Yevqo frontend is missing: $SHARE/public/index.html" >&2
+  exit 1
+fi
+log "Updating Control Plane frontend from $SHARE/public"
+cp -a "$SHARE/public/." "$DATA_ROOT/public/"
 mkdir -p "$SERVICE_DIR"
 cat > "$SERVICE_DIR/run" <<'RUN'
 #!/data/data/com.termux/files/usr/bin/sh
