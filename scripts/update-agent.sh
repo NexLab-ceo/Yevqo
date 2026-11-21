@@ -14,7 +14,7 @@ command -v dpkg-deb >/dev/null || { echo "dpkg-deb is unavailable" >&2; exit 1; 
 [ "$(uname -m)" = "aarch64" ] || { echo "Yevqo requires Android ARM64" >&2; exit 1; }
 
 CURRENT="$(dpkg-query -W -f='${Version}' "$PACKAGE" 2>/dev/null || true)"
-curl -fsSL --retry 3 -H 'Accept: application/vnd.github+json' -H 'User-Agent: Yevqo-Updater' "$API" -o "$TMP/release.json"
+curl -fsSL --connect-timeout 20 --max-time 300 --retry 3 -H 'Accept: application/vnd.github+json' -H 'User-Agent: Yevqo-Updater' "$API" -o "$TMP/release.json"
 LATEST="$(jq -er '.tag_name | sub("^v"; "")' "$TMP/release.json")"
 ASSET="${PACKAGE}_${LATEST}_aarch64.deb"
 URL="$(jq -er --arg name "$ASSET" '.assets[] | select(.name == $name) | .browser_download_url' "$TMP/release.json")"
@@ -25,8 +25,8 @@ if [ -n "$CURRENT" ] && dpkg --compare-versions "$LATEST" le "$CURRENT"; then
   exit 0
 fi
 
-curl -fL --retry 3 --progress-bar "$URL" -o "$TMP/$ASSET"
-curl -fsSL --retry 3 "$CHECKSUM_URL" -o "$TMP/SHA256SUMS"
+curl -fL --connect-timeout 20 --max-time 300 --retry 3 --progress-bar "$URL" -o "$TMP/$ASSET"
+curl -fsSL --connect-timeout 20 --max-time 300 --retry 3 "$CHECKSUM_URL" -o "$TMP/SHA256SUMS"
 EXPECTED="$(awk -v file="$ASSET" '$2 == file { print $1; exit }' "$TMP/SHA256SUMS")"
 ACTUAL="$(sha256sum "$TMP/$ASSET" | awk '{ print $1 }')"
 [ -n "$EXPECTED" ] && [ "$EXPECTED" = "$ACTUAL" ] || { echo "Yevqo Agent package checksum verification failed" >&2; exit 1; }
