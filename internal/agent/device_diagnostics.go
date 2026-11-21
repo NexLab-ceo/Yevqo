@@ -106,7 +106,7 @@ func primaryLocalIP() string {
 func readAgentLogs(dataRoot string) string {
  logPath:=filepath.Join(dataRoot,"logs","agent.log")
  if info,err:=os.Lstat(logPath);err==nil&&info.Mode().IsRegular()&&info.Mode()&os.ModeSymlink==0 {
-  data,readErr:=os.ReadFile(logPath);if readErr==nil { lines:=strings.Split(strings.TrimRight(string(data),"\\n"),"\\n");if len(lines)>200{lines=lines[len(lines)-200:]};return strings.Join(lines,"\\n") }
+  data,readErr:=os.ReadFile(logPath);if readErr==nil { lines:=strings.Split(strings.TrimRight(string(data),"\n"),"\n");if len(lines)>200{lines=lines[len(lines)-200:]};return strings.Join(lines,"\n") }
  }
 
  prefix:=os.Getenv("PREFIX");if prefix==""{prefix="/data/data/com.termux/files/usr"}
