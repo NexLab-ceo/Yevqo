@@ -15,7 +15,6 @@ var firstPartyAppTemplates = []AppTemplate{
 	{ID:"php-api", Name:"PHP JSON API", Description:"Minimal JSON API endpoint using the local PHP runtime", Runtime:"php", EntryPoint:"index.php"},
 	{ID:"nodejs-http", Name:"Node.js HTTP", Description:"Runnable Node.js HTTP server with npm start", Runtime:"nodejs", EntryPoint:"server.js"},
 	{ID:"nodejs-api", Name:"Node.js JSON API", Description:"Node.js JSON API with a built-in health endpoint", Runtime:"nodejs", EntryPoint:"server.js"},
-	{ID:"nextjs-app", Name:"Next.js App", Description:"Next.js App Router starter with a production build and health route", Runtime:"nodejs", EntryPoint:"app/page.js"},
 	{ID:"static-site", Name:"Static Website", Description:"Static HTML website served by the local PHP development server", Runtime:"static", EntryPoint:"index.html"},
 	{ID:"go-http", Name:"Go HTTP", Description:"Go HTTP starter with a standard-library server; build before starting", Runtime:"go", EntryPoint:"main.go"},
 	{ID:"custom-app", Name:"Custom Language App", Description:"Blank project for any installed Termux toolchain; configure build and start commands", Runtime:"custom", EntryPoint:""},
