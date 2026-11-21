@@ -142,6 +142,8 @@ Before finishing every task:
 
 ### Progress history
 
+- 2026-11-21 — Improved GitHub App installation verification diagnostics: backend now maps GitHub HTTP 401/403/404/429, App/installation mismatch, PEM parsing and network failures to actionable messages without exposing provider response bodies or credentials. Added unit coverage for safe error mapping. Automated tests and CI are pending; no production service or database was changed.
+
 - 2026-11-21 — Fixed the Debian all-in-one package Control Plane UI refresh: `packaging/setup-control.sh` now reads frontend assets from `$PREFIX/share/yevqo/public`, validates the packaged `index.html`, and copies the current bundle into the configured `$DATA_ROOT/public` served by Control Plane. Deliberately does not copy packaged migrations during setup, because server startup can auto-apply pending migrations to the existing database. Shell/CI verification is pending; no production device, database, or deployment was changed.
 
 
