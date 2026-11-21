@@ -350,7 +350,7 @@ func (s *Server) handleProjectEnvironments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if len(parts) == 5 && parts[4] == "variables" {
+	if len(parts) == 4 && parts[3] == "variables" {
 		environmentID, parseErr := strconv.ParseInt(parts[2], 10, 64)
 		if parseErr != nil || environmentID < 1 { apiError(w, shared.ErrBadRequest("invalid environment id")); return }
 		var valid int
