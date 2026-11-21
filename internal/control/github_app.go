@@ -93,22 +93,36 @@ func githubAppRequest(ctx context.Context, method, endpoint, jwt string, body io
 // githubAppVerificationMessage maps internal failures to actionable, credential-safe diagnostics.
 func githubAppVerificationMessage(err error) string {
 	if err == nil { return "GitHub App installation verification failed" }
-	message := err.Error()
+	message := strings.ToLower(err.Error())
+	stage := "installation lookup"
+	if strings.Contains(message, "create github installation token") {
+		stage = "installation token creation"
+	}
 	switch {
-	case strings.Contains(message, "provider returned HTTP 401"):
+	case strings.Contains(message, "provider returned http 401"):
 		return "GitHub rejected the App JWT (HTTP 401). Check that the App ID matches the App that generated the private key."
-	case strings.Contains(message, "provider returned HTTP 404"):
+	case strings.Contains(message, "provider returned http 404"):
 		return "GitHub could not find this installation (HTTP 404). Check the installation ID and that the App is installed for this account."
-	case strings.Contains(message, "provider returned HTTP 403"):
+	case strings.Contains(message, "provider returned http 403"):
 		return "GitHub denied access to this App installation (HTTP 403). Check the App and installation permissions."
-	case strings.Contains(message, "installation does not belong to this GitHub App"):
-		return "The installation belongs to a different GitHub App. Check the configured App ID and installation ID."
-	case strings.Contains(message, "not valid PEM"), strings.Contains(message, "could not parse GitHub App RSA private key"), strings.Contains(message, "must be RSA"):
-		return "The configured GitHub App private key could not be parsed. Upload the private key generated for this App."
-	case strings.Contains(message, "provider returned HTTP 429"):
+	case strings.Contains(message, "provider returned http 429"):
 		return "GitHub API rate limit reached (HTTP 429). Try connecting again later."
+	case strings.Contains(message, "provider returned http 422"):
+		return "GitHub rejected the " + stage + " request (HTTP 422). Recheck that the App is installed for the selected account and that its installation is active."
+	case strings.Contains(message, "provider returned http 400"):
+		return "GitHub rejected the " + stage + " request (HTTP 400). Check the App installation configuration."
+	case strings.Contains(message, "provider returned http 5"):
+		return "GitHub is temporarily failing the " + stage + " request. Try again later."
+	case strings.Contains(message, "installation does not belong to this github app"):
+		return "The installation belongs to a different GitHub App. Check the configured App ID and installation ID."
+	case strings.Contains(message, "not valid pem"), strings.Contains(message, "could not parse github app rsa private key"), strings.Contains(message, "must be rsa"):
+		return "The configured GitHub App private key could not be parsed. Upload the private key generated for this App."
+	case strings.Contains(message, "x509"), strings.Contains(message, "certificate"), strings.Contains(message, "tls handshake"):
+		return "The Control Plane could not establish a trusted TLS connection to GitHub. Check the device date, certificate store and network filtering."
+	case strings.Contains(message, "no such host"), strings.Contains(message, "lookup "), strings.Contains(message, "connection refused"), strings.Contains(message, "network is unreachable"), strings.Contains(message, "timeout"), strings.Contains(message, "deadline exceeded"):
+		return "The Control Plane could not reach GitHub during " + stage + ". Check DNS, network access and device time, then retry."
 	default:
-		return "Could not reach or verify the GitHub App installation. Check network access and the App configuration."
+		return "GitHub App verification failed during " + stage + ". Check the App configuration and retry; internal details were withheld."
 	}
 }
 
