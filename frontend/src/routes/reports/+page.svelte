@@ -1,7 +1,7 @@
 <script>
  import { onMount } from 'svelte';
  import { page } from '$app/stores';
- import { getReports, listAuditLogs } from '$lib/api.js';
+ import { getReports, listAuditLogs, listProjects } from '$lib/api.js';
  import { notify } from '$lib/stores.js';
  import Button from '$lib/components/Button.svelte';
 
@@ -11,6 +11,8 @@
  let reportType = 'security';
  let periodDays = '30';
  let scope = 'all';
+ let projects = [];
+ $: scopeLabel = scope === 'all' ? 'All projects' : (projects.find(project => String(project.id) === scope)?.name || 'Selected project');
 
  $: cutoff = Date.now() - Number(periodDays) * 24 * 60 * 60 * 1000;
  $: periodLogs = logs.filter((entry) => {
@@ -22,7 +24,7 @@
 
  async function load() {
    loading = true;
-   const projectId = $page.url.searchParams.get('project_id') || ''; const [summary, audit] = await Promise.all([getReports(projectId, Number(periodDays)), listAuditLogs(200, projectId)]);
+   const projectId = scope === 'all' ? '' : scope; const [summary, audit] = await Promise.all([getReports(projectId, Number(periodDays)), listAuditLogs(200, projectId)]);
    if (summary.ok) report = summary.data?.report || null;
    else notify(summary.error || 'Не удалось загрузить сводку', 'error');
    if (audit.ok) logs = audit.data?.audit_logs || [];
@@ -30,7 +32,7 @@
    loading = false;
  }
 
- onMount(load);
+ onMount(async () => { const currentProject = $page.url.searchParams.get('project_id') || ''; if (currentProject) scope = currentProject; const result = await listProjects(); if (result.ok) projects = result.data.projects || []; else notify(result.error || 'Не удалось загрузить список проектов', 'error'); await load(); });
 
  function exportCSV() {
    const rows = [['timestamp', 'action', 'device', 'details'], ...periodLogs.map((entry) => [entry.created_at, entry.action, entry.device, JSON.stringify(entry.details || {})])];
@@ -38,7 +40,7 @@
    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
    const link = document.createElement('a');
    link.href = url;
-   link.download = 'veltrix-security-report.csv';
+   link.download = 'yevqo-security-report.csv';
    link.click();
    URL.revokeObjectURL(url);
  }
@@ -48,7 +50,7 @@
  }
 </script>
 
-<svelte:head><title>Reports · VELTRIX Dock</title></svelte:head>
+<svelte:head><title>Reports · Yevqo</title></svelte:head>
 
 <div class="page-header no-print">
  <div><div class="eyebrow">OPERATIONS</div><h1 class="page-title">Reports & Export</h1><p class="page-desc">Отчёты по инфраструктуре и событиям безопасности.</p></div>
@@ -60,7 +62,7 @@
  <div class="controls">
   <label>Тип отчёта<select bind:value={reportType}><option value="security">Security Report</option><option value="infrastructure">Infrastructure Summary</option></select></label>
   <label>Период<select bind:value={periodDays} on:change={load}><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></label>
-  <label>Область<select bind:value={scope}><option value="all">All projects</option></select></label>
+  <label>Область<select bind:value={scope} on:change={load}><option value="all">All projects</option>{#each projects as project}<option value={String(project.id)}>{project.name}</option>{/each}</select></label>
   <div class="format"><span>Формат</span><strong>PDF</strong><small>Печать / Save as PDF</small></div>
  </div>
  <div class="actions"><Button variant="primary" on:click={exportPDF} disabled={loading}>Сформировать PDF</Button><Button on:click={exportCSV} disabled={loading || periodLogs.length===0}>Экспорт событий CSV</Button></div>
@@ -70,7 +72,7 @@
  <div class="empty">Собираем данные отчёта…</div>
 {:else}
  <article class="report-document">
-  <header class="document-header"><div><div class="eyebrow">VELTRIX DOCK · REPORT</div><h2>{reportType === 'security' ? 'Security Report' : 'Infrastructure Summary'}</h2><p>Период: последние {periodDays} дней · Область: {$page.url.searchParams.get('project_id') ? 'Selected project' : 'All projects'}</p></div><div class="brand-mark">V</div></header>
+  <header class="document-header"><div><div class="eyebrow">YEVQO · REPORT</div><h2>{reportType === 'security' ? 'Security Report' : 'Infrastructure Summary'}</h2><p>Период: последние {periodDays} дней · Область: {scopeLabel}</p></div><div class="brand-mark">V</div></header>
   <div class="document-meta"><span>Сформировано: {new Date().toLocaleString()}</span><span>Источники: Control Plane · Audit Log</span></div>
   {#if reportType === 'security'}
    <div class="metrics">
@@ -98,7 +100,7 @@
   {:else}
    <p class="muted">Нет данных для формирования отчёта.</p>
   {/if}
-  <footer class="document-footer"><span>VELTRIX Dock</span><span>Confidential · Account report</span></footer>
+  <footer class="document-footer"><span>Yevqo</span><span>Confidential · Account report</span></footer>
  </article>
 {/if}
 
