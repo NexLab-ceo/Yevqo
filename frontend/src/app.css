@@ -218,3 +218,21 @@ html,body{font-size:14px}
 .page-container .table th,.page-container table th{font-weight:600!important;letter-spacing:.035em!important}
 @media(max-width:900px){.page-scroll{padding:20px 18px!important}}
 @media(max-width:700px){.page-scroll{padding:16px 12px!important}.sidebar{padding:16px 12px 12px!important}}
+
+/* Dokploy-inspired Yevqo UI: compact surfaces, shared palette, light-theme safe. */
+.app-shell{background:var(--bg-base)!important;color:var(--text-main)}
+.app-shell .sidebar,.app-shell .topbar{background:var(--bg-sidebar)!important;border-color:var(--border)!important}
+.app-shell .workspace-switcher,.app-shell .global-search-trigger,.app-shell .theme-switch,.app-shell .mode-switch,.app-shell .icon-action,.app-shell .profile-action{background:var(--bg-card)!important;border-color:var(--border)!important;color:var(--text-muted)!important;border-radius:6px!important}
+.app-shell .brand-mark{background:transparent!important;color:var(--accent)!important;filter:none!important}
+.app-shell .brand-copy strong,.app-shell .workspace-copy strong,.app-shell .account-copy strong,.app-shell .breadcrumbs strong{color:var(--text-main)!important}
+.app-shell .workspace-copy small,.app-shell .account-copy small,.app-shell .breadcrumbs span,.app-shell .nav-label{color:var(--text-muted)!important}
+.app-shell .nav-item{border-radius:6px!important;color:var(--text-muted)!important;min-height:34px!important}
+.app-shell .nav-item:hover{background:var(--bg-hover)!important;color:var(--text-main)!important}.app-shell .nav-item.active{background:var(--bg-elevated)!important;border-color:var(--border)!important;box-shadow:inset 2px 0 var(--accent)!important;color:var(--text-main)!important}.app-shell .nav-item.active .nav-icon{color:var(--accent)!important}
+.app-shell .page-scroll{padding:22px 26px!important}
+.app-shell .page-container .card,.app-shell .page-container .panel,.app-shell .page-container .settings-panel,.app-shell .page-container .settings-nav,.app-shell .page-container .connect-card,.app-shell .page-container .github-card,.app-shell .page-container .permission-card,.app-shell .page-container .setup-card,.app-shell .page-container .project-list,.app-shell .page-container .device-list,.app-shell .page-container .log-table,.app-shell .page-container .history,.app-shell .page-container .notification-list,.app-shell .page-container .audit-list{background:var(--bg-card)!important;border:1px solid var(--border)!important;border-radius:8px!important;box-shadow:none!important}
+.app-shell .page-container .card:hover,.app-shell .page-container .device-card:hover{transform:none!important}
+.app-shell .page-container input,.app-shell .page-container select,.app-shell .page-container textarea,.app-shell .page-container .input{background:var(--bg-input)!important;color:var(--text-main)!important;border-color:var(--border)!important;border-radius:6px!important}
+.app-shell .page-container .btn,.app-shell .page-container button.btn{border-radius:6px!important;box-shadow:none!important}.app-shell .page-container .btn-primary{background:var(--accent)!important;border-color:var(--accent)!important;color:var(--accent-fg)!important}
+.app-shell .page-container table th,.app-shell .page-container table td{border-color:var(--border)!important}.app-shell .page-container table th{color:var(--text-muted)!important;font-weight:600!important;letter-spacing:.035em!important}.app-shell .page-container table tbody tr:hover{background:var(--bg-hover)!important}
+.app-shell .page-container .page-title,.app-shell .page-container .section-title{color:var(--text-main)!important}.app-shell .page-container .page-desc,.app-shell .page-container .subtitle,.app-shell .page-container .muted{color:var(--text-muted)!important}
+@media(max-width:900px){.app-shell .page-scroll{padding:20px 18px!important}}@media(max-width:700px){.app-shell .page-scroll{padding:16px 12px!important}}
