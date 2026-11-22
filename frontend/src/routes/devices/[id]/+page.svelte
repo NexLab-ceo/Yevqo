@@ -165,7 +165,7 @@
         color: #94A3B8;
     }
 
-    .device-capabilities{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:-8px 0 22px}.device-platform,.capability-chip{font-size:10px;color:#9aa9c2;background:#111b2d;border:1px solid #253149;border-radius:7px;padding:5px 8px}.capability-chip{color:#a5b4fc}
+    .device-capabilities{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:-8px 0 22px}.device-platform,.capability-chip{font-size:10px;color:#9aa9c2;background:#111b2d;border:1px solid #253149;border-radius:7px;padding:5px 8px}.capability-chip{color:#8AB4FF}
     .section-header {
         display: flex;
         justify-content: space-between;
