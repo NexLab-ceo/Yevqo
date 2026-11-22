@@ -14,7 +14,7 @@
  const globalGroups=[
   {label:'',items:[['Обзор','/overview','◉'],['Проекты','/projects','▦']]},
   {label:'ОПЕРАЦИИ',items:[['Развёртывания','/deployments','↗'],['Сборки','/builds','⌁'],['Расписания','/schedules','◷'],['Журналы','/logs','⌘'],['Отчёты','/reports','▤']]},
-  {label:'ИНФРАСТРУКТУРА',items:[['Устройства','/devices','▣'],['Домены','/domains','◎'],['Мониторинг','/monitoring','⌁'],['Базы данных','/databases','◈'],['Резервные копии','/backups','⤓']]},
+  {label:'ИНФРАСТРУКТУРА',items:[['Устройства','/devices','▣'],['Приложения','/sites','◫'],['Домены','/domains','◎'],['Мониторинг','/monitoring','⌁'],['Базы данных','/databases','◈'],['Резервные копии','/backups','⤓']]},
   {label:'УПРАВЛЕНИЕ',items:[['Команда','/team','♧'],['Уведомления','/notifications','◌'],['Обслуживание','/maintenance','⚙'],['Настройки','/settings','⚙']]}
  ];
  $: pathParts=$page.url.pathname.split('/');
@@ -48,7 +48,7 @@
    {#each groups as group}
     <section class="nav-group"><div class="nav-label">{ru?group.label:({'ОПЕРАЦИИ':'OPERATIONS','ИНФРАСТРУКТУРА':'INFRASTRUCTURE','УПРАВЛЕНИЕ':'MANAGEMENT'}[group.label]||'')}</div>
      {#each group.items as item}
-      <a href={item[1]} class:active={active(item[1],$page.url.pathname)} class="nav-item" aria-current={active(item[1],$page.url.pathname) ? 'page' : undefined} on:click={()=>mobileNavOpen=false}><span class="nav-icon">{item[2]}</span><span>{ru?item[0]:({'Обзор':'Overview','Проекты':'Projects','Развёртывания':'Deployments','Сборки':'Builds','Расписания':'Schedules','Журналы':'Logs','Отчёты':'Reports','Устройства':'Devices','Домены':'Domains','Мониторинг':'Monitoring','Базы данных':'Databases','Резервные копии':'Backups','Команда':'Team','Уведомления':'Notifications','Обслуживание':'Maintenance','Настройки':'Settings'}[item[0]]||item[0])}</span>{#if item[0]==='Databases'}<span class="nav-tag">DB</span>{/if}</a>
+      <a href={item[1]} class:active={active(item[1],$page.url.pathname)} class="nav-item" aria-current={active(item[1],$page.url.pathname) ? 'page' : undefined} on:click={()=>mobileNavOpen=false}><span class="nav-icon">{item[2]}</span><span>{ru?item[0]:({'Обзор':'Overview','Проекты':'Projects','Развёртывания':'Deployments','Сборки':'Builds','Расписания':'Schedules','Журналы':'Logs','Отчёты':'Reports','Устройства':'Devices','Приложения':'Applications','Домены':'Domains','Мониторинг':'Monitoring','Базы данных':'Databases','Резервные копии':'Backups','Команда':'Team','Уведомления':'Notifications','Обслуживание':'Maintenance','Настройки':'Settings'}[item[0]]||item[0])}</span>{#if item[0]==='Databases'}<span class="nav-tag">DB</span>{/if}</a>
      {/each}
     </section>
    {/each}
