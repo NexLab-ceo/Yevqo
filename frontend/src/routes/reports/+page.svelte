@@ -103,7 +103,7 @@
 {/if}
 
 <style>
-.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}
+.eyebrow{font-size:9px;letter-spacing:.14em;color:#8AB4FF;font-weight:700;margin-bottom:7px}
 .generator,.report-document{padding:18px;background:#101727;border:1px solid #253149;border-radius:12px;margin-bottom:14px}
 .generator-heading,.document-header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
 .generator-heading h2{font-size:13px;margin:0 0 5px}.generator-heading p,.document-header p,.muted{font-size:10px;color:#64748b;line-height:1.6;margin:0}
