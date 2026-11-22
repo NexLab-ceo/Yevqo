@@ -162,3 +162,59 @@ html,body{font-size:14px}
 .page-container .filters button.active,.page-container .view-switch button.active{background:var(--bg-elevated)!important;color:var(--accent)!important}
 .page-container .settings-nav,.page-container .settings-panel,.page-container .connect-card,.page-container .github-card,.page-container .permission-card,.page-container .setup-card{background:var(--bg-card)!important;border-color:var(--border)!important}
 .page-container .settings-nav button.active,.page-container .choice-grid button.chosen{background:var(--bg-elevated)!important;border-color:var(--accent)!important;color:var(--text-main)!important}
+
+
+/* Minimal Dokploy-inspired dashboard refinement — Yevqo palette remains canonical. */
+.app-shell{background:var(--bg-base)!important}
+.sidebar{padding:18px 12px 12px!important}
+.brand-lockup{margin-bottom:18px!important}
+.workspace-switcher{padding:9px 10px!important;margin-bottom:18px!important;border-radius:8px!important}
+.nav-group{margin-bottom:17px!important}
+.nav-item{min-height:34px!important;padding:7px 10px!important;border-radius:6px!important;font-size:12px!important}
+.nav-item.active{background:var(--bg-elevated)!important;border-color:var(--border)!important;box-shadow:inset 2px 0 var(--accent)!important}
+.nav-item.active .nav-icon{color:var(--accent)!important}
+.topbar{height:54px!important;flex-basis:54px!important;background:var(--bg-base)!important}
+.page-scroll{padding:24px 28px!important}
+.page-container{max-width:1480px!important;margin:0 auto!important}
+.page-header{margin-bottom:22px!important}
+.page-title{font-size:21px!important;font-weight:650!important;letter-spacing:-.035em!important}
+.page-desc{font-size:12px!important}
+.card,.device-card,.page-container .panel,.page-container .metric-card,.page-container .quick-panel,.page-container .sites-table-wrap,.page-container .hero-panel{border-radius:8px!important;box-shadow:none!important}
+.card:hover,.device-card:hover{transform:none!important}
+.page-container .hero-panel{background:var(--bg-card)!important;border-color:var(--border)!important}
+.page-container .hero-orb,.page-container .hero-graphic{display:none!important}
+.page-container .hero-content{max-width:680px!important;padding:22px!important}
+.page-container .hero-kicker,.page-container .eyebrow{color:var(--text-muted)!important}
+.page-container .hero-content h2{font-size:21px!important;font-weight:650!important}
+.page-container .hero-content p,.page-container .hero-status{color:var(--text-muted)!important}
+.page-container .hero-status i{background:var(--accent)!important;box-shadow:none!important}
+.page-container .quick-panel{background:var(--bg-card)!important}
+.page-container .quick-icon,.page-container .device-symbol,.page-container .empty-symbol{background:var(--bg-elevated)!important;color:var(--accent)!important}
+.page-container .quick-link{border-color:var(--border)!important}
+.page-container .quick-link strong,.page-container .sites-table td strong{color:var(--text-main)!important}
+.page-container .quick-link small,.page-container .sites-table td,.page-container .section-subtitle{color:var(--text-muted)!important}
+.page-container .metric-card{background:var(--bg-card)!important}
+.page-container .metric-track{background:var(--bg-elevated)!important}
+.page-container .metric-track i{background:var(--accent)!important}
+.page-container .view-link,.page-container .section-heading>a{color:var(--accent)!important}
+.page-container .sites-table-wrap,.page-container .project-list{overflow:hidden;background:var(--bg-card)!important;border-color:var(--border)!important}
+.page-container .sites-table th,.page-container .sites-table td{border-color:var(--border)!important}
+.page-container .sites-table tbody tr:hover{background:var(--bg-hover)!important}
+.page-container .project-row{background:transparent!important;border-color:var(--border)!important}
+.page-container .project-main{color:var(--text-main)!important}
+.page-container .project-icon{background:var(--bg-elevated)!important;color:var(--accent)!important}
+.page-container .project-copy small,.page-container .project-stats,.page-container .arrow{color:var(--text-muted)!important}
+.page-container .project-toolbar .input{max-width:none}
+.page-container .view-switch{border-color:var(--border)!important;border-radius:6px!important}
+.page-container .view-switch button.active{background:var(--bg-elevated)!important;color:var(--accent)!important}
+.page-container .field label,.page-container .form-label{color:var(--text-muted)!important}
+.page-container .source-note{border-color:var(--border)!important;background:var(--bg-card)!important}
+.page-container .source-note button{background:var(--bg-elevated)!important;border-color:var(--border)!important}
+.page-container .btn{border-radius:6px!important}
+.page-container .btn-primary{background:var(--accent)!important;border-color:var(--accent)!important;color:var(--accent-fg)!important}
+.page-container .btn-primary:hover{background:var(--accent-hover)!important;border-color:var(--accent-hover)!important}
+.page-container .empty,.page-container .empty-state,.page-container .loading-state{background:var(--bg-card)!important;border:1px solid var(--border)!important;border-radius:8px!important}
+.page-container .table th,.page-container .table td,.page-container table th,.page-container table td{border-color:var(--border)!important}
+.page-container .table th,.page-container table th{font-weight:600!important;letter-spacing:.035em!important}
+@media(max-width:900px){.page-scroll{padding:20px 18px!important}}
+@media(max-width:700px){.page-scroll{padding:16px 12px!important}.sidebar{padding:16px 12px 12px!important}}
