@@ -41,7 +41,7 @@
  {#if mobileNavOpen}<button class="mobile-scrim" aria-label="Закрыть меню" on:click={()=>mobileNavOpen=false}></button>{/if}
  <aside class:mobile-open={mobileNavOpen} class="sidebar">
   <a class="brand-lockup" href="/overview"><svg class="brand-mark" viewBox="0 0 30 24" aria-label="Yevqo" role="img"><path d="M2 17.5 7.1 6.2h5.1L7.1 17.5H2Z" fill="currentColor"/><path d="M10.8 17.5 16 3.5h5.1L16 17.5h-5.2Z" fill="currentColor"/><path d="M19.4 17.5 24.5 0h5.1l-5.1 17.5h-5.1Z" fill="currentColor"/></svg><span class="brand-copy"><strong>YEVQO</strong></span></a>
-  <button class="workspace-switcher" on:click={()=>goto(inProject?'/projects':'/settings')}><span class="workspace-avatar">N</span><span class="workspace-copy"><strong>{inProject?(ru?'Рабочая область проекта':'Project workspace'):$workspaceName}</strong><small>{inProject?'Project #'+projectId:(ru?'Личный тариф · Локальный хост':'Personal workspace · Local host')}</small></span><span class="switch-chevron">⌄</span></button>
+  <button class="workspace-switcher" on:click={()=>goto(inProject?'/projects':'/settings')}><span class="workspace-avatar">Y</span><span class="workspace-copy"><strong>{inProject?(ru?'Рабочая область проекта':'Project workspace'):$workspaceName}</strong><small>{inProject?'Project #'+projectId:(ru?'Личный тариф · Локальный хост':'Personal workspace · Local host')}</small></span><span class="switch-chevron">⌄</span></button>
   <nav class="sidebar-nav">
    {#each groups as group}
     <section class="nav-group"><div class="nav-label">{group.label? (ru?'УПРАВЛЕНИЕ':'MANAGEMENT'):''}</div>
@@ -52,7 +52,7 @@
    {/each}
    
   </nav>
-  <div class="sidebar-bottom"><div class="sidebar-meta"><span><i></i>{ru?"Control Plane подключён":"Control Plane connected"}</span><small>Yevqo Control Panel · v1.0.0</small></div>
+  <div class="sidebar-bottom"><div class="sidebar-meta"><span>{ru?"Среда выполнения":"Runtime"}</span><small>Android + Termux · Agent</small></div>
    
    <div class="account-row"><span class="account-avatar">{($user?.username||'U').slice(0,1).toUpperCase()}</span><span class="account-copy"><strong>{$user?.username||'User'}</strong><small>{$user?.email||'Personal account'}</small></span><button class="account-menu" title="Выйти" aria-label="Выйти" on:click={handleLogout}>↗</button></div>
   </div>
