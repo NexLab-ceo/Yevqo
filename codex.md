@@ -56,18 +56,18 @@ Read the relevant source, migrations, package scripts, and CI workflows before m
 
 ## Visual design system
 
-The authenticated Yevqo interface uses the dark green palette below as its default dark appearance. Keep these values centralized in `frontend/src/app.css` and reuse the CSS variables rather than introducing unrelated one-off colors.
+The authenticated Yevqo interface uses a graphite and cool-blue palette as its default dark appearance. Keep these values centralized in `frontend/src/app.css` and reuse the CSS variables rather than introducing unrelated one-off colors.
 
 | Token | Value | Usage |
 |---|---|---|
-| Background | `#080A09` | Main application background |
-| Surface | `#101611` | Sidebar, cards, inputs and standard surfaces |
-| Elevated | `#18221A` | Elevated surfaces, hover and accent-soft backgrounds |
-| Primary green | `#A5EC79` | Primary actions, focus and key accents |
-| Secondary green | `#78C85A` | Hover states and secondary/success accents |
-| Main text | `#E9EEE8` | Primary readable text |
-| Muted text | `#929D91` | Secondary and subdued text |
-| Borders | `#2C392D` | Dividers, outlines and card borders |
+| Background | `#090D16` | Main application background |
+| Surface | `#111827` | Sidebar, cards, inputs and standard surfaces |
+| Elevated | `#1A2638` | Elevated surfaces, hover and accent-soft backgrounds |
+| Primary blue | `#8AB4FF` | Primary actions, focus and key accents |
+| Secondary blue | `#6D9EFF` | Hover states and secondary accents |
+| Main text | `#E9EEF8` | Primary readable text |
+| Muted text | `#9AA8BD` | Secondary and subdued text |
+| Borders | `#2B3548` | Dividers, outlines and card borders |
 
 Keep semantic danger and warning colors distinct. The existing selectable light appearance remains separate and must not be overwritten by dark-palette changes.
 
@@ -123,7 +123,7 @@ This is a conservative starting snapshot based on the repository documentation a
 | P1 — Project workspaces and environments | PARTIAL | All work is on `main`. Each project owns Production, Development, Staging and custom environments; resources are project/environment scoped and each application can belong to only one environment per project. Per-environment variables are AES-GCM encrypted, masked in API responses, and injected into application start, Android local build and deployment with project → site → managed DB precedence; reserved keys are blocked. Project settings support Admin/Developer/Viewer overrides for active workspace members; project detail, environment/resource assignment, repository/deployment, project-scoped device commands, site lifecycle/deployment, preview, webhook, and site Git/ENV operations enforce effective project roles, with workspace-role inheritance when no override exists. Developers can create apps on attached devices and assign them to project environments. Overview includes devices, applications, DB servers, per-environment app/database counts and recent deployments; Applications supports Agent-backed create/start/stop; Activity combines project-filtered audit and operational events. Remaining hardening: OS/container isolation, full role propagation across legacy workspace-wide database/backup routes, DB-backed migration/lifecycle integration tests, and physical Android runtime verification.
 | P2 — AI Agents / Agent Builder | TODO | Do not imply real agent execution until model integration, permission enforcement, and execution lifecycle are implemented. |
 | P3 — Full Android device validation | TODO | Requires tests on a real supported Android + Termux device; CI cross-compilation is not a substitute. |
-| P3 — Dashboard UX consistency | PARTIAL | Shared shell and Overview use compact Dokploy-inspired navigation, restrained token-based surfaces, consistent controls/tables and responsive spacing while retaining Yevqo dark-green and light themes. Shared surface normalization is applied to existing pages; frontend build and browser/mobile visual verification remain pending. |
+| P3 — Dashboard UX consistency | PARTIAL | Shared shell and Overview use compact Dokploy-inspired navigation, restrained token-based surfaces, consistent controls/tables and responsive spacing. Dark appearance uses graphite/cool-blue tokens; selectable light appearance remains available. Shared surface normalization is applied to existing pages; frontend build and browser/mobile visual verification remain pending. |
 
 ### Mandatory update procedure for every task
 
@@ -407,3 +407,5 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 - 2026-11-22 — Improved project detail load-failure handling on `main`: `/projects/:id` no longer silently redirects to the Projects list when `GET /api/projects/:id` fails. The page now preserves the route, displays the API error and HTTP status when available, and offers an in-place retry. This exposes the backend response needed to identify the remaining cause instead of hiding it. No API/backend, database schema/data, Agent or production service was changed. Frontend build and live API response verification remain pending; no production deployment was performed.
 
 - 2026-11-22 — Reworked the authenticated Dashboard visual system on main using the Dokploy UI research: compact Yevqo-token shell, restrained surface hierarchy, denser tables and cards, consistent form controls, calmer operational Overview and responsive mobile spacing. Removed decorative Overview gradients/graphics and misleading static Control Plane active messaging. Shared styles preserve the selectable light appearance, existing routes, API calls and interactions. UI-only; no backend, API, database, Agent, user data or production service changed. Frontend build and browser/Android visual verification remain pending.
+
+- 2026-11-22 — Replaced the authenticated Dashboard's green accent palette on `main` with graphite surfaces and cool-blue accents. Updated centralized CSS tokens and matching hard-coded accent/surface references, keeping the selectable light theme and existing semantic danger/warning styling. Updated this design-system specification and UX ledger. UI-only; frontend build and browser/Android visual verification remain pending; no backend, database, Agent or production deployment was changed.
