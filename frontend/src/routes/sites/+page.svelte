@@ -161,7 +161,7 @@
 <style>
     .header-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
     .site-select{display:flex;align-items:center;flex-shrink:0;cursor:pointer}
-    .site-select input{width:16px;height:16px;accent-color:#3B82F6;cursor:pointer}
+    .site-select input{width:16px;height:16px;accent-color:#8AB4FF;cursor:pointer}
     .sites-list {
         display: flex;
         flex-direction: column;
