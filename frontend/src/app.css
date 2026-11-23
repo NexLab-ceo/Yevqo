@@ -110,7 +110,7 @@ html,body{font-size:14px}
 
 
 /* YEVQO Control Panel — canonical product design tokens and shell. */
-:root{--bg-base:#090D16;--bg-sidebar:#0B0F0C;--bg-card:#111827;--bg-elevated:#141C15;--bg-hover:#1B261C;--bg-input:#111827;--border:#2B3548;--border-hover:#6D9EFF;--text-main:#E9EEF8;--text-muted:#9AA8BD;--text-dim:#69766B;--accent:#8AB4FF;--accent-hover:#6D9EFF;--accent-soft:#18251A;--accent-fg:#090D16;--info:#70A9E8;--danger:#EF6464;--success:#38BDF8;--warning:#E9B85C;--radius:10px}
+:root{--bg-base:#090D16;--bg-sidebar:#090D16;--bg-card:#111827;--bg-elevated:#1A2638;--bg-hover:#1A2638;--bg-input:#111827;--border:#2B3548;--border-hover:#6D9EFF;--text-main:#E9EEF8;--text-muted:#9AA8BD;--text-dim:#8492A8;--accent:#8AB4FF;--accent-hover:#6D9EFF;--accent-soft:#1A2638;--accent-fg:#090D16;--info:#8AB4FF;--danger:#EF6464;--success:#38BDF8;--warning:#E9B85C;--radius:10px}
 .app-shell{background:var(--bg-base)!important;color:var(--text-main)}
 .sidebar{width:240px!important;flex-basis:240px!important;background:var(--bg-sidebar)!important;border-color:var(--border)!important}
 .brand-mark{background:var(--accent)!important;color:#090D16!important;box-shadow:none!important;border-radius:8px!important}
