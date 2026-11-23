@@ -12,6 +12,9 @@
     let error = '';
     let loading = false;
 
+    // The shared layout restores the session before rendering this route.
+    $: if ($user) goto('/overview');
+
     // Если в URL есть ?ref=XXX — подставляем в поле.
     $: if ($page.url.searchParams.has('ref')) {
         referralCode = $page.url.searchParams.get('ref');
@@ -32,7 +35,7 @@
 
         // Успех — сохраняем пользователя и редирект.
         user.set(res.data.user);
-        goto('/');
+        goto('/overview');
     }
 </script>
 
