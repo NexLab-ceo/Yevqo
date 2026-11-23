@@ -201,21 +201,4 @@ jobs:
           path: |
             yevqo-all_${{ env.VERSION }}_aarch64.deb
             yevqo_${{ env.VERSION }}_aarch64.deb
-            SHA256SUMS
 
-      - name: Publish Yevqo packages to VELTRIX Dock
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          repository: NexLab-ceo/veltrix-dock
-          token: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
-          tag_name: ${{ github.ref_name }}
-          target_commitish: main
-          name: Yevqo ${{ env.VERSION }}
-          files: |
-            yevqo-all_${{ env.VERSION }}_aarch64.deb
-            yevqo_${{ env.VERSION }}_aarch64.deb
-            SHA256SUMS
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
