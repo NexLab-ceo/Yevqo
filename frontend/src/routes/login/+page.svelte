@@ -9,6 +9,9 @@
     let error = '';
     let loading = false;
 
+    // The shared layout restores the session before rendering this route.
+    $: if ($user) goto('/overview');
+
     async function handleSubmit(e) {
         e.preventDefault();
         error = '';
@@ -24,7 +27,7 @@
 
         // Успех — сохраняем пользователя и редирект.
         user.set(res.data.user);
-        goto('/');
+        goto('/overview');
     }
 </script>
 
