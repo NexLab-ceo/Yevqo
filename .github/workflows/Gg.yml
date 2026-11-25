@@ -1,0 +1,17 @@
+name: Test Build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check trigger
+        run: |
+          echo "Push trigger works!"
+          echo "Commit: ${{ github.sha }}"
+          echo "Actor: ${{ github.actor }}"
