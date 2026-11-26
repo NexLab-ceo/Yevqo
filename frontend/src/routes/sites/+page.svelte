@@ -4,6 +4,7 @@
     import { goto } from '$app/navigation';
     import { listSites, sendCommand } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
+    import { locale } from '$lib/i18n.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
     import StatusDot from '$lib/components/StatusDot.svelte';
@@ -14,6 +15,7 @@
     let busyBulk = false;
     let selectedSites = [];
     let sites = [];
+    $: ru = $locale !== 'en';
 
     // Загружаем сайты повторно по запросу пользователя.
     async function loadSites() {
@@ -22,7 +24,7 @@
         if (res.ok) {
             sites = res.data?.sites || [];
         } else {
-            notify(res.error || 'Не удалось загрузить сайты', 'error');
+            notify(res.error || (ru ? 'Не удалось загрузить сайты' : 'Could not load applications'), 'error');
         }
         loading = false;
         refreshing = false;
@@ -69,7 +71,7 @@
         busyBulk = false;
         selectedSites = [];
         await loadSites();
-        notify(failed ? `Остановлено: ${total - failed}, ошибок: ${failed}` : `Остановлено сайтов: ${total}`, failed ? 'error' : 'success');
+        notify(failed ? (ru ? `Остановлено: ${total - failed}, ошибок: ${failed}` : `Stopped: ${total - failed}, errors: ${failed}`) : (ru ? `Остановлено сайтов: ${total}` : `Stopped applications: ${total}`), failed ? 'error' : 'success');
     }
 
     async function runSiteAction(item, action) {
@@ -84,7 +86,7 @@
         if (!result.ok || !result.data?.ok) {
             notify(result.error || result.data?.message || 'Не удалось выполнить команду', 'error');
         } else {
-            notify(action === 'start_site' ? 'Сайт запущен' : 'Сайт остановлен', 'success');
+            notify(action === 'start_site' ? (ru ? 'Сайт запущен' : 'Application started') : (ru ? 'Сайт остановлен' : 'Application stopped'), 'success');
             await loadSites();
         }
         busySite = '';
@@ -93,25 +95,25 @@
 
 <div class="page-header">
     <div>
-        <h1 class="page-title">Сайты</h1>
-        <p class="page-desc">Все сайты на всех подключённых устройствах</p>
+        <h1 class="page-title">{ru ? 'Сайты' : 'Applications'}</h1>
+        <p class="page-desc">{ru ? 'Все сайты на всех подключённых устройствах' : 'Applications across all connected devices'}</p>
     </div>
     <div class="header-actions">
         {#if sites.length > 0}
-            <Button size="sm" on:click={toggleAll}>{allSelected ? 'Снять выбор' : 'Выбрать все'}</Button>
-            <Button size="sm" variant="danger" disabled={selectedRunning.length === 0 || busyBulk} loading={busyBulk} on:click={stopSelected}>Остановить выбранные ({selectedRunning.length})</Button>
+            <Button size="sm" on:click={toggleAll}>{allSelected ? (ru ? 'Снять выбор' : 'Clear selection') : (ru ? 'Выбрать все' : 'Select all')}</Button>
+            <Button size="sm" variant="danger" disabled={selectedRunning.length === 0 || busyBulk} loading={busyBulk} on:click={stopSelected}>{ru ? 'Остановить выбранные' : 'Stop selected'} ({selectedRunning.length})</Button>
         {/if}
-        <Button on:click={loadSites} disabled={refreshing || busyBulk} loading={refreshing}>↻ Обновить</Button>
+        <Button on:click={loadSites} disabled={refreshing || busyBulk} loading={refreshing}>{ru ? '↻ Обновить' : '↻ Refresh'}</Button>
     </div>
 </div>
 
 {#if loading}
-    <div class="empty">Загрузка...</div>
+    <div class="empty">{ru ? 'Загрузка…' : 'Loading…'}</div>
 {:else if sites.length === 0}
     <div class="empty">
-        <p>Пока нет сайтов</p>
+        <p>{ru ? 'Пока нет сайтов' : 'No applications yet'}</p>
         <p class="empty-hint">
-            Перейдите на устройство и нажмите «Добавить сайт»
+            {ru ? 'Перейдите на устройство и нажмите «Добавить сайт»' : 'Open a device and choose “Add application”.'}
         </p>
     </div>
 {:else}
@@ -126,7 +128,7 @@
                         <div class="site-name">
                             {item.site.site_id}
                             <span class="site-device">
-                                на {item.device_name || `устройство ${item.device_id}`}
+                                {ru ? 'на' : 'on'} {item.device_name || (ru ? `устройство ${item.device_id}` : `device ${item.device_id}`)}
                             </span>
                         </div>
                         <div class="site-meta">
@@ -140,18 +142,18 @@
                     <div class="site-status">
                         <StatusDot status={item.site.status} />
                         <span class="status-text">
-                            {item.site.status === 'running' ? 'Работает' : item.site.status === 'error' ? 'Ошибка' : 'Остановлен'}
+                            {item.site.status === 'running' ? (ru ? 'Работает' : 'Running') : item.site.status === 'error' ? (ru ? 'Ошибка' : 'Error') : (ru ? 'Остановлен' : 'Stopped')}
                         </span>
                     </div>
                 </div>
                 <div class="site-actions" on:click|stopPropagation>
                     {#if item.site.status === 'running'}
-                        <Button size="sm" disabled={busySite !== ''} on:click={() => runSiteAction(item, 'stop_site')}>Остановить</Button>
-                        <Button size="sm" disabled={busySite !== ''} on:click={() => runSiteAction(item, 'start_site')}>Перезапустить</Button>
+                        <Button size="sm" disabled={busySite !== ''} on:click={() => runSiteAction(item, 'stop_site')}>{ru ? 'Остановить' : 'Stop'}</Button>
+                        <Button size="sm" disabled={busySite !== ''} on:click={() => runSiteAction(item, 'start_site')}>{ru ? 'Перезапустить' : 'Restart'}</Button>
                     {:else}
-                        <Button size="sm" variant="primary" disabled={busySite !== ''} loading={busySite === siteKey(item)} on:click={() => runSiteAction(item, 'start_site')}>Запустить</Button>
+                        <Button size="sm" variant="primary" disabled={busySite !== ''} loading={busySite === siteKey(item)} on:click={() => runSiteAction(item, 'start_site')}>{ru ? 'Запустить' : 'Start'}</Button>
                     {/if}
-                    <Button size="sm" variant="ghost" on:click={() => openDevice(item.device_id)}>Устройство</Button>
+                    <Button size="sm" variant="ghost" on:click={() => openDevice(item.device_id)}>{ru ? 'Устройство' : 'Device'}</Button>
                 </div>
             </Card>
         {/each}
