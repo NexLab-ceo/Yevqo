@@ -88,14 +88,18 @@ fi
 
 # Updates are downloaded from the public VELTRIX Dock releases; no device-side GitHub token is needed.
 
-# Debian packages place the current Control Plane assets under share/yevqo.
-# Do not copy package migrations here: starting the server can apply pending
-# migrations to the existing database. This setup step only refreshes static UI.
+# Debian packages place the current Control Plane assets and immutable migrations under share/yevqo.
 SHARE="$PREFIX/share/yevqo"
 if [ ! -s "$SHARE/public/index.html" ]; then
   echo "Packaged Yevqo frontend is missing: $SHARE/public/index.html" >&2
   exit 1
 fi
+if [ ! -x "$SHARE/scripts/sync-migrations.sh" ]; then
+  echo "Packaged Yevqo migration synchronizer is missing: $SHARE/scripts/sync-migrations.sh" >&2
+  exit 1
+fi
+log "Staging new immutable database migrations"
+"$SHARE/scripts/sync-migrations.sh" "$SHARE/migrations" "$DATA_ROOT/migrations"
 log "Updating Control Plane frontend from $SHARE/public"
 cp -a "$SHARE/public/." "$DATA_ROOT/public/"
 # Keep GitHub App metadata separate from the PEM private key. The package setup

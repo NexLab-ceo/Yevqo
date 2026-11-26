@@ -90,4 +90,4 @@ Managed PostgreSQL and MariaDB/MySQL server installation and local database oper
 - `024_project_repositories.sql` adds the optional project-level GitHub App repository binding.
 - `025_project_deployment_lifecycle.sql` adds repository-to-site deployment targets, webhook registration IDs, and durable deployment runs.
 
-These are additive migrations. They have not been applied to production or to the user's existing database as part of this work. Apply them only through the normal migration/upgrade process after taking a verified backup and checking the target installation.
+These are additive migrations. The all-in-one `.deb` stages missing, byte-identical migration files into the Control Plane data root during package post-install and `yevqo-setup-control`; the Control Plane applies pending files on startup. Existing migration files are never overwritten, and same-name content conflicts or symlink destinations stop setup. This delivery mechanism does not itself run migrations against a database; the Control Plane applies them on its next startup. Take a verified backup before upgrading an existing installation.

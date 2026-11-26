@@ -75,6 +75,9 @@ jobs:
           bash -n scripts/termux-boot.sh
           sh -n packaging/postinst-all
           sh -n packaging/postinst-agent
+          sh -n packaging/sync-migrations.sh
+          bash -n scripts/test-migration-sync.sh
+          bash scripts/test-migration-sync.sh
 
       - name: Package Yevqo all-in-one and standalone Agent
         shell: bash
@@ -99,6 +102,7 @@ jobs:
 
           cp -a public/. "build-deb-all/$PREFIX_ROOT/share/yevqo/public/"
           cp -a migrations/. "build-deb-all/$PREFIX_ROOT/share/yevqo/migrations/"
+          install -m 0755 packaging/sync-migrations.sh "build-deb-all/$PREFIX_ROOT/share/yevqo/scripts/sync-migrations.sh"
           install -m 0755 scripts/install-control.sh "build-deb-all/$PREFIX_ROOT/share/yevqo/scripts/install-control.sh"
           install -m 0755 scripts/install-agent.sh "build-deb-all/$PREFIX_ROOT/share/yevqo/scripts/install-agent.sh"
           install -m 0755 scripts/termux-boot.sh "build-deb-all/$PREFIX_ROOT/share/yevqo/termux-boot.sh"

@@ -1,6 +1,16 @@
 #!/data/data/com.termux/files/usr/bin/sh
 set -e
 PREFIX="/data/data/com.termux/files/usr"
+DATA_ROOT="${YEVQO_DATA_ROOT:-${VELTRIX_DATA_ROOT:-/sdcard/yevqo}}"
+SHARE="$PREFIX/share/yevqo"
+# Stage only missing, byte-identical immutable migrations before the updater
+# restarts Control Plane. Existing migration files and database contents stay untouched.
+if [ -x "$SHARE/scripts/sync-migrations.sh" ] && [ -d "$SHARE/migrations" ]; then
+  "$SHARE/scripts/sync-migrations.sh" "$SHARE/migrations" "$DATA_ROOT/migrations"
+else
+  echo "Packaged migration synchronizer or migrations directory is missing" >&2
+  exit 1
+fi
 SERVICE_DIR="$PREFIX/var/service/yevqo-updater"
 mkdir -p "$SERVICE_DIR"
 cat > "$SERVICE_DIR/run" <<'RUN'
