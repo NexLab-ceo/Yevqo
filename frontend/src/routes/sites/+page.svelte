@@ -84,7 +84,7 @@
             : { site_id: site.site_id };
         const result = await sendCommand(item.device_id, action, payload);
         if (!result.ok || !result.data?.ok) {
-            notify(result.error || result.data?.message || 'Не удалось выполнить команду', 'error');
+            notify(result.error || result.data?.message || (ru ? 'Не удалось выполнить команду' : 'Could not run application command'), 'error');
         } else {
             notify(action === 'start_site' ? (ru ? 'Сайт запущен' : 'Application started') : (ru ? 'Сайт остановлен' : 'Application stopped'), 'success');
             await loadSites();
@@ -122,7 +122,7 @@
             <Card clickable on:click={() => openSite(item)}>
                 <div class="site-row">
                     <label class="site-select" on:click|stopPropagation>
-                        <input type="checkbox" checked={selectedSites.includes(siteKey(item))} on:change={() => toggleSelected(item)} aria-label={'Выбрать '+item.site.site_id}/>
+                        <input type="checkbox" checked={selectedSites.includes(siteKey(item))} on:change={() => toggleSelected(item)} aria-label={(ru ? 'Выбрать ' : 'Select ') + item.site.site_id}/>
                     </label>
                     <div class="site-info">
                         <div class="site-name">

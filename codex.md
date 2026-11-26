@@ -447,3 +447,5 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 - 2026-11-26 — Finished the remaining global Applications list surface and shared Card component. Card now follows theme tokens and activates by Enter/Space only when the card itself has focus (nested buttons keep their own keyboard behavior), with a visible keyboard focus outline; the Applications list uses semantic colors. This closes the static theme-token sweep for the identified routes/components; keyboard/screen-reader and browser/mobile acceptance still require visual QA. CI is pending for this follow-up.
 
 - 2026-11-26 — Completed localization of the global Applications list: loading, empty, status, bulk actions, per-app controls and notifications now follow the selected Russian/English locale. The previous page had hard-coded Russian text despite the Dashboard locale setting. CI for this follow-up is pending.
+
+- 2026-11-26 — Finished the Applications list locale pass by translating the remaining command-error fallback and checkbox accessible label. CI is pending for the latest localization revision.
