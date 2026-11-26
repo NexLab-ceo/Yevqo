@@ -175,13 +175,13 @@
         align-items: center;
         margin-top: 10px;
         padding: 8px 12px;
-        border: 1px solid #334155;
+        border: 1px solid var(--border);
         border-radius: 8px;
-        color: #cbd5e1;
+        color: var(--text-main);
         text-decoration: none;
         font-size: 12px;
     }
-    .export-link:hover { background: #172136; color: #fff; }
+    .export-link:hover { background: var(--bg-elevated); color: #fff; }
 
     .stats-grid {
         display: grid;
@@ -192,7 +192,7 @@
 
     .stat-label {
         font-size: 11px;
-        color: #64748B;
+        color: var(--text-muted);
         text-transform: uppercase;
         letter-spacing: 0.04em;
     }
@@ -200,7 +200,7 @@
     .stat-value {
         font-size: 20px;
         font-weight: 600;
-        color: #F1F5F9;
+        color: var(--text-main);
         margin-top: 4px;
         font-family: ui-monospace, monospace;
     }
@@ -215,12 +215,12 @@
     .section-title {
         font-size: 14px;
         font-weight: 600;
-        color: #F1F5F9;
+        color: var(--text-main);
     }
 
     .section-count {
         font-size: 12px;
-        color: #64748B;
+        color: var(--text-muted);
     }
 
     .users-list {
@@ -244,7 +244,7 @@
     .user-name {
         font-size: 14px;
         font-weight: 500;
-        color: #F1F5F9;
+        color: var(--text-main);
         display: flex;
         align-items: center;
         gap: 8px;
@@ -261,24 +261,24 @@
     }
 
     .status-free {
-        background: #172136;
-        color: #94A3B8;
+        background: var(--bg-elevated);
+        color: var(--text-muted);
     }
 
     .status-commercial {
         background: rgba(34, 197, 94, 0.1);
-        color: #4ade80;
+        color: var(--success);
     }
 
     .status-blocked {
         background: rgba(239, 68, 68, 0.1);
-        color: #f87171;
+        color: var(--danger);
     }
 
     .user-meta {
         font-family: ui-monospace, monospace;
         font-size: 11px;
-        color: #64748B;
+        color: var(--text-muted);
         margin-top: 4px;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -297,12 +297,12 @@
 
     .user-stat-label {
         font-size: 11px;
-        color: #64748B;
+        color: var(--text-muted);
     }
 
     .user-stat-value {
         font-size: 13px;
-        color: #94A3B8;
+        color: var(--text-muted);
         font-family: ui-monospace, monospace;
         margin-top: 2px;
     }
@@ -317,6 +317,6 @@
 
     .page-info {
         font-size: 12px;
-        color: #64748B;
+        color: var(--text-muted);
     }
 </style>
