@@ -161,7 +161,7 @@
 <style>
     .header-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
     .site-select{display:flex;align-items:center;flex-shrink:0;cursor:pointer}
-    .site-select input{width:16px;height:16px;accent-color:#8AB4FF;cursor:pointer}
+    .site-select input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
     .sites-list {
         display: flex;
         flex-direction: column;
@@ -182,7 +182,7 @@
     .site-name {
         font-size: 14px;
         font-weight: 500;
-        color: #F1F5F9;
+        color: var(--text-main);
         display: flex;
         align-items: baseline;
         gap: 8px;
@@ -191,14 +191,14 @@
 
     .site-device {
         font-size: 12px;
-        color: #64748B;
+        color: var(--text-muted);
         font-weight: 400;
     }
 
     .site-meta {
         font-family: ui-monospace, monospace;
         font-size: 11px;
-        color: #64748B;
+        color: var(--text-muted);
         margin-top: 4px;
     }
 
@@ -219,12 +219,12 @@
 
     .status-text {
         font-size: 12px;
-        color: #94A3B8;
+        color: var(--text-muted);
     }
 
     .empty-hint {
         font-size: 12px;
-        color: #64748B;
+        color: var(--text-muted);
         margin-top: 8px;
     }
 </style>
