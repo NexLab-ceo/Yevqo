@@ -19,6 +19,20 @@ Attaching a site or database server also attaches its host device to the project
 
 Deleting a project removes the grouping and its associations only. It does not delete the underlying resources or their data.
 
+## Application-scoped resources
+
+An application is identified by its host `device_id` plus its `site_id`. It is not a separate device. One Android device can host multiple applications, and each application can have its own attached operational resources.
+
+- **Device:** remains a host/infrastructure object. It can host multiple applications and database servers; it is not owned by one application.
+- **Domain and Cloudflare route:** belong to one application/site. The site's detail page owns its primary domain and tunnel ingress configuration.
+- **Logs and process monitoring:** are scoped to the application process and its host device. Device-level telemetry remains available separately.
+- **Builds, releases, previews, Git deployment targets and scheduled application tasks:** are tied to a site/device pair. Project deployment runs can target one or more attached applications.
+- **Databases:** a database server belongs to a workspace and can be assigned to a project/environment. A database instance belongs to its server. The connection from an application to a database instance is application-specific and injects that connection's managed environment values into the application.
+- **Backups:** site backups identify the application by `device_id` + `site_id`; database backups identify a database instance. Backup schedules are resource-scoped.
+- **Reports:** aggregate workspace or project resources and are not an application-owned resource.
+
+The global sidebar is the workspace inventory/aggregate view. The application detail view is the contextual place to manage its domain, logs, environment/database connections, build, Git/release and scheduled tasks. Do not nest devices under applications or make one application the owner of a shared host device.
+
 ## Project GitHub delivery and deployments
 
 A project may connect one GitHub App repository and attach it to one or more project sites/devices. Each target has its own verified deployment branch. Connecting a target snapshots the site's previous Git URL, branch and webhook settings; detaching the target, disconnecting the repository, or deleting the project restores those original settings.
