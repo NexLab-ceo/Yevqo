@@ -449,3 +449,5 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 - 2026-11-26 — Completed localization of the global Applications list: loading, empty, status, bulk actions, per-app controls and notifications now follow the selected Russian/English locale. The previous page had hard-coded Russian text despite the Dashboard locale setting. CI for this follow-up is pending.
 
 - 2026-11-26 — Finished the Applications list locale pass by translating the remaining command-error fallback and checkbox accessible label. CI is pending for the latest localization revision.
+
+- 2026-11-26 — Aligned the Appearance settings' dark/light/system preview swatches with the actual graphite/cool-blue dark and neutral-blue light palettes; removed the last green-tinted sample colors from the theme selector. CI is pending.
