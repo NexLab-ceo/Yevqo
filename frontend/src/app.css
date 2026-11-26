@@ -250,3 +250,81 @@ html,body{font-size:14px}
 .app-shell .page-container .btn-primary:hover{background:var(--accent-hover)!important;border-color:var(--accent-hover)!important}
 .app-shell .page-container a:not(.btn):hover{color:var(--accent)}
 @media(max-width:700px){.app-shell .sidebar-nav{padding-bottom:16px}.app-shell .nav-group{margin-bottom:12px!important}.app-shell .nav-item{min-height:38px!important}}
+
+/* Yevqo unified design pass — final semantic layer for every dashboard route. */
+:root{
+ --bg-base:#090D16;
+ --bg-sidebar:#090D16;
+ --bg-card:#111827;
+ --bg-elevated:#1A2638;
+ --bg-hover:#202D42;
+ --bg-input:#111827;
+ --border:#2B3548;
+ --border-hover:#6D9EFF;
+ --text-main:#E9EEF8;
+ --text-muted:#9AA8BD;
+ --text-dim:#8492A8;
+ --accent:#8AB4FF;
+ --accent-hover:#6D9EFF;
+ --accent-soft:#1A2638;
+ --accent-fg:#090D16;
+ --info:#8AB4FF;
+ --success:#38BDF8;
+ --warning:#E9B85C;
+ --danger:#EF6464;
+ --radius:8px;
+ color-scheme:dark;
+}
+.app-shell[data-theme="system"]{
+ --bg-base:#090D16;--bg-sidebar:#090D16;--bg-card:#111827;
+ --bg-elevated:#1A2638;--bg-hover:#202D42;--bg-input:#111827;
+ --border:#2B3548;--border-hover:#6D9EFF;
+ --text-main:#E9EEF8;--text-muted:#9AA8BD;--text-dim:#8492A8;
+ --accent:#8AB4FF;--accent-hover:#6D9EFF;--accent-soft:#1A2638;
+ --accent-fg:#090D16;--info:#8AB4FF;--success:#38BDF8;
+ --warning:#E9B85C;--danger:#EF6464;color-scheme:dark;
+}
+.app-shell[data-theme="light"]{color-scheme:light}
+.app-shell .page-container{
+ color:var(--text-main);
+}
+.app-shell .page-container :is(.card,.panel,.metric-card,.quick-panel,.hero-panel,.device-card,.project-list,.history,.log-table,.device-list,.notification-list,.audit-list,.activity-list,.settings-panel,.settings-nav,.connect-card,.github-card,.permission-card,.setup-card,.sites-table-wrap){
+ background:var(--bg-card)!important;border-color:var(--border)!important;
+ box-shadow:none!important;border-radius:8px!important;
+}
+.app-shell .page-container :is(input,select,textarea,.input){
+ background:var(--bg-input)!important;color:var(--text-main)!important;
+ border-color:var(--border)!important;
+}
+.app-shell .page-container :is(.page-title,.section-title,h1,h2,h3,strong){color:var(--text-main)}
+.app-shell .page-container :is(.page-desc,.subtitle,.muted,.field-hint,.empty-hint){color:var(--text-muted)}
+.app-shell .page-container :is(table th,table td){border-color:var(--border)!important}
+.app-shell .page-container table th{color:var(--text-muted)!important}
+.app-shell .page-container :is(.good,.success,.online,.healthy,.result,.status-success,.text-success){color:var(--success)!important}
+.app-shell .page-container :is(.entry-icon:not(.failed),.status-success,.success-badge){background:var(--accent-soft)!important;color:var(--success)!important}
+.app-shell .page-container :is(.failed,.bad,.danger,.offline,.status-error,.text-danger){color:var(--danger)!important}
+.app-shell .page-container :is(.warning,.status-warning,.text-warning){color:var(--warning)!important}
+.app-shell .page-container :is(.filters button.active,.view-switch button.active,.settings-nav button.active,.choice-grid button.chosen){
+ background:var(--accent-soft)!important;color:var(--accent)!important;border-color:var(--border-hover)!important;
+}
+.app-shell .page-container .btn-primary{background:var(--accent)!important;border-color:var(--accent)!important;color:var(--accent-fg)!important}
+.app-shell .page-container .btn-primary:hover{background:var(--accent-hover)!important;border-color:var(--accent-hover)!important}
+.app-shell .page-container :is(.project-row,.entry,.device-row,.log-row,.notification,.audit-row,.activity-row){border-color:var(--border)!important}
+.app-shell .page-container :is(.project-row,.device-row,.log-row):hover{background:var(--bg-hover)!important}
+.app-shell[data-theme="light"]{
+ --bg-base:#F4F6FA;--bg-sidebar:#FFFFFF;--bg-card:#FFFFFF;
+ --bg-elevated:#F2F5FA;--bg-hover:#EEF2F8;--bg-input:#FFFFFF;
+ --border:#E2E6EE;--border-hover:#9ABAF4;
+ --text-main:#172033;--text-muted:#667085;--text-dim:#98A2B3;
+ --accent:#2563EB;--accent-hover:#1D4ED8;--accent-soft:#EFF6FF;
+ --accent-fg:#FFFFFF;--info:#2563EB;--success:#0284C7;
+ --warning:#B7791F;--danger:#DC2626;color-scheme:light;
+}
+.app-shell[data-theme="light"] .page-container :is(.good,.success,.online,.healthy,.result,.status-success,.text-success){color:#0284C7!important}
+@media(max-width:700px){
+ .app-shell .page-scroll{padding:16px 12px!important}
+ .app-shell .page-header{gap:12px}
+ .app-shell .page-container .table-wrap,.app-shell .page-container .table-container{overflow-x:auto;max-width:100%}
+ .app-shell .page-container table{min-width:560px}
+}
+
