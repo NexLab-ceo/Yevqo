@@ -7,7 +7,7 @@
         if (clickable) dispatch('click', event);
     }
     function handleKeydown(event) {
-        if (!clickable || (event.key !== 'Enter' && event.key !== ' ')) return;
+        if (!clickable || event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
         event.preventDefault();
         dispatch('click', event);
     }
