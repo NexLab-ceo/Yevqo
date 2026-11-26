@@ -99,19 +99,19 @@
 </section>
 
 <style>
-.eyebrow{font-size:9px;letter-spacing:.14em;color:#818cf8;font-weight:700;margin-bottom:7px}
-.panel{padding:16px;background:#101727;border:1px solid #253149;border-radius:11px;margin-bottom:12px}
+.eyebrow{font-size:9px;letter-spacing:.14em;color:var(--accent);font-weight:700;margin-bottom:7px}
+.panel{padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:11px;margin-bottom:12px}
 .panel h2{font-size:12px;margin-bottom:12px}.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.workspace-select{max-width:240px}.role-select{width:118px;padding:5px 7px;font-size:9px}
-.member,.member-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #1e293b}
+.member,.member-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
 .member-row:last-child{border-bottom:0}
-.avatar{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;background:#242b50;color:#c7d2fe;font-size:12px;font-weight:700}
+.avatar{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700}
 .member-main{display:grid;gap:3px;flex:1;min-width:0}
 .member strong,.member-row strong,.role-row strong{font-size:10px}
-.member small,.member-row small,.role-row span,.hint{font-size:9px;color:#64748b}
-.role{font-size:9px;padding:4px 7px;border-radius:6px;background:#1e293b;color:#cbd5e1}
-.owner{background:#25264a;color:#a5b4fc}.admin{background:#183b36;color:#6ee7b7}.developer{background:#26334b;color:#93c5fd}
+.member small,.member-row small,.role-row span,.hint{font-size:9px;color:var(--text-muted)}
+.role{font-size:9px;padding:4px 7px;border-radius:6px;background:var(--border);color:var(--text-main)}
+.owner{background:var(--bg-elevated);color:var(--accent)}.admin{background:var(--accent-soft);color:var(--success)}.developer{background:var(--bg-elevated);color:var(--accent)}
 .invite-form{display:grid;grid-template-columns:minmax(160px,1fr) 130px auto;gap:8px}
 .hint{line-height:1.6;margin-top:10px}
-.role-row{display:grid;grid-template-columns:100px 1fr;gap:12px;padding:10px 0;border-top:1px solid #253149}
+.role-row{display:grid;grid-template-columns:100px 1fr;gap:12px;padding:10px 0;border-top:1px solid var(--border)}
 @media(max-width:600px){.invite-form{grid-template-columns:1fr}.member-row{flex-wrap:wrap}}
 </style>
