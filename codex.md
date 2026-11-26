@@ -451,3 +451,5 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 - 2026-11-26 — Finished the Applications list locale pass by translating the remaining command-error fallback and checkbox accessible label. CI is pending for the latest localization revision.
 
 - 2026-11-26 — Aligned the Appearance settings' dark/light/system preview swatches with the actual graphite/cool-blue dark and neutral-blue light palettes; removed the last green-tinted sample colors from the theme selector. CI is pending.
+
+- 2026-11-26 — Completed the Deployments page Russian/English locale audit: stat captions, loading/error feedback and relative timestamps now follow the selected locale; previously some secondary labels and time strings stayed Russian in English mode. The page still distinguishes confirmed success/failure from `Recorded` unknown outcomes. CI is pending.

@@ -7,7 +7,7 @@
  import Button from '$lib/components/Button.svelte';
  let deployments=[],loading=true,refreshing=false,filter='all',search='',refreshTimer,selected=null;
  $: ru=$locale!=='en';
- async function load(silent=false){if(refreshing)return;refreshing=true;const r=await listDeployments($page.url.searchParams.get('project_id')||'');if(r.ok)deployments=r.data.deployments||[];else if(!silent)notify(r.error||'Не удалось загрузить историю деплоев','error');loading=false;refreshing=false;}
+ async function load(silent=false){if(refreshing)return;refreshing=true;const r=await listDeployments($page.url.searchParams.get('project_id')||'');if(r.ok)deployments=r.data.deployments||[];else if(!silent)notify(r.error||(ru?'Не удалось загрузить историю деплоев':'Could not load deployment history'),'error');loading=false;refreshing=false;}
  onMount(()=>{load();refreshTimer=setInterval(()=>load(true),15000);});
  onDestroy(()=>{if(refreshTimer)clearInterval(refreshTimer);});
  $: successful=deployments.filter(d=>d.details?.ok===true).length;
@@ -15,18 +15,18 @@
  $: rollbacks=deployments.filter(d=>d.action==='site_rollback').length;
  $: filtered=deployments.filter(d=>{const ok=d.details?.ok===true;if(filter==='success'&&!ok)return false;if(filter==='failed'&&d.details?.ok!==false)return false;const q=search.trim().toLowerCase();return !q||[d.details?.site_id,d.device,d.action,d.details?.commit_hash,d.details?.error].some(v=>String(v||'').toLowerCase().includes(q));});
  function label(action){return ({site_deploy:ru?'Развёртывание':'Deploy',site_rebuild:ru?'Сборка':'Rebuild',site_rollback:ru?'Откат':'Rollback',site_restart:ru?'Перезапуск':'Restart'})[action]||action;}
- function relative(value){const t=new Date(value).getTime();if(!Number.isFinite(t))return '—';const s=Math.max(0,Math.floor((Date.now()-t)/1000));if(s<60)return 'только что';if(s<3600)return Math.floor(s/60)+' мин. назад';if(s<86400)return Math.floor(s/3600)+' ч. назад';return Math.floor(s/86400)+' дн. назад';}
+ function relative(value){const t=new Date(value).getTime();if(!Number.isFinite(t))return '—';const s=Math.max(0,Math.floor((Date.now()-t)/1000));if(s<60)return ru?'только что':'just now';if(s<3600)return ru?Math.floor(s/60)+' мин. назад':Math.floor(s/60)+' min ago';if(s<86400)return ru?Math.floor(s/3600)+' ч. назад':Math.floor(s/3600)+' hr ago';return ru?Math.floor(s/86400)+' дн. назад':Math.floor(s/86400)+' days ago';}
  function shortCommit(value){return value?String(value).slice(0,12):'';}
 </script>
 <div class="page-header"><div><div class="eyebrow">DELIVERY / OVERVIEW</div><h1 class="page-title">{ru?'Развёртывания':'Deployments'}</h1><p class="page-desc">{ru?'Мониторинг и управление развёртываниями проектов.':'Monitor and manage your project deployments.'}</p></div><Button on:click={()=>load()} disabled={refreshing}>↻ {ru?'Обновить':'Refresh'}</Button></div>
 <div class="stats">
- <article><span >{ru?'Всего операций':'Total operations'}</span><strong>{deployments.length}</strong><small>Последние 100</small></article>
- <article><span >{ru?'Успешно':'Successful'}</span><strong class="good">{successful}</strong><small>Завершены без ошибок</small></article>
- <article><span >{ru?'Ошибки':'Failed'}</span><strong class="bad">{failed}</strong><small>Требуют внимания</small></article>
- <article><span >{ru?'Откаты':'Rollbacks'}</span><strong>{rollbacks}</strong><small>Возврат к прошлому релизу</small></article>
+ <article><span >{ru?'Всего операций':'Total operations'}</span><strong>{deployments.length}</strong><small>{ru?'Последние 100':'Latest 100'}</small></article>
+ <article><span >{ru?'Успешно':'Successful'}</span><strong class="good">{successful}</strong><small>{ru?'Завершены без ошибок':'Completed without errors'}</small></article>
+ <article><span >{ru?'Ошибки':'Failed'}</span><strong class="bad">{failed}</strong><small>{ru?'Требуют внимания':'Need attention'}</small></article>
+ <article><span >{ru?'Откаты':'Rollbacks'}</span><strong>{rollbacks}</strong><small>{ru?'Возврат к прошлому релизу':'Return to a previous release'}</small></article>
 </div>
 <div class="toolbar"><div class="filters"><button class:active={filter==='all'} on:click={()=>filter='all'} >{ru?'Все':'All'}</button><button class:active={filter==='success'} on:click={()=>filter='success'} >{ru?'Успешные':'Successful'}</button><button class:active={filter==='failed'} on:click={()=>filter='failed'} >{ru?'С ошибками':'Failed'}</button></div><input class="input search" bind:value={search} placeholder={ru?'Поиск по сайту, устройству или commit…':'Search by site, device or commit…'}/></div>
-{#if loading}<div class="empty">Загружаем историю деплоев…</div>{:else if !filtered.length}<div class="empty">{deployments.length?(ru?'По заданным условиям ничего не найдено.':'No deployments match your filters.'):(ru?'Операций пока нет. Запусти Deploy или Rebuild на странице сайта.':'No operations yet. Start Deploy or Rebuild from a site page.')}</div>{:else}
+{#if loading}<div class="empty">{ru?'Загружаем историю деплоев…':'Loading deployment history…'}</div>{:else if !filtered.length}<div class="empty">{deployments.length?(ru?'По заданным условиям ничего не найдено.':'No deployments match your filters.'):(ru?'Операций пока нет. Запусти Deploy или Rebuild на странице сайта.':'No operations yet. Start Deploy or Rebuild from a site page.')}</div>{:else}
 <section class="history">{#each filtered as d (d.id)}<article class="entry"><span class:failed={d.details?.ok===false} class="entry-icon">{d.details?.ok===false?'!':d.action==='site_rollback'?'↶':d.details?.ok===true?'↑':'·'}</span><div class="entry-main"><div class="entry-title"><strong>{label(d.action)}</strong><span class:failed-text={d.details?.ok===false} class="result">{d.details?.ok===true?(ru?'Успешно':'Succeeded'):d.details?.ok===false?(ru?'Ошибка':'Failed'):(ru?'Запись получена':'Recorded')}</span></div><div class="entry-meta"><b>{d.details?.site_id||(ru?'Неизвестный сайт':'Unknown site')}</b><span>{d.device||(ru?'Устройство':'Device')}</span></div>{#if d.details?.commit_hash}<code>{shortCommit(d.details.commit_hash)}</code>{/if}{#if d.details?.error}<p class="error-text">{d.details.error}</p>{/if}</div><time title={formatDate(d.created_at)}>{relative(d.created_at)}<small>{formatDate(d.created_at)}</small></time><button class="details-button" on:click={()=>selected=d}>{ru?'Детали':'Details'}</button></article>{/each}</section>
 {/if}
 <p class="footnote">{ru?'Автообновление каждые 15 секунд. Страница показывает подтверждённые записи операций. Активные build jobs и отмена задач пока не предоставляются API.':'Auto-refreshes every 15 seconds. This page shows confirmed operation records. Live build jobs and cancellation are not exposed by the API yet.'}</p>
