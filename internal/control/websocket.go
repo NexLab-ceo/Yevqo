@@ -244,7 +244,8 @@ func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 		Architecture: req.Architecture,
 		Capabilities: req.Capabilities,
 	}
-	device, err = srv.db.UpsertDevice(ctx, device)
+	user.IsAdmin = user.Username == srv.adminUsername
+	device, err = srv.db.UpsertDevice(ctx, device, user.IsAdmin)
 	if err != nil {
 		var apiErr *shared.APIError
 		if errors.As(err, &apiErr) {
