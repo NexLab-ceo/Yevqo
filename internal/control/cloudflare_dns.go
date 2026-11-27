@@ -308,7 +308,7 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 		ingressManaged,err:=cloudflareTunnelIngressManaged(configSource)
 		if err!=nil{apiError(w,shared.ErrBadRequest(err.Error()));return}
 		if ingressManaged {
-			if err:=updateCloudflareTunnelIngress(ctx,token,accountID,in.TunnelID,hostname,service,false,existingErr==nil);err!=nil{apiError(w,shared.ErrBadRequest("could not configure Cloudflare Tunnel ingress: "+err.Error()));return}
+			if err:=updateCloudflareTunnelIngress(ctx,token,accountID,in.TunnelID,hostname,service,false,existingErr==nil && existingIngressManaged);err!=nil{apiError(w,shared.ErrBadRequest("could not configure Cloudflare Tunnel ingress: "+err.Error()));return}
 		}
 		record,err:=ensureCloudflareTunnelDNS(ctx,token,zoneID,hostname,in.TunnelID)
 		if err!=nil{
