@@ -1,6 +1,6 @@
 # Yevqo package updates
 
-Yevqo packages use the public GitHub Releases page in [NexLab-ceo/veltrix-dock](https://github.com/NexLab-ceo/veltrix-dock/releases).
+Yevqo packages are distributed through the public GitHub Releases page in [NexLab-ceo/veltrix-dock](https://github.com/NexLab-ceo/veltrix-dock/releases). The source code and CI workflows live in [NexLab-ceo/Yevqo](https://github.com/NexLab-ceo/Yevqo).
 
 ## Automatic updates
 
@@ -43,17 +43,25 @@ Run an update check immediately:
 
 The update commands are safe to run more than once. If the installed version is already current, they exit without reinstalling it.
 
-## Publishing a release
+## Building and publishing a release
 
-The build workflow in the Yevqo source repository builds both Debian packages from the same version and attaches them, plus `SHA256SUMS`, to a release in `NexLab-ceo/veltrix-dock` when a `v*` tag is pushed.
+**Important: publishing is currently a manual, separate step.** A push to `main` runs the CI build and uploads both packages plus `SHA256SUMS` as a GitHub Actions artifact. The current workflows do not create or upload a GitHub Release automatically. Pushing a version tag alone does not publish a release.
 
-The source repository needs a GitHub Actions secret named `PUBLIC_RELEASE_TOKEN`. It must be a token that can create releases and upload assets in `NexLab-ceo/veltrix-dock` (repository Contents: write). For a fine-grained token, grant access to that repository specifically. The token is used only by GitHub Actions; it is not embedded in the packages or sent to devices.
+To prepare a stable package version:
 
-Create a versioned tag on the Yevqo `main` branch to publish a release, for example:
+1. Create and push a version tag from the verified `main` commit, for example:
 
-```sh
-git tag v0.2.0
-git push origin v0.2.0
-```
+   ```sh
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
 
-Normal pushes to `main` still run the build and upload CI artifacts, but do not publish a stable GitHub Release.
+2. Open the Yevqo repository's Actions page and manually run the **Build Yevqo** workflow with the ref set to that tag (for example, `v0.2.0`). Do not use an artifact from a different commit or tag.
+3. Wait for the workflow to complete successfully. Download its artifact, which contains:
+   - `yevqo-all_0.2.0_aarch64.deb`
+   - `yevqo_0.2.0_aarch64.deb`
+   - `SHA256SUMS`
+4. Verify the checksums, then create the matching `v0.2.0` release in [NexLab-ceo/veltrix-dock](https://github.com/NexLab-ceo/veltrix-dock/releases) and attach all three files without renaming them.
+5. Confirm the release is public and both package assets plus `SHA256SUMS` are downloadable before announcing the update.
+
+The current workflow does not use a `PUBLIC_RELEASE_TOKEN` secret. That secret will only be needed if automated publishing to `veltrix-dock` is implemented later. Never publish an artifact from a failed or unverified build.
