@@ -3,6 +3,8 @@ package control
 import (
 	"context"
 	"database/sql"
+	"strconv"
+	"strings"
 
 	"veltrix/internal/shared"
 )
@@ -95,20 +97,43 @@ func (s *Server) authorizeDatabaseInstance(ctx context.Context, databaseID, acto
 
 // authorizeDeviceOwner resolves the workspace owner for a device-scoped
 // resource and applies the requested role permission.
+// authorizeSiteProjects applies project role overrides to a website attached
+// to one or more projects. Unassigned sites retain workspace-level permissions.
+func (s *Server) authorizeSiteProjects(ctx context.Context, deviceID int64, siteID string, ownerID, actorID int64, action string) error {
+	rows, err := s.db.conn.QueryContext(ctx, `SELECT p.id,p.user_id FROM project_sites ps JOIN projects p ON p.id=ps.project_id WHERE ps.device_id=? AND ps.site_id=? ORDER BY p.id`, deviceID, siteID)
+	if err != nil { return shared.ErrInternal("could not resolve website project access") }
+	type projectOwner struct { id, ownerID int64 }
+	projects := make([]projectOwner, 0)
+	for rows.Next() { var item projectOwner; if err := rows.Scan(&item.id,&item.ownerID); err != nil { rows.Close(); return shared.ErrInternal("could not read website project access") }; projects=append(projects,item) }
+	if err := rows.Err(); err != nil { rows.Close(); return shared.ErrInternal("could not read website project access") }
+	if err := rows.Close(); err != nil { return shared.ErrInternal("could not close website project access") }
+	if len(projects)==0 { return s.authorizeWorkspace(ctx,ownerID,actorID,action) }
+	for _,project := range projects { if project.ownerID!=ownerID { return shared.ErrInternal("website project ownership is inconsistent") }; if err := s.authorizeProjectAction(ctx,project.id,actorID,action); err != nil { return err } }
+	return nil
+}
+
 // authorizeBackup resolves backup ownership before read, restore or transfer operations.
 func (s *Server) authorizeBackup(ctx context.Context, backupID, actorID int64, action string) (ownerID, deviceID int64, err error) {
 	if backupID < 1 {
 		return 0, 0, shared.ErrBadRequest("invalid backup id")
 	}
-	err = s.db.conn.QueryRowContext(ctx, "SELECT user_id,device_id FROM backups WHERE id=?", backupID).Scan(&ownerID, &deviceID)
-	if err == sql.ErrNoRows {
-		return 0, 0, shared.ErrNotFound("backup not found")
-	}
-	if err != nil {
-		return 0, 0, shared.ErrInternal("could not resolve backup owner")
-	}
-	if err = s.authorizeWorkspace(ctx, ownerID, actorID, action); err != nil {
-		return 0, 0, err
+	var resourceType, resourceID string
+	var serverID sql.NullInt64
+	err = s.db.conn.QueryRowContext(ctx, "SELECT user_id,device_id,resource_type,resource_id,database_server_id FROM backups WHERE id=?", backupID).Scan(&ownerID, &deviceID, &resourceType, &resourceID, &serverID)
+	if err == sql.ErrNoRows { return 0, 0, shared.ErrNotFound("backup not found") }
+	if err != nil { return 0, 0, shared.ErrInternal("could not resolve backup owner") }
+	switch resourceType {
+	case "database":
+		if !serverID.Valid || serverID.Int64 < 1 { return 0, 0, shared.ErrInternal("database backup has no owning server") }
+		if err = s.authorizeDatabaseServerProjects(ctx, serverID.Int64, ownerID, actorID, action); err != nil { return 0, 0, err }
+	case "site":
+		parts := strings.SplitN(resourceID, ":", 2)
+		if len(parts) != 2 { return 0, 0, shared.ErrInternal("site backup resource is invalid") }
+		resourceDeviceID, parseErr := strconv.ParseInt(parts[0], 10, 64)
+		if parseErr != nil || resourceDeviceID != deviceID || !validBackupSiteID(parts[1]) { return 0, 0, shared.ErrInternal("site backup resource is invalid") }
+		if err = s.authorizeSiteProjects(ctx, deviceID, parts[1], ownerID, actorID, action); err != nil { return 0, 0, err }
+	default:
+		return 0, 0, shared.ErrInternal("unsupported backup resource")
 	}
 	return ownerID, deviceID, nil
 }
