@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -43,7 +44,8 @@ func (s *Server) handleBackupSchedules(w http.ResponseWriter, r *http.Request) {
 					rows.Close(); apiError(w, shared.ErrInternal("could not read backup schedules")); return
 				}
 				if err := s.authorizeBackupSchedule(r.Context(), ownerID, item, u.ID, "backup.read"); err != nil {
-					if shared.IsForbidden(err) { continue }
+					var apiErr *shared.APIError
+					if errors.As(err, &apiErr) && apiErr.Code == http.StatusForbidden { continue }
 					rows.Close(); apiError(w, err); return
 				}
 				out = append(out, item)
