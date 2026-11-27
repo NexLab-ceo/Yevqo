@@ -7,11 +7,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check trigger
-        run: |
-          echo "Push trigger works!"
-          echo "Commit: ${{ github.sha }}"
-          echo "Actor: ${{ github.actor }}"
+  package:
+    name: Build and verify Android packages
+    uses: ./.github/workflows/build.yml
