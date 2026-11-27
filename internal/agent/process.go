@@ -877,6 +877,16 @@ func truncateDeployOutput(value string) string {
 // DeployGitSite builds an immutable release directory before touching the
 // currently running application. A failed candidate start restores the prior
 // process from its recorded working directory.
+// gitRepositoryCommand marks only the generated staging repository as safe.
+ // Android shared storage (/sdcard) can report ownership differently from the
+ // Termux process, causing Git's dubious-ownership guard to reject even a
+ // repository just cloned by this Agent.
+ func gitRepositoryCommand(ctx context.Context, repositoryDir string, args ...string) *exec.Cmd {
+ 	gitArgs := []string{"-c", "safe.directory=" + repositoryDir, "-C", repositoryDir}
+ 	gitArgs = append(gitArgs, args...)
+ 	return exec.CommandContext(ctx, "git", gitArgs...)
+ }
+
 func (m *ProcessManager) DeployGitSite(req shared.SiteAction, rebuild bool) (int, string, string, string, error) {
 	return m.DeployGitSiteWithJob(context.Background(), "", req, rebuild)
 }
@@ -949,12 +959,12 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	}
 
 	if req.GitCommit != "" {
-		fetch := exec.CommandContext(cloneCtx, "git", "-C", stageDir, "fetch", "--depth", "1", "origin", req.GitCommit)
+		fetch := gitRepositoryCommand(cloneCtx, stageDir, "fetch", "--depth", "1", "origin", req.GitCommit)
 		fetch.Env = gitEnv
 		fetchOutput, fetchErr := fetch.CombinedOutput()
 		output.Write(fetchOutput)
 		if fetchErr != nil { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("fetch requested commit: %w", fetchErr) }
-		checkout := exec.CommandContext(cloneCtx, "git", "-C", stageDir, "checkout", "--detach", "FETCH_HEAD")
+		checkout := gitRepositoryCommand(cloneCtx, stageDir, "checkout", "--detach", "FETCH_HEAD")
 		checkoutOutput, checkoutErr := checkout.CombinedOutput()
 		output.Write(checkoutOutput)
 		if checkoutErr != nil { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("checkout requested commit: %w", checkoutErr) }
@@ -963,7 +973,7 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	// os/exec's Output() discarded Git's diagnostic, leaving only exit status 128
 	// in the deployment UI and making repository/checkout failures impossible to
 	// distinguish. Keep this command bounded by the checkout timeout as well.
-	readCommit := exec.CommandContext(cloneCtx, "git", "-C", stageDir, "rev-parse", "--verify", "HEAD^{commit}")
+	readCommit := gitRepositoryCommand(cloneCtx, stageDir, "rev-parse", "--verify", "HEAD^{commit}")
 	readCommit.Env = gitEnv
 	commitBytes, commitErr := readCommit.CombinedOutput()
 	if commitErr != nil {
@@ -978,7 +988,9 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 	commit := strings.TrimSpace(string(commitBytes))
 	if len(commit) != 40 && len(commit) != 64 { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git returned an invalid commit identifier") }
 	for _, r := range commit { if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git returned an invalid commit identifier") } }
-	dateBytes, err := exec.Command("git", "-C", stageDir, "show", "-s", "--format=%cI", "HEAD").Output()
+	dateCmd := gitRepositoryCommand(cloneCtx, stageDir, "show", "-s", "--format=%cI", "HEAD")
+	dateCmd.Env = gitEnv
+	dateBytes, err := dateCmd.Output()
 	if err != nil { return 0, truncateDeployOutput(output.String()), commit, "", fmt.Errorf("read commit date: %w", err) }
 	commitDate := strings.TrimSpace(string(dateBytes))
 
