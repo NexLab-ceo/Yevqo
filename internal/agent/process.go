@@ -959,8 +959,22 @@ func (m *ProcessManager) DeployGitSiteWithJob(ctx context.Context, jobID string,
 		output.Write(checkoutOutput)
 		if checkoutErr != nil { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("checkout requested commit: %w", checkoutErr) }
 	}
-	commitBytes, err := exec.Command("git", "-C", stageDir, "rev-parse", "HEAD").Output()
-	if err != nil { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("read checked-out commit: %w", err) }
+	// Use the same credential/config environment as clone and capture stderr.
+	// os/exec's Output() discarded Git's diagnostic, leaving only exit status 128
+	// in the deployment UI and making repository/checkout failures impossible to
+	// distinguish. Keep this command bounded by the checkout timeout as well.
+	readCommit := exec.CommandContext(cloneCtx, "git", "-C", stageDir, "rev-parse", "--verify", "HEAD^{commit}")
+	readCommit.Env = gitEnv
+	commitBytes, commitErr := readCommit.CombinedOutput()
+	if commitErr != nil {
+		diagnostic := strings.TrimSpace(string(commitBytes))
+		if len(diagnostic) > 500 { diagnostic = diagnostic[:500] }
+		diagnostic = strings.ReplaceAll(diagnostic, req.GitURL, "[repository URL]")
+		if diagnostic != "" {
+			return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("read checked-out commit: %w: %s", commitErr, diagnostic)
+		}
+		return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("read checked-out commit: %w", commitErr)
+	}
 	commit := strings.TrimSpace(string(commitBytes))
 	if len(commit) != 40 && len(commit) != 64 { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git returned an invalid commit identifier") }
 	for _, r := range commit { if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) { return 0, truncateDeployOutput(output.String()), "", "", fmt.Errorf("Git returned an invalid commit identifier") } }
