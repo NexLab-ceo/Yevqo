@@ -86,3 +86,25 @@ func TestUpdateCloudflareIngressRulesDoesNotOverwriteManualRoute(t *testing.T) {
 	var service string;_ = json.Unmarshal(updated[0]["service"],&service)
 	if service!="http://127.0.0.1:3000"{t.Fatalf("service=%q",service)}
 }
+
+func TestCloudflareTunnelIngressManagedModes(t *testing.T) {
+	tests := []struct {
+		source string
+		want   bool
+		ok     bool
+	}{
+		{source: "cloudflare", want: true, ok: true},
+		{source: " local ", want: false, ok: true},
+		{source: "unknown", want: false, ok: false},
+		{source: "", want: false, ok: false},
+	}
+	for _, test := range tests {
+		got, err := cloudflareTunnelIngressManaged(test.source)
+		if (err == nil) != test.ok {
+			t.Errorf("source %q error = %v, want success %v", test.source, err, test.ok)
+		}
+		if got != test.want {
+			t.Errorf("source %q managed = %v, want %v", test.source, got, test.want)
+		}
+	}
+}
