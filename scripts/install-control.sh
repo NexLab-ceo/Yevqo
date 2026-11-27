@@ -3,6 +3,7 @@
 # Запуск: bash scripts/install-control.sh
 
 set -e
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 
 # Цвета.
 RED='\033[0;31m'
@@ -54,7 +55,34 @@ if [ -z "${YEVQO_DATA_ROOT:-}" ] && [ -z "${VELTRIX_DATA_ROOT:-}" ] && [ -e "$LE
         exit 1
     fi
 fi
-CONFIG_FILE="$DATA_ROOT/config/config.json"
+LEGACY_CONFIG_FILE="$DATA_ROOT/config/config.json"
+CONFIG_DIR="$PREFIX/var/lib/yevqo-control/config"
+CONFIG_FILE="$CONFIG_DIR/config.json"
+mkdir -p "$CONFIG_DIR"
+chmod 700 "$PREFIX/var/lib/yevqo-control" "$CONFIG_DIR"
+if [ -L "$CONFIG_FILE" ] || { [ -e "$CONFIG_FILE" ] && [ ! -f "$CONFIG_FILE" ]; }; then
+    err "Unsafe private Control Plane config path; refusing to follow it."
+    exit 1
+fi
+if [ ! -e "$CONFIG_FILE" ] && [ -e "$LEGACY_CONFIG_FILE" ]; then
+    if [ -L "$LEGACY_CONFIG_FILE" ] || [ ! -f "$LEGACY_CONFIG_FILE" ]; then
+        err "Unsafe legacy Control Plane config; refusing migration."
+        exit 1
+    fi
+    TMP_CONFIG="$CONFIG_FILE.tmp"
+    cp "$LEGACY_CONFIG_FILE" "$TMP_CONFIG"
+    chmod 600 "$TMP_CONFIG"
+    if ! cmp -s "$LEGACY_CONFIG_FILE" "$TMP_CONFIG"; then
+        rm -f "$TMP_CONFIG"
+        err "Control Plane config migration verification failed."
+        exit 1
+    fi
+    mv "$TMP_CONFIG" "$CONFIG_FILE"
+    rm -f "$LEGACY_CONFIG_FILE"
+    log "Migrated Control Plane credentials into Termux private storage"
+fi
+if [ -f "$CONFIG_FILE" ]; then chmod 600 "$CONFIG_FILE"; fi
+
 # Generate a strong database password only when creating a fresh config.
 # Existing configs and their database credentials are never overwritten.
 if [ ! -f "$CONFIG_FILE" ]; then
