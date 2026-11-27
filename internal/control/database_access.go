@@ -166,6 +166,11 @@ func (s *Server) authorizeProjectLogDetails(ctx context.Context, projectID, owne
 		resourceOwnerID, _, _, err := s.authorizeDatabaseInstance(ctx, databaseID, actorID, "database.read")
 		if err != nil { return err }
 		if resourceOwnerID != ownerID { return shared.ErrForbidden("database log is outside this workspace") }
+		if projectID > 0 {
+			var linked int
+			if err := s.db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM project_database_servers pds JOIN db_instances d ON d.server_id=pds.database_server_id WHERE pds.project_id=? AND d.id=? AND d.user_id=?`, projectID, databaseID, ownerID).Scan(&linked); err != nil { return shared.ErrInternal("could not check project database log scope") }
+			if linked == 0 { return shared.ErrForbidden("database log is outside this project") }
+		}
 	}
 	for _, key := range []string{"database_server_id"} {
 		if serverID, exists := projectLogDetailID(details, key); exists {
@@ -173,6 +178,11 @@ func (s *Server) authorizeProjectLogDetails(ctx context.Context, projectID, owne
 			resourceOwnerID, _, err := s.authorizeDatabaseServer(ctx, serverID, actorID, "database.read")
 			if err != nil { return err }
 			if resourceOwnerID != ownerID { return shared.ErrForbidden("database server log is outside this workspace") }
+			if projectID > 0 {
+				var linked int
+				if err := s.db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM project_database_servers WHERE project_id=? AND database_server_id=?`, projectID, serverID).Scan(&linked); err != nil { return shared.ErrInternal("could not check project database server log scope") }
+				if linked == 0 { return shared.ErrForbidden("database server log is outside this project") }
+			}
 		}
 	}
 	if backupID, exists := projectLogDetailID(details, "backup_id"); exists {
