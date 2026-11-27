@@ -167,7 +167,7 @@ func (s *Server) authorizeProjectLogDetails(ctx context.Context, projectID, owne
 		if err != nil { return err }
 		if resourceOwnerID != ownerID { return shared.ErrForbidden("database log is outside this workspace") }
 	}
-	for _, key := range []string{"database_server_id", "server_id"} {
+	for _, key := range []string{"database_server_id"} {
 		if serverID, exists := projectLogDetailID(details, key); exists {
 			if serverID < 1 { return shared.ErrForbidden("database server log has no valid resource scope") }
 			resourceOwnerID, _, err := s.authorizeDatabaseServer(ctx, serverID, actorID, "database.read")
