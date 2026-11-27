@@ -197,7 +197,7 @@ func scanDevice(scanner deviceRowScanner) (*shared.Device, error) {
 	return &d, nil
 }
 
-func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Device, error) {
+func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device, unlimited bool) (*shared.Device, error) {
 	// Serialize registrations per account. Locking the user row prevents two
 	// simultaneous first-time Agent connections from both passing the limit.
 	tx, err := db.conn.BeginTx(ctx, nil)
@@ -249,7 +249,7 @@ func (db *DB) UpsertDevice(ctx context.Context, d *shared.Device) (*shared.Devic
 		return nil, fmt.Errorf("count registered devices: %w", err)
 	}
 	limit := shared.DeviceLimitFor(accountStatus, maxDevices, bonusDevices)
-	if count >= limit {
+	if !unlimited && count >= limit {
 		return nil, shared.ErrForbidden("device limit reached: your current plan allows " + strconv.Itoa(limit) + " connected phone(s); disconnect a phone or upgrade your plan")
 	}
 
