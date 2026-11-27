@@ -20,8 +20,9 @@ type Config struct {
 	DataRoot  string `json:"data_root"`
 }
 
-const DefaultConfigPath = "/sdcard/veltrix-agent/config/agent.json"
-const DefaultDataRoot = "/sdcard/veltrix-agent"
+const DefaultConfigPath = "/data/data/com.termux/files/usr/var/lib/veltrix-agent/config/agent.json"
+const LegacyDefaultConfigPath = "/sdcard/veltrix-agent/config/agent.json"
+const DefaultDataRoot = "/sdcard/yevqo-agent"
 
 // LoadConfig загружает конфиг из файла. Если файла нет — создаёт новый.
 func LoadConfig(path string) (*Config, error) {
@@ -70,7 +71,7 @@ func SaveConfig(path string, cfg *Config) error {
 		path = DefaultConfigPath
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
@@ -80,7 +81,7 @@ func SaveConfig(path string, cfg *Config) error {
 	}
 
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return fmt.Errorf("write tmp: %w", err)
 	}
 	if err := os.Rename(tmp, path); err != nil {
