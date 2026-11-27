@@ -71,7 +71,8 @@
     }
 
     function statusClass(status) {
-        if (status === 'commercial' || status === 'pro') return 'status-commercial';
+        if (status === 'pro') return 'status-pro';
+        if (status === 'commercial') return 'status-commercial';
         if (status === 'blocked') return 'status-blocked';
         return 'status-free';
     }
@@ -219,6 +220,8 @@
         background: rgba(34, 197, 94, 0.1);
         color: var(--success);
     }
+
+    .status-pro { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 
     .status-blocked {
         background: rgba(239, 68, 68, 0.1);
