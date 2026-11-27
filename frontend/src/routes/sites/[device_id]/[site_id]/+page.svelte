@@ -42,6 +42,14 @@
     const logReconnectDelays = [1000, 2000, 5000, 10000, 20000, 30000];
     let activeTab = 'general';
     const siteTabs = ['general','deployments','build','tasks','monitoring','databases','logs','domains','environment','git','previews'];
+    $: routeTab = $page.url.searchParams.get('tab') || 'general';
+    $: if (siteTabs.includes(routeTab) && routeTab !== activeTab) {
+        activeTab = routeTab;
+        if (routeTab === 'tasks') refreshScheduledTasks();
+        if (routeTab === 'deployments') loadReleases();
+        if (routeTab === 'build') loadBuildHistory();
+        if (routeTab === 'monitoring') loadProcessMetrics();
+    }
     function selectTab(tab) {
         if (!siteTabs.includes(tab)) return;
         activeTab = tab;
