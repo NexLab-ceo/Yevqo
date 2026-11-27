@@ -706,7 +706,23 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 		role, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
 		if roleErr != nil { apiError(w, roleErr); return }
 		if !allowed || !CanWorkspaceAction(role, "backup.read") { continue }
-		rows, queryErr := s.db.conn.QueryContext(r.Context(), `SELECT id,device_id,resource_type,resource_id,file_name,size_bytes,status,created_at FROM backups WHERE user_id=? ORDER BY id DESC LIMIT 100`, ownerID)
+		query := `SELECT id,device_id,resource_type,resource_id,file_name,size_bytes,status,created_at FROM backups WHERE user_id=?`
+		args := []interface{}{ownerID}
+		if resourceType := strings.TrimSpace(r.URL.Query().Get("resource_type")); resourceType != "" {
+			if resourceType != "site" && resourceType != "database" && resourceType != "database_server" { apiError(w, shared.ErrBadRequest("invalid backup resource_type")); return }
+			query += " AND resource_type=?"; args = append(args, resourceType)
+		}
+		if resourceID := strings.TrimSpace(r.URL.Query().Get("resource_id")); resourceID != "" {
+			if len(resourceID) > 128 { apiError(w, shared.ErrBadRequest("invalid backup resource_id")); return }
+			query += " AND resource_id=?"; args = append(args, resourceID)
+		}
+		if rawDeviceID := strings.TrimSpace(r.URL.Query().Get("device_id")); rawDeviceID != "" {
+			deviceID, parseErr := strconv.ParseInt(rawDeviceID, 10, 64)
+			if parseErr != nil || deviceID < 1 { apiError(w, shared.ErrBadRequest("invalid backup device_id")); return }
+			query += " AND device_id=?"; args = append(args, deviceID)
+		}
+		query += " ORDER BY id DESC LIMIT 100"
+		rows, queryErr := s.db.conn.QueryContext(r.Context(), query, args...)
 		if queryErr != nil { apiError(w, shared.ErrInternal("could not load backups")); return }
 		for rows.Next() {
 			var id, deviceID, size int64
