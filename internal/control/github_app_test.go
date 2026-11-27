@@ -7,8 +7,11 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -56,3 +59,79 @@ func TestGitHubAppVerificationMessageDoesNotExposeInternalErrors(t *testing.T) {
 		})
 	}
 }
+
+type githubAppScopedTokenRoundTripper struct {
+	t                  *testing.T
+	installationTokens int
+	repositoryIDs      []int64
+}
+
+func (rt *githubAppScopedTokenRoundTripper) response(req *http.Request, body string) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Request:    req,
+	}, nil
+}
+
+func (rt *githubAppScopedTokenRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	switch {
+	case req.Method == http.MethodGet && req.URL.Path == "/app/installations/456":
+		return rt.response(req, "{\"id\":456,\"app_id\":123,\"account\":{\"login\":\"acme\"}}")
+	case req.Method == http.MethodPost && req.URL.Path == "/app/installations/456/access_tokens":
+		rt.installationTokens++
+		if rt.installationTokens == 1 {
+			return rt.response(req, "{\"token\":\"temporary-installation-token\"}")
+		}
+		var payload map[string][]int64
+		if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+			rt.t.Fatalf("decode scoped token request: %v", err)
+		}
+		rt.repositoryIDs = payload["repository_ids"]
+		return rt.response(req, "{\"token\":\"repository-scoped-token\"}")
+	case req.Method == http.MethodGet && req.URL.Path == "/repos/acme/private":
+		if got := req.Header.Get("Authorization"); got != "Bearer temporary-installation-token" {
+			rt.t.Errorf("repository lookup authorization = %q, want temporary installation token", got)
+		}
+		return rt.response(req, "{\"id\":789,\"full_name\":\"acme/private\",\"clone_url\":\"https://github.com/acme/private.git\",\"default_branch\":\"main\"}")
+	default:
+		return nil, fmt.Errorf("unexpected GitHub API request: %s %s", req.Method, req.URL.String())
+	}
+}
+
+func TestGitHubAppInstallationTokenForRepositoryIsScoped(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate test RSA key: %v", err)
+	}
+	privateKey := string(pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	}))
+
+	transport := &githubAppScopedTokenRoundTripper{t: t}
+	previousClient := integrationHTTPClient
+	integrationHTTPClient = &http.Client{Transport: transport}
+	defer func() { integrationHTTPClient = previousClient }()
+
+	server := &Server{}
+	token, err := server.githubAppInstallationTokenForRepository(context.Background(), githubAppCredentials{
+		AppID:          "123",
+		InstallationID: "456",
+		PrivateKey:     privateKey,
+	}, "acme", "private")
+	if err != nil {
+		t.Fatalf("create repository-scoped installation token: %v", err)
+	}
+	if token != "repository-scoped-token" {
+		t.Fatalf("token = %q, want repository-scoped token", token)
+	}
+	if transport.installationTokens != 2 {
+		t.Fatalf("installation token requests = %d, want 2", transport.installationTokens)
+	}
+	if len(transport.repositoryIDs) != 1 || transport.repositoryIDs[0] != 789 {
+		t.Fatalf("scoped repository IDs = %v, want [789]", transport.repositoryIDs)
+	}
+}
+
