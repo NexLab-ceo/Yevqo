@@ -5,17 +5,18 @@ package control
 import (
 	"context"
 	"database/sql"
-
-	"github.com/gorilla/websocket"
-	"fmt"
 	"encoding/json"
-	"net/http"
+	"errors"
+	"fmt"
 	"net"
+	"net/http"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gorilla/websocket"
 
 	"veltrix/internal/shared"
 )
@@ -296,6 +297,23 @@ func (s *Server) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 			if scanErr:=rows.Scan(&item.ID,&item.WorkspaceOwnerID,&actor,&item.TargetType,&item.TargetID,&item.Action,&item.Outcome,&item.RequestID,&item.IP,&details,&item.CreatedAt,&item.Device);scanErr!=nil{rows.Close();apiError(w,shared.ErrInternal("could not read audit log"));return}
 			if actor.Valid{value:=actor.Int64;item.ActorUserID=&value}
 			if len(details)>0{item.Details=append(json.RawMessage(nil),details...)}
+			if projectID>0 && item.TargetType=="device" && len(details)>0 {
+				var detailMap map[string]interface{}
+				if json.Unmarshal(details,&detailMap)==nil {
+					if siteID,ok:=detailMap["site_id"].(string);ok && siteID!="" {
+						deviceID,parseErr:=strconv.ParseInt(item.TargetID,10,64)
+						if parseErr!=nil { continue }
+						var linked int
+						if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=? AND site_id=?`,projectID,deviceID,siteID).Scan(&linked);err!=nil{rows.Close();apiError(w,shared.ErrInternal("could not check project audit scope"));return}
+						if linked==0 { continue }
+						if accessErr:=s.authorizeSiteProjects(r.Context(),deviceID,siteID,ownerID,user.ID,"audit.read");accessErr!=nil{
+							var apiErr *shared.APIError
+							if errors.As(accessErr,&apiErr)&&apiErr.Code==http.StatusForbidden{continue}
+							rows.Close();apiError(w,accessErr);return
+						}
+					}
+				}
+			}
 			out=append(out,item)
 		}
 		if rowsErr:=rows.Err();rowsErr!=nil{rows.Close();apiError(w,shared.ErrInternal("could not read audit log"));return}
