@@ -126,6 +126,17 @@ func (s *Server) authorizeBackup(ctx context.Context, backupID, actorID int64, a
 	case "database":
 		if !serverID.Valid || serverID.Int64 < 1 { return 0, 0, shared.ErrInternal("database backup has no owning server") }
 		if err = s.authorizeDatabaseServerProjects(ctx, serverID.Int64, ownerID, actorID, action); err != nil { return 0, 0, err }
+	case "database_server":
+		resourceServerID := int64(0)
+		if serverID.Valid {
+			resourceServerID = serverID.Int64
+		} else {
+			resourceServerID, err = strconv.ParseInt(resourceID, 10, 64)
+			if err != nil || resourceServerID < 1 { return 0, 0, shared.ErrInternal("database server backup resource is invalid") }
+		}
+		serverOwnerID, serverDeviceID, authErr := s.authorizeDatabaseServer(ctx, resourceServerID, actorID, action)
+		if authErr != nil { return 0, 0, authErr }
+		if serverOwnerID != ownerID || serverDeviceID != deviceID { return 0, 0, shared.ErrInternal("database server backup ownership is inconsistent") }
 	case "site":
 		parts := strings.SplitN(resourceID, ":", 2)
 		if len(parts) != 2 { return 0, 0, shared.ErrInternal("site backup resource is invalid") }
