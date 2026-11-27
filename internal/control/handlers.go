@@ -296,14 +296,16 @@ func (s *Server) handleAuditLogs(w http.ResponseWriter, r *http.Request) {
 			if scanErr:=rows.Scan(&item.ID,&item.WorkspaceOwnerID,&actor,&item.TargetType,&item.TargetID,&item.Action,&item.Outcome,&item.RequestID,&item.IP,&details,&item.CreatedAt,&item.Device);scanErr!=nil{rows.Close();apiError(w,shared.ErrInternal("could not read audit log"));return}
 			if actor.Valid{value:=actor.Int64;item.ActorUserID=&value}
 			if len(details)>0{item.Details=append(json.RawMessage(nil),details...)}
-			if projectID>0 && item.TargetType=="device" {
-				deviceID,parseErr:=strconv.ParseInt(item.TargetID,10,64)
-				if parseErr!=nil { continue }
-				if len(details)>0 {
-					if accessErr:=s.authorizeProjectLogDetails(r.Context(),projectID,ownerID,user.ID,deviceID,details,"audit.read");accessErr!=nil{
-						if isProjectAccessFilterError(accessErr){continue}
-						rows.Close();apiError(w,accessErr);return
-					}
+			if projectID>0 && len(details)>0 {
+				deviceID:=int64(0)
+				if item.TargetType=="device" {
+					parsedDeviceID,parseErr:=strconv.ParseInt(item.TargetID,10,64)
+					if parseErr!=nil { continue }
+					deviceID=parsedDeviceID
+				}
+				if accessErr:=s.authorizeProjectLogDetails(r.Context(),projectID,ownerID,user.ID,deviceID,details,"audit.read");accessErr!=nil{
+					if isProjectAccessFilterError(accessErr){continue}
+					rows.Close();apiError(w,accessErr);return
 				}
 			}
 			out=append(out,item)
