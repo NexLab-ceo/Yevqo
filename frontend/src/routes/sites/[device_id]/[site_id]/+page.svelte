@@ -236,7 +236,8 @@
         cloudflareRouteBusy = false;
         if (!res.ok) { notify(res.error || 'Не удалось настроить Cloudflare route', 'error'); return; }
         cloudflareRoute = res.data;
-        notify('Cloudflare Tunnel route настроен', 'success');
+        if (res.data?.ingress_managed === false) notify('DNS CNAME настроен. Локальный ingress не изменён — проверь config.yml', 'warning');
+        else notify('Cloudflare Tunnel route настроен', 'success');
     }
 
     async function removeCloudflareRoute() {
@@ -1023,8 +1024,11 @@
                     if(inferredTunnelId && cloudflareConfig.connected){
                         cloudflareTunnelIdDraft=inferredTunnelId;
                         const route=await configureCloudflareTunnelRoute(deviceId,siteId,inferredTunnelId);
-                        if(route.ok){cloudflareRoute=route.data;notify('Tunnel подключён, DNS и публичный маршрут настроены','success')}
-                        else notify('Tunnel подключён, но публичный маршрут не настроен: '+(route.error||'проверь Cloudflare API permissions'),'warning');
+                        if(route.ok){
+                            cloudflareRoute=route.data;
+                            if(route.data?.ingress_managed===false) notify('Tunnel подключён, DNS CNAME настроен. Проверь локальный ingress в config.yml.','warning');
+                            else notify('Tunnel подключён, DNS и публичный маршрут настроены','success');
+                        } else notify('Tunnel подключён, но публичный маршрут не настроен: '+(route.error||'проверь Cloudflare API permissions'),'warning');
                     }else{
                         notify('Tunnel подключён, но публичный маршрут не настроен. Укажи Tunnel ID и подключи Cloudflare API для автоматической маршрутизации.','warning');
                     }
@@ -1057,9 +1061,14 @@
                     <Button size="sm" disabled={cloudflareConfigBusy} on:click={disconnectCloudflareAccount}>Disconnect API</Button>
                 </div>
                 {#if cloudflareRoute?.configured}
-                    <p class="muted">Route: <strong>{cloudflareRoute.hostname}</strong> → <code>{cloudflareRoute.origin}</code></p>
+                    {#if cloudflareRoute.ingress_managed === false}
+                        <p class="muted">DNS CNAME: <strong>{cloudflareRoute.hostname}</strong> → <code>{cloudflareRoute.tunnel_id}.cfargotunnel.com</code></p>
+                        <p class="muted">Tunnel локально управляется из Termux. Yevqo не меняет его ingress: проверь в config.yml правило <code>{cloudflareRoute.hostname}</code> → <code>{cloudflareRoute.origin}</code>.</p>
+                    {:else}
+                        <p class="muted">Route: <strong>{cloudflareRoute.hostname}</strong> → <code>{cloudflareRoute.origin}</code></p>
+                    {/if}
                 {:else}
-                    <p class="muted">Route ещё не настроен. Yevqo добавит ingress rule и CNAME для этого сайта.</p>
+                    <p class="muted">Yevqo определит тип Tunnel. Для remotely-managed настроит ingress и CNAME; для locally-managed — только DNS CNAME, не меняя config.yml на устройстве.</p>
                 {/if}
             {:else}
                 <label class="field-label" for="cloudflare-api-token">Cloudflare API token</label>
