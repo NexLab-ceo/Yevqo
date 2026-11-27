@@ -39,12 +39,14 @@ func (s *Server) handleBackupTransfer(w http.ResponseWriter,r *http.Request){
 		if targetDeviceID==sourceDeviceID&&targetSiteID==sourceSiteID{apiError(w,shared.ErrBadRequest("source and target website are the same"));return}
 		var owned int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`,targetDeviceID,targetSiteID,ownerID).Scan(&owned);err!=nil||owned!=1{apiError(w,shared.ErrNotFound("target website not found"));return}
+		if err:=s.authorizeSiteProjects(r.Context(),targetDeviceID,targetSiteID,ownerID,u.ID,"backup.manage");err!=nil{apiError(w,err);return}
 		suffix:=strings.TrimPrefix(fileName,sourceSiteID+"-");if suffix==fileName{apiError(w,shared.ErrBadRequest("invalid source archive name"));return}
 		targetFileName=targetSiteID+"-"+suffix
 	}else{
 		if in.TargetServerID<1||in.TargetDeviceID!=0||in.TargetSiteID!=""{apiError(w,shared.ErrBadRequest("choose a target PostgreSQL server"));return}
 		var engine,serverStatus string
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT device_id,engine,status FROM database_servers WHERE id=? AND user_id=?`,in.TargetServerID,ownerID).Scan(&targetDeviceID,&engine,&serverStatus);err!=nil||engine!="postgresql"||serverStatus!="ready"{apiError(w,shared.ErrNotFound("ready target PostgreSQL server not found"));return}
+		if err:=s.authorizeDatabaseServerProjects(r.Context(),in.TargetServerID,ownerID,u.ID,"backup.manage");err!=nil{apiError(w,err);return}
 		targetServerID=in.TargetServerID
 		targetFileName=fmt.Sprintf("transfer-%d.dump",backupID)
 	}
