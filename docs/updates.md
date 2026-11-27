@@ -14,6 +14,8 @@ The updater:
 4. Verifies the checksum, Debian package name, architecture and embedded version before installation.
 5. Installs only a newer version and restarts the installed Yevqo services.
 
+If the latest release tag is not a Debian version, the expected package asset is missing, or `SHA256SUMS` is absent, the updater stops with an explicit error. It never falls back to installing an unverified asset.
+
 The updater does not need a GitHub token on the Android device. It does need network access, and Android must allow Termux to run in the background. Battery optimization or Android process restrictions can delay checks. The default interval is six hours; values below 15 minutes are ignored.
 
 ## Service controls
