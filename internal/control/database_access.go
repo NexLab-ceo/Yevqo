@@ -3,6 +3,8 @@ package control
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -109,6 +111,69 @@ func (s *Server) authorizeSiteProjects(ctx context.Context, deviceID int64, site
 	if err := rows.Close(); err != nil { return shared.ErrInternal("could not close website project access") }
 	if len(projects)==0 { return s.authorizeWorkspace(ctx,ownerID,actorID,action) }
 	for _,project := range projects { if project.ownerID!=ownerID { return shared.ErrInternal("website project ownership is inconsistent") }; if err := s.authorizeProjectAction(ctx,project.id,actorID,action); err != nil { return err } }
+	return nil
+}
+
+func projectLogDetailID(details map[string]interface{}, key string) (int64, bool) {
+	raw, exists := details[key]
+	if !exists { return 0, false }
+	switch value := raw.(type) {
+	case float64:
+		id := int64(value)
+		if value <= 0 || float64(id) != value { return 0, true }
+		return id, true
+	case string:
+		id, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+		if err != nil || id < 1 { return 0, true }
+		return id, true
+	default:
+		return 0, true
+	}
+}
+
+func isProjectAccessFilterError(err error) bool {
+	var apiErr *shared.APIError
+	return errors.As(err, &apiErr) && (apiErr.Code == http.StatusForbidden || apiErr.Code == http.StatusNotFound)
+}
+
+// authorizeProjectLogDetails prevents project-scoped logs from exposing activity
+// for sites, databases or backups that the current project member cannot access.
+func (s *Server) authorizeProjectLogDetails(ctx context.Context, projectID, ownerID, actorID, deviceID int64, raw []byte, siteAction string) error {
+	if len(raw) == 0 { return nil }
+	var details map[string]interface{}
+	if err := json.Unmarshal(raw, &details); err != nil { return shared.ErrForbidden("log details cannot be scoped to this project") }
+
+	if rawSiteID, exists := details["site_id"]; exists {
+		siteID, ok := rawSiteID.(string)
+		if !ok || strings.TrimSpace(siteID) == "" || deviceID < 1 { return shared.ErrForbidden("site log has no valid resource scope") }
+		if projectID > 0 {
+			var linked int
+			if err := s.db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=? AND site_id=?`, projectID, deviceID, siteID).Scan(&linked); err != nil { return shared.ErrInternal("could not check project log scope") }
+			if linked == 0 { return shared.ErrForbidden("site log is outside this project") }
+		}
+		if err := s.authorizeSiteProjects(ctx, deviceID, siteID, ownerID, actorID, siteAction); err != nil { return err }
+	}
+
+	if databaseID, exists := projectLogDetailID(details, "database_id"); exists {
+		if databaseID < 1 { return shared.ErrForbidden("database log has no valid resource scope") }
+		resourceOwnerID, _, _, err := s.authorizeDatabaseInstance(ctx, databaseID, actorID, "database.read")
+		if err != nil { return err }
+		if resourceOwnerID != ownerID { return shared.ErrForbidden("database log is outside this workspace") }
+	}
+	for _, key := range []string{"database_server_id", "server_id"} {
+		if serverID, exists := projectLogDetailID(details, key); exists {
+			if serverID < 1 { return shared.ErrForbidden("database server log has no valid resource scope") }
+			resourceOwnerID, _, err := s.authorizeDatabaseServer(ctx, serverID, actorID, "database.read")
+			if err != nil { return err }
+			if resourceOwnerID != ownerID { return shared.ErrForbidden("database server log is outside this workspace") }
+		}
+	}
+	if backupID, exists := projectLogDetailID(details, "backup_id"); exists {
+		if backupID < 1 { return shared.ErrForbidden("backup log has no valid resource scope") }
+		resourceOwnerID, _, err := s.authorizeBackup(ctx, backupID, actorID, "backup.read")
+		if err != nil { return err }
+		if resourceOwnerID != ownerID { return shared.ErrForbidden("backup log is outside this workspace") }
+	}
 	return nil
 }
 
