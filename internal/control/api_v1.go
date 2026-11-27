@@ -122,6 +122,18 @@ func (s *Server) handleV1(w http.ResponseWriter,r *http.Request) {
 	case strings.HasPrefix(path,"/databases/servers/"): r2.URL.Path="/api"+path; s.handleDatabaseServerByID(w,r2)
 	case strings.HasPrefix(path,"/databases/"): r2.URL.Path="/api"+path; s.handleDatabaseByID(w,r2)
 	case path=="/backups": s.handleBackups(w,r2)
+	case path=="/backups/restore": s.handleRestoreDatabaseBackup(w,r2)
+	case path=="/backups/restore-site": s.handleRestoreSiteBackup(w,r2)
+	case strings.HasPrefix(path,"/backups/"):
+		r2.URL.Path="/api"+path
+		if strings.HasSuffix(path,"/transfer") { s.handleBackupTransfer(w,r2) } else { s.handleDatabaseBackupChunk(w,r2) }
+	case path=="/backup-schedules" || strings.HasPrefix(path,"/backup-schedules/"): r2.URL.Path="/api"+path; s.handleBackupSchedules(w,r2)
+	case path=="/scheduled-tasks" || strings.HasPrefix(path,"/scheduled-tasks/"): r2.URL.Path="/api"+path; s.handleScheduledTasks(w,r2)
+	case path=="/database-connections": s.handleDatabaseConnections(w,r2)
+	case path=="/notifications": s.handleNotifications(w,r2)
+	case path=="/audit-logs": s.handleAuditLogs(w,r2)
+	case path=="/templates": s.handleAppTemplates(w,r2)
+	case path=="/workspaces": s.handleWorkspaces(w,r2)
 	case path=="/domains": s.handleDomains(w,r2)
 	case path=="/monitoring": s.handleMonitoring(w,r2)
 	case path=="/logs": s.handleLogs(w,r2)
