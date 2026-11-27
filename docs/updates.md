@@ -58,7 +58,13 @@ To prepare a stable package version:
    git push origin v0.2.0
    ```
 
-2. Open the Yevqo repository's Actions page and manually run the **Build Yevqo** workflow with the ref set to that tag (for example, `v0.2.0`). Do not use an artifact from a different commit or tag.
+2. Trigger the manual workflow for that exact tag. The most deterministic method is GitHub CLI:
+
+   ```sh
+   gh workflow run build.yml --ref v0.2.0
+   ```
+
+   If the Actions UI offers the tag in its ref selector, you can dispatch **Build Yevqo** there instead. Confirm the run's source ref/commit before using its artifact. Do not use an artifact from a different commit or tag.
 3. Wait for the workflow to complete successfully. Download its artifact, which contains:
    - `yevqo-all_0.2.0_aarch64.deb`
    - `yevqo_0.2.0_aarch64.deb`
