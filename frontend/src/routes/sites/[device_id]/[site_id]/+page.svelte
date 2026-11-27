@@ -4,6 +4,7 @@
     import { goto } from '$app/navigation';
     import { getDevice, getSite, getSiteMetrics, updateSiteDomain, listSitePreviews, createSitePreview, deleteSitePreview, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream, getCloudflareConfig, saveCloudflareConfig, disconnectCloudflare, getCloudflareTunnelRoute, configureCloudflareTunnelRoute, removeCloudflareTunnelRoute } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
+    import { listIntegrations, listIntegrationRepositories } from '$lib/api.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
     import StatusDot from '$lib/components/StatusDot.svelte';
@@ -84,6 +85,12 @@
     let rollbackTarget = '';
     let git = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', health_check_path: '', clone_timeout_seconds: 600, build_timeout_seconds: 1200, health_check_timeout_seconds: 15, start_command: '', has_token: false, commit: '', deployed_at: null };
     let gitForm = { repository_url: '', branch: 'main', build_command: '', root_directory: '.', health_check_path: '', clone_timeout_seconds: 600, build_timeout_seconds: 1200, health_check_timeout_seconds: 15, start_command: '', github_token: '' };
+    let gitHubIntegrations = [];
+    let gitHubRepositories = [];
+    let selectedGitHubIntegration = '';
+    let selectedGitHubRepository = '';
+    let gitHubRepositoriesLoading = false;
+    let gitHubRepositoriesError = '';
     let deployCommit = '';
     let connections = [];
     let envVariables = [];
@@ -136,6 +143,7 @@
         const requestedTab = $page.url.searchParams.get('tab') || 'general';
         activeTab = siteTabs.includes(requestedTab) ? requestedTab : 'general';
         await refresh();
+        await loadGitHubConnections();
         if (activeTab === 'deployments') loadReleases();
         if (activeTab === 'build') loadBuildHistory();
         if (activeTab === 'monitoring') loadProcessMetrics();
@@ -779,6 +787,48 @@
         await loadReleases();
     }
 
+    async function loadGitHubConnections() {
+        gitHubRepositoriesError = '';
+        const result = await listIntegrations();
+        if (!result.ok) { gitHubRepositoriesError = result.error || 'Не удалось загрузить GitHub integration'; return; }
+        gitHubIntegrations = (result.data.integrations || []).filter(item => item.provider === 'github_app' || item.provider === 'github');
+        const savedRepo = String(gitForm.repository_url || '').trim().replace(/\.git$/, '').replace(/\/$/, '');
+        const preferred = gitHubIntegrations.find(item => String(item.id) === String(selectedGitHubIntegration)) || gitHubIntegrations[0];
+        selectedGitHubIntegration = preferred ? String(preferred.id) : '';
+        if (selectedGitHubIntegration) await loadGitHubRepositories(savedRepo);
+    }
+
+    async function loadGitHubRepositories(savedRepo = '') {
+        if (!selectedGitHubIntegration) { gitHubRepositories = []; return; }
+        gitHubRepositoriesLoading = true;
+        gitHubRepositoriesError = '';
+        const result = await listIntegrationRepositories(selectedGitHubIntegration);
+        gitHubRepositoriesLoading = false;
+        if (!result.ok) { gitHubRepositories = []; gitHubRepositoriesError = result.error || 'Не удалось получить репозитории GitHub'; return; }
+        gitHubRepositories = result.data.repositories || [];
+        const normalizedSaved = String(savedRepo || gitForm.repository_url || '').trim().replace(/\.git$/, '').replace(/\/$/, '').toLowerCase();
+        const match = gitHubRepositories.find(repo => [repo.web_url, repo.clone_url, `https://github.com/${repo.full_name}`, `https://github.com/${repo.full_name}.git`]
+            .some(url => String(url || '').trim().replace(/\.git$/, '').replace(/\/$/, '').toLowerCase() === normalizedSaved));
+        const selected = gitHubRepositories.find(repo => String(repo.full_name) === String(selectedGitHubRepository)) || match;
+        if (selected) {
+            selectedGitHubRepository = selected.full_name;
+            if (!gitForm.repository_url || match) gitForm.repository_url = selected.clone_url || `https://github.com/${selected.full_name}.git`;
+            if (!gitForm.branch || match || !gitForm.branch.trim()) gitForm.branch = selected.default_branch || 'main';
+        } else if (!selectedGitHubRepository && gitHubRepositories.length === 1) {
+            selectedGitHubRepository = gitHubRepositories[0].full_name;
+            gitForm.repository_url = gitHubRepositories[0].clone_url || `https://github.com/${gitHubRepositories[0].full_name}.git`;
+            gitForm.branch = gitHubRepositories[0].default_branch || 'main';
+        }
+    }
+
+    function selectGitHubRepository(fullName) {
+        selectedGitHubRepository = fullName;
+        const repo = gitHubRepositories.find(item => item.full_name === fullName);
+        if (!repo) return;
+        gitForm.repository_url = repo.clone_url || `https://github.com/${repo.full_name}.git`;
+        gitForm.branch = repo.default_branch || 'main';
+    }
+
     async function saveGit() {
         if (busyAction) return;
         busyAction = 'git';
@@ -1203,6 +1253,15 @@
         <Card>
             <h2 class="details-title">Git Repository</h2>
             <p class="muted">Первый Deploy выполнит clone, следующие — fast-forward pull. Build Command запускается после обновления исходников.</p>
+            {#if gitHubIntegrations.length}
+                <div class="git-form">
+                    <label>GitHub connection<select class="input" bind:value={selectedGitHubIntegration} on:change={() => { selectedGitHubRepository = ''; gitHubRepositories = []; loadGitHubRepositories(); }}><option value="">Select connection</option>{#each gitHubIntegrations as integration (integration.id)}<option value={String(integration.id)}>{integration.account_name} · {integration.provider === 'github_app' ? 'GitHub App' : 'GitHub'}</option>{/each}</select></label>
+                    <label>GitHub repository<select class="input" value={selectedGitHubRepository} on:change={(event) => selectGitHubRepository(event.currentTarget.value)} disabled={gitHubRepositoriesLoading || !gitHubRepositories.length}><option value="">{gitHubRepositoriesLoading ? 'Loading repositories…' : 'Select repository'}</option>{#each gitHubRepositories as repository (repository.id)}<option value={repository.full_name}>{repository.full_name}{repository.private ? ' · Private' : ''}</option>{/each}</select></label>
+                </div>
+                {#if gitHubRepositoriesError}<p class="muted">{gitHubRepositoriesError}</p>{/if}
+            {:else}
+                <p class="muted">GitHub App не подключён. Подключите его в Settings → Integrations, чтобы автоматически выбирать доступные репозитории.</p>
+            {/if}
             <div class="git-form">
                 <label>Repository URL<input class="input" bind:value={gitForm.repository_url} placeholder="https://github.com/user/repo.git" /></label>
                 <label>Branch<input class="input" bind:value={gitForm.branch} placeholder="main" /></label>
