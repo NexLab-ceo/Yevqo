@@ -164,11 +164,44 @@ func cloudflareTunnelConfigPayload(current cloudflareTunnelConfig, rules []map[s
 	return map[string]interface{}{"config":config}
 }
 
+func cloudflareTunnelConfigSource(ctx context.Context, token, accountID, tunnelID string) (string, error) {
+	if !validCloudflareAccountID(accountID) || !validCloudflareTunnelID(tunnelID) {
+		return "", fmt.Errorf("invalid Cloudflare tunnel identity")
+	}
+	var tunnel struct {
+		ID        string `json:"id"`
+		AccountTag string `json:"account_tag"`
+		ConfigSrc string `json:"config_src"`
+	}
+	if err := cloudflareAPIRequest(ctx, token, http.MethodGet, "/accounts/"+accountID+"/cfd_tunnel/"+tunnelID, nil, &tunnel); err != nil {
+		return "", err
+	}
+	if tunnel.ID != tunnelID || tunnel.AccountTag != accountID {
+		return "", fmt.Errorf("tunnel does not belong to the configured Cloudflare account")
+	}
+	source := strings.ToLower(strings.TrimSpace(tunnel.ConfigSrc))
+	if source != "cloudflare" && source != "local" {
+		return "", fmt.Errorf("Cloudflare returned an unsupported tunnel configuration source")
+	}
+	return source, nil
+}
+
+func cloudflareTunnelIngressManaged(configSource string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(configSource)) {
+	case "cloudflare":
+		return true, nil
+	case "local":
+		return false, nil
+	default:
+		return false, fmt.Errorf("unsupported Cloudflare tunnel configuration source")
+	}
+}
+
 func updateCloudflareTunnelIngress(ctx context.Context, token, accountID, tunnelID, hostname, service string, remove, allowReplace bool) error {
 	if !validCloudflareAccountID(accountID)||!validCloudflareTunnelID(tunnelID)||!domainPattern.MatchString(hostname){return fmt.Errorf("invalid Cloudflare tunnel route parameters")}
-	var tunnel struct{ID string `json:"id"`;AccountTag string `json:"account_tag"`;ConfigSrc string `json:"config_src"`}
-	if err:=cloudflareAPIRequest(ctx,token,http.MethodGet,"/accounts/"+accountID+"/cfd_tunnel/"+tunnelID,nil,&tunnel);err!=nil{return err}
-	if tunnel.ID!=tunnelID||tunnel.AccountTag!=accountID||tunnel.ConfigSrc!="cloudflare"{return fmt.Errorf("tunnel must be a remotely managed tunnel in the configured account")}
+	source, err := cloudflareTunnelConfigSource(ctx, token, accountID, tunnelID)
+	if err != nil { return err }
+	if source != "cloudflare" { return fmt.Errorf("tunnel is locally managed; configure hostname ingress in the Termux cloudflared config.yml") }
 	var current cloudflareTunnelConfig
 	if err:=cloudflareAPIRequest(ctx,token,http.MethodGet,"/accounts/"+accountID+"/cfd_tunnel/"+tunnelID+"/configurations",nil,&current);err!=nil{return err}
 	if current.Source!="cloudflare"{return fmt.Errorf("tunnel configuration is not remotely managed")}
@@ -210,15 +243,18 @@ func deleteCloudflareTunnelDNS(ctx context.Context, token, zoneID, hostname, tun
 
 func (s *Server) removeCloudflareRouteForSite(ctx context.Context, userID, deviceID int64, siteID string) (bool, string, error) {
 	var tunnelID, hostname string
-	err:=s.db.conn.QueryRowContext(ctx,`SELECT tunnel_id,hostname FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,userID,deviceID,siteID).Scan(&tunnelID,&hostname)
+	var ingressManaged bool
+	err:=s.db.conn.QueryRowContext(ctx,`SELECT tunnel_id,hostname,ingress_managed FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,userID,deviceID,siteID).Scan(&tunnelID,&hostname,&ingressManaged)
 	if err==sql.ErrNoRows{return false,"",nil};if err!=nil{return false,"",err}
 	accountID,zoneID,_,token,err:=s.cloudflareCredentials(ctx,userID);if err!=nil{return false,"",err}
 	workCtx,cancel:=context.WithTimeout(ctx,30*time.Second);defer cancel()
-	if err:=updateCloudflareTunnelIngress(workCtx,token,accountID,tunnelID,hostname,"",true,false);err!=nil{return false,"",err}
-	dnsErr:=deleteCloudflareTunnelDNS(workCtx,token,zoneID,hostname,tunnelID)
+	if ingressManaged {
+		if err:=updateCloudflareTunnelIngress(workCtx,token,accountID,tunnelID,hostname,"",true,false);err!=nil{return false,"",err}
+	}
+	if err:=deleteCloudflareTunnelDNS(workCtx,token,zoneID,hostname,tunnelID);err!=nil{return false,"",fmt.Errorf("could not remove managed DNS record; route metadata was retained for retry: %w",err)}
 	if _,err:=s.db.conn.ExecContext(workCtx,`DELETE FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,userID,deviceID,siteID);err!=nil{return false,"",err}
-	if dnsErr!=nil{return true,"Cloudflare ingress removed; DNS record left unchanged: "+dnsErr.Error(),nil}
-	return true,"Cloudflare ingress and managed DNS record removed",nil
+	if ingressManaged { return true,"Cloudflare ingress and managed DNS record removed",nil }
+	return true,"Managed DNS record removed; locally managed Termux ingress was left unchanged",nil
 }
 
 func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Request) {
@@ -228,11 +264,11 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 		siteID:=r.URL.Query().Get("site_id");if !validBackupSiteID(siteID){apiError(w,shared.ErrBadRequest("invalid site id"));return}
 		dev,err:=s.db.GetDeviceByID(r.Context(),deviceID);if err!=nil{apiError(w,shared.ErrNotFound("device not found"));return}
 		if err:=s.authorizeWorkspace(r.Context(),dev.UserID,u.ID,"device.read");err!=nil{apiError(w,err);return}
-		var tunnelID,hostname string;var port int
-		err=s.db.conn.QueryRowContext(r.Context(),`SELECT tunnel_id,hostname,origin_port FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,dev.UserID,deviceID,siteID).Scan(&tunnelID,&hostname,&port)
+		var tunnelID,hostname string;var port int;var ingressManaged bool
+		err=s.db.conn.QueryRowContext(r.Context(),`SELECT tunnel_id,hostname,origin_port,ingress_managed FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,dev.UserID,deviceID,siteID).Scan(&tunnelID,&hostname,&port,&ingressManaged)
 		if err==sql.ErrNoRows{writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"configured":false});return}
 		if err!=nil{apiError(w,shared.ErrInternal("could not load Cloudflare route"));return}
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"configured":true,"tunnel_id":tunnelID,"hostname":hostname,"origin_port":port,"origin":fmt.Sprintf("http://127.0.0.1:%d",port)});return
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"configured":true,"tunnel_id":tunnelID,"hostname":hostname,"origin_port":port,"origin":fmt.Sprintf("http://127.0.0.1:%d",port),"ingress_managed":ingressManaged});return
 	}
 	var in struct{DeviceID int64 `json:"device_id"`;SiteID string `json:"site_id"`;TunnelID string `json:"tunnel_id"`}
 	if err:=decodeJSON(r,&in);err!=nil||in.DeviceID<1||!validBackupSiteID(in.SiteID){apiError(w,shared.ErrBadRequest("invalid Cloudflare route request"));return}
@@ -249,7 +285,9 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 		if err!=nil{apiError(w,shared.ErrBadRequest("connect a Cloudflare API token and zone first"));return}
 		if !hostnameBelongsToZone(hostname,zoneName){apiError(w,shared.ErrBadRequest("site domain must belong to the connected Cloudflare zone"));return}
 		var existingTunnel,existingHost string
-		existingErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT tunnel_id,hostname FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,dev.UserID,in.DeviceID,in.SiteID).Scan(&existingTunnel,&existingHost)
+		var existingPort int
+		var existingIngressManaged bool
+		existingErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT tunnel_id,hostname,origin_port,ingress_managed FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,dev.UserID,in.DeviceID,in.SiteID).Scan(&existingTunnel,&existingHost,&existingPort,&existingIngressManaged)
 		if existingErr!=nil&&existingErr!=sql.ErrNoRows{apiError(w,shared.ErrInternal("could not check existing Cloudflare route"));return}
 		if existingErr==nil&&(existingTunnel!=in.TunnelID||existingHost!=hostname){apiError(w,shared.ErrConflict("remove the existing Cloudflare route before changing its tunnel or hostname"));return}
 		var occupied int
@@ -257,24 +295,50 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 		if occupied>0{apiError(w,shared.ErrConflict("hostname is already assigned to another Yevqo site"));return}
 		ctx,cancel:=context.WithTimeout(r.Context(),30*time.Second);defer cancel()
 		service:=fmt.Sprintf("http://127.0.0.1:%d",port)
-		if err:=updateCloudflareTunnelIngress(ctx,token,accountID,in.TunnelID,hostname,service,false,existingErr==nil);err!=nil{apiError(w,shared.ErrBadRequest("could not configure Cloudflare Tunnel ingress: "+err.Error()));return}
+		configSource,err:=cloudflareTunnelConfigSource(ctx,token,accountID,in.TunnelID)
+		if err!=nil{apiError(w,shared.ErrBadRequest("could not verify Cloudflare Tunnel: "+err.Error()));return}
+		ingressManaged,err:=cloudflareTunnelIngressManaged(configSource)
+		if err!=nil{apiError(w,shared.ErrBadRequest(err.Error()));return}
+		if ingressManaged {
+			if err:=updateCloudflareTunnelIngress(ctx,token,accountID,in.TunnelID,hostname,service,false,existingErr==nil);err!=nil{apiError(w,shared.ErrBadRequest("could not configure Cloudflare Tunnel ingress: "+err.Error()));return}
+		}
 		record,err:=ensureCloudflareTunnelDNS(ctx,token,zoneID,hostname,in.TunnelID)
 		if err!=nil{
-			rollbackCtx,rollbackCancel:=context.WithTimeout(context.Background(),20*time.Second)
-			_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,"",true,false)
-			rollbackCancel()
+			if ingressManaged {
+				rollbackCtx,rollbackCancel:=context.WithTimeout(context.Background(),20*time.Second)
+				if existingErr==nil && existingIngressManaged {
+					oldService:=fmt.Sprintf("http://127.0.0.1:%d",existingPort)
+					_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,oldService,false,true)
+				} else {
+					_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,"",true,false)
+				}
+				rollbackCancel()
+			}
 			apiError(w,shared.ErrBadRequest("could not create Cloudflare DNS record: "+err.Error()));return
 		}
-		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO site_cloudflare_routes(user_id,device_id,site_id,tunnel_id,hostname,origin_port) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE tunnel_id=VALUES(tunnel_id),hostname=VALUES(hostname),origin_port=VALUES(origin_port),updated_at=CURRENT_TIMESTAMP`,dev.UserID,in.DeviceID,in.SiteID,in.TunnelID,hostname,port)
+		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO site_cloudflare_routes(user_id,device_id,site_id,tunnel_id,hostname,origin_port,ingress_managed) VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE tunnel_id=VALUES(tunnel_id),hostname=VALUES(hostname),origin_port=VALUES(origin_port),ingress_managed=VALUES(ingress_managed),updated_at=CURRENT_TIMESTAMP`,dev.UserID,in.DeviceID,in.SiteID,in.TunnelID,hostname,port,ingressManaged)
 		if err!=nil{
-			rollbackCtx,rollbackCancel:=context.WithTimeout(context.Background(),20*time.Second)
-			_ = deleteCloudflareTunnelDNS(rollbackCtx,token,zoneID,hostname,in.TunnelID)
-			_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,"",true,false)
-			rollbackCancel()
+			if existingErr==sql.ErrNoRows {
+				rollbackCtx,rollbackCancel:=context.WithTimeout(context.Background(),20*time.Second)
+				_ = deleteCloudflareTunnelDNS(rollbackCtx,token,zoneID,hostname,in.TunnelID)
+				rollbackCancel()
+			}
+			if ingressManaged {
+				rollbackCtx,rollbackCancel:=context.WithTimeout(context.Background(),20*time.Second)
+				if existingErr==nil && existingIngressManaged {
+					oldService:=fmt.Sprintf("http://127.0.0.1:%d",existingPort)
+					_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,oldService,false,true)
+				} else {
+					_ = updateCloudflareTunnelIngress(rollbackCtx,token,accountID,in.TunnelID,hostname,"",true,false)
+				}
+				rollbackCancel()
+			}
 			apiError(w,shared.ErrInternal("Cloudflare route was configured but could not be saved"));return
 		}
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),DeviceID:shared.PtrInt64(in.DeviceID),Action:"cloudflare_tunnel_route_configured",Details:map[string]interface{}{"site_id":in.SiteID,"hostname":hostname,"tunnel_id":in.TunnelID,"origin_port":port},IP:clientIP(r)})
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"configured":true,"hostname":hostname,"tunnel_id":in.TunnelID,"origin":service,"dns_record":record});return
+		message:="Cloudflare ingress and DNS record configured"
+		if !ingressManaged { message="DNS CNAME configured. The locally managed Termux ingress was not changed; verify config.yml routes this hostname to "+service }
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"configured":true,"hostname":hostname,"tunnel_id":in.TunnelID,"origin":service,"dns_record":record,"ingress_managed":ingressManaged,"message":message});return
 	}
 	if r.Method==http.MethodDelete {
 		if u.ID!=dev.UserID{apiError(w,shared.ErrForbidden("only the workspace owner can manage Cloudflare routes"));return}
