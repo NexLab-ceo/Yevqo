@@ -85,6 +85,7 @@ func DeviceLimitFor(status string, maxDevices, bonusDevices int) int {
 
 // MaxDevicesTotal — сколько телефонов можно подключить по тарифу.
 func (u *User) MaxDevicesTotal() int {
+	if u.IsAdmin { return int(^uint(0) >> 1) }
 	return DeviceLimitFor(u.Status, u.MaxDevices, u.BonusDevices)
 }
 
