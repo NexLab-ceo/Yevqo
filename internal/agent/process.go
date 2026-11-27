@@ -879,10 +879,14 @@ func truncateDeployOutput(value string) string {
 // process from its recorded working directory.
 // gitRepositoryCommand marks only the generated staging repository as safe.
  // Android shared storage (/sdcard) can report ownership differently from the
- // Termux process, causing Git's dubious-ownership guard to reject even a
- // repository just cloned by this Agent.
+ // Termux process, causing Git's dubious-ownership guard to reject a repository
+ // just cloned by this Agent.
  func gitRepositoryCommand(ctx context.Context, repositoryDir string, args ...string) *exec.Cmd {
- 	gitArgs := []string{"-c", "safe.directory=" + repositoryDir, "-C", repositoryDir}
+ 	safeDir, err := filepath.Abs(repositoryDir)
+ 	if err != nil {
+ 		safeDir = repositoryDir
+ 	}
+ 	gitArgs := []string{"-c", "safe.directory=" + safeDir, "-C", repositoryDir}
  	gitArgs = append(gitArgs, args...)
  	return exec.CommandContext(ctx, "git", gitArgs...)
  }
