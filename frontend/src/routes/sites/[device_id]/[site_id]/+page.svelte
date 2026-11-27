@@ -42,7 +42,7 @@
     let logStatus = 'disconnected';
     const logReconnectDelays = [1000, 2000, 5000, 10000, 20000, 30000];
     let activeTab = 'general';
-    const siteTabs = ['general','environment','domains','git','deployments','build','tasks','monitoring','logs','previews'];
+    const siteTabs = ['general','git','settings','environment','domains','deployments','build','tasks','monitoring','logs','previews'];
     $: routeTab = $page.url.searchParams.get('tab') || 'general';
     $: if (siteTabs.includes(routeTab) && routeTab !== activeTab) {
         activeTab = routeTab;
@@ -908,6 +908,8 @@
 
     <nav class="tabs">
         <button class:active={activeTab === 'general'} on:click={() => selectTab('general')}>Обзор</button>
+        <button class:active={activeTab === 'git'} on:click={() => selectTab('git')}>Git</button>
+        <button class:active={activeTab === 'settings'} on:click={() => selectTab('settings')}>Настройки</button>
         <button class:active={activeTab === 'environment'} on:click={() => selectTab('environment')}>Переменные</button>
         <button class:active={activeTab === 'domains'} on:click={() => selectTab('domains')}>Домены</button>
         <button class:active={activeTab === 'deployments'} on:click={() => selectTab('deployments')}>Развёртывания</button>
@@ -915,7 +917,6 @@
         <button class:active={activeTab === 'tasks'} on:click={() => selectTab('tasks')}>Расписания</button>
         <button class:active={activeTab === 'monitoring'} on:click={() => selectTab('monitoring')}>Мониторинг</button>
         <button class:active={activeTab === 'logs'} on:click={openTerminal}>Журналы</button>
-        <button class:active={activeTab === 'git'} on:click={() => selectTab('git')}>Git</button>
         {#if String(device?.platform || '').toLowerCase() === 'android'}<button class:active={activeTab === 'previews'} on:click={() => { selectTab('previews'); loadPreviews(); }}>Previews</button>{/if}
     </nav>
 
@@ -961,6 +962,14 @@
                 <div class="commit">{git.commit ? git.commit.slice(0, 12) : 'Ещё не выполнялся'}</div>
                 <p class="muted">{git.deployed_at ? new Date(git.deployed_at).toLocaleString() : 'Нет данных о деплое'}</p>
                 <p class="muted">{git.repository_url || 'Git-репозиторий не подключён'}</p>
+            </Card>
+            <Card>
+                <div class="metrics-card-head"><h2 class="details-title">Git</h2><Button size="sm" on:click={() => selectTab('git')}>Изменить</Button></div>
+                <div class="details">
+                    <div><span>GitHub connection</span><strong>{gitHubIntegrations.find(item => String(item.id) === String(selectedGitHubIntegration))?.account_name || 'Не подключено'}{gitHubIntegrations.find(item => String(item.id) === String(selectedGitHubIntegration)) ? ' · GitHub App' : ''}</strong></div>
+                    <div><span>GitHub repository</span><strong>{selectedGitHubRepository || 'Не выбран'}</strong></div>
+                    <div><span>Branch</span><strong>{gitForm.branch || 'main'}</strong></div>
+                </div>
             </Card>
         </div>
     {:else if activeTab === 'logs'}
@@ -1130,7 +1139,7 @@
     {:else if activeTab === 'build'}
         <Card>
             <div class="logs-head">
-                <div><h2 class="details-title">Build Engine</h2><p class="muted">Анализ проекта без выполнения его кода. Root Directory берётся из Git settings.</p></div>
+                <div><h2 class="details-title">Build Engine</h2><p class="muted">Анализ проекта без выполнения его кода. Root Directory берётся из настроек сайта.</p></div>
                 <Button variant="primary" disabled={!online || analyzingBuild} loading={analyzingBuild} on:click={analyzeBuild}>Analyze project</Button>
             </div>
             {#if !online}
@@ -1239,23 +1248,41 @@
         </Card>
     {:else if activeTab === 'git'}
         <Card>
-            <h2 class="details-title">Git Repository</h2>
-            <p class="muted">Выбери Git-провайдера и репозиторий. Адрес репозитория подставляется автоматически; вручную вводить URL не нужно.</p>
-            <div class="git-form">
-                <label>Git provider<select class="input" value="github" disabled><option value="github">GitHub</option><option value="gitlab" disabled>GitLab — скоро</option></select><small>Сейчас подключение репозиториев доступно через GitHub App. Поддержка GitLab появится отдельно.</small></label>
-            </div>
+            <h2 class="details-title">GitHub connection</h2>
+            <p class="muted">Подключение GitHub App, выбор репозитория и основной ветки для этого сайта.</p>
             {#if gitHubIntegrations.length}
                 <div class="git-form">
-                    <label>GitHub connection<select class="input" bind:value={selectedGitHubIntegration} on:change={() => { selectedGitHubRepository = ''; gitHubRepositories = []; loadGitHubRepositories(); }}><option value="">Select connection</option>{#each gitHubIntegrations as integration (integration.id)}<option value={String(integration.id)}>{integration.account_name} · {integration.provider === 'github_app' ? 'GitHub App' : 'GitHub'}</option>{/each}</select></label>
-                    <label>GitHub repository<select class="input" value={selectedGitHubRepository} on:change={(event) => selectGitHubRepository(event.currentTarget.value)} disabled={gitHubRepositoriesLoading || !gitHubRepositories.length}><option value="">{gitHubRepositoriesLoading ? 'Loading repositories…' : 'Select repository'}</option>{#each gitHubRepositories as repository (repository.id)}<option value={repository.full_name}>{repository.full_name}{repository.private ? ' · Private' : ''}</option>{/each}</select></label>
+                    <label>GitHub connection
+                        <select class="input" bind:value={selectedGitHubIntegration} on:change={() => { selectedGitHubRepository = ''; gitHubRepositories = []; loadGitHubRepositories(); }}>
+                            <option value="">Select connection</option>
+                            {#each gitHubIntegrations as integration (integration.id)}
+                                <option value={String(integration.id)}>{integration.account_name} · GitHub App</option>
+                            {/each}
+                        </select>
+                    </label>
+                    <label>GitHub repository
+                        <select class="input" value={selectedGitHubRepository} on:change={(event) => selectGitHubRepository(event.currentTarget.value)} disabled={gitHubRepositoriesLoading || !gitHubRepositories.length}>
+                            <option value="">{gitHubRepositoriesLoading ? 'Loading repositories…' : 'Select repository'}</option>
+                            {#each gitHubRepositories as repository (repository.id)}
+                                <option value={repository.full_name}>{repository.full_name}{repository.private ? ' · Private' : ''}</option>
+                            {/each}
+                        </select>
+                    </label>
+                    <label>Branch
+                        <input class="input" bind:value={gitForm.branch} placeholder="main" maxlength="128" />
+                    </label>
                 </div>
                 {#if gitHubRepositoriesError}<p class="muted">{gitHubRepositoriesError}</p>{/if}
             {:else}
-                <p class="muted">GitHub App не подключён. Подключите его в Settings → Integrations, чтобы автоматически выбирать доступные репозитории.</p>
+                <p class="muted">GitHub App не подключён. Подключите приложение в Settings → Integrations, затем обновите страницу.</p>
             {/if}
+            <div class="save-row"><Button variant="primary" loading={busyAction === 'git'} disabled={!selectedGitHubIntegration || !selectedGitHubRepository} on:click={saveGit}>Save Git connection</Button></div>
+        </Card>
+    {:else if activeTab === 'settings'}
+        <Card>
+            <h2 class="details-title">Настройки сборки и запуска</h2>
+            <p class="muted">Параметры применяются к сборке и развёртыванию выбранного Git-репозитория.</p>
             <div class="git-form">
-                <label>Branch<input class="input" bind:value={gitForm.branch} placeholder="main" /></label>
-                <label class="wide">Commit SHA for next deploy (optional)<input class="input" bind:value={deployCommit} placeholder="Leave empty to deploy current branch HEAD" maxlength="64" /><small>Можно указать полный SHA-1 или SHA-256. Agent fetches and checks out exactly this commit; the field is not saved as the default branch.</small></label>
                 <label class="wide">Build Command<input class="input" bind:value={gitForm.build_command} placeholder="npm run build или composer install" /></label>
                 <label class="wide">Root Directory<input class="input" bind:value={gitForm.root_directory} placeholder="." /></label>
                 <label class="wide">Custom Start Command (optional)<input class="input" bind:value={gitForm.start_command} placeholder="npm run start · node server.js · ./bin/server" /><small>Запускается напрямую без shell. Поддерживаются allowlisted tools или исполняемый файл внутри каталога сайта; shell-операторы запрещены.</small></label>
@@ -1266,7 +1293,7 @@
                 <label class="wide">GitHub Token<input class="input" type="password" bind:value={gitForm.github_token} autocomplete="new-password" placeholder={git.has_token ? 'Токен сохранён — пустое поле оставит его без изменений' : 'Только для приватного репозитория'} />{#if git.has_token}<small>Токен сохранён с AES-GCM шифрованием.</small>{/if}</label>
             </div>
             <p class="security-note">Build Command выполняется на устройстве от имени пользователя Termux через allowlisted executable без shell-интерпретации. Используйте только доверенные команды.</p>
-            <div class="save-row"><Button variant="primary" loading={busyAction === 'git'} on:click={saveGit}>Connect / Save</Button></div>
+            <div class="save-row"><Button variant="primary" loading={busyAction === 'git'} on:click={saveGit}>Сохранить настройки</Button></div>
             <section class="webhook-panel">
                 <h3>GitHub Push Deployments</h3>
                 <p class="muted">При push в выбранную ветку Yevqo проверит HMAC-подпись и развернёт именно commit из события. Повторные webhook delivery игнорируются.</p>
