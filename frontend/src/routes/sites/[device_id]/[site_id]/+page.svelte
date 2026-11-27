@@ -190,6 +190,19 @@
         if (cloudflareRoute.configured) cloudflareTunnelIdDraft = cloudflareRoute.tunnel_id || '';
     }
 
+    function cloudflareTunnelIDFromToken(token) {
+        const value = String(token || '').trim();
+        if (!value) return '';
+        try {
+            const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+            const decoded = JSON.parse(atob(normalized + '='.repeat((4 - normalized.length % 4) % 4)));
+            const id = String(decoded.t || decoded.TunnelID || '').trim();
+            return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : '';
+        } catch {
+            return '';
+        }
+    }
+
     async function connectCloudflare() {
         if (cloudflareConfigBusy || !cloudflareTokenDraft.trim() || !cloudflareZoneDraft.trim()) return;
         cloudflareConfigBusy = true;
@@ -939,6 +952,9 @@
             <p class="muted">Домен сайта и Cloudflare Tunnel. Сохранение домена запускает cloudflared на Agent; публичный маршрут и CNAME можно настроить автоматически ниже.</p>
             <label class="field-label" for="site-domain">Primary domain</label>
             <input id="site-domain" class="input" bind:value={domainDraft} placeholder="app.example.com" autocomplete="off"/>
+            {#if cloudflareConfig.connected && cloudflareConfig.zone_name}
+                <Button size="sm" on:click={() => { const label = siteId.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, ''); domainDraft = label + '.' + cloudflareConfig.zone_name; }}>Предложить домен для приложения</Button>
+            {/if}
             <label class="field-label" for="site-tunnel-token">Cloudflare Tunnel token</label>
             <input id="site-tunnel-token" class="input" type="password" bind:value={domainTunnelToken} placeholder="Оставьте пустым, чтобы использовать сохранённый token" autocomplete="new-password"/>
             <div class="actions">
@@ -949,9 +965,22 @@
                         if(!removed.ok){domainBusy=false;notify(removed.error||'Сначала удалите Cloudflare route','error');return;}
                         cloudflareRoute={configured:false};
                     }
-                    const r=await updateSiteDomain(deviceId,siteId,domainDraft.trim(),domainTunnelToken.trim());
+                    const suppliedTunnelToken=domainTunnelToken.trim();
+                    const r=await updateSiteDomain(deviceId,siteId,domainDraft.trim(),suppliedTunnelToken);
+                    if(!r.ok){domainBusy=false;notify(r.error||'Не удалось сохранить домен','error');return}
+                    domainTunnelToken='';
+                    if(!r.data?.ok){domainBusy=false;notify(r.data?.message||'Домен сохранён, но Tunnel не активирован','error');await refresh();return}
+                    const inferredTunnelId=cloudflareTunnelIDFromToken(suppliedTunnelToken);
+                    if(inferredTunnelId && cloudflareConfig.connected){
+                        cloudflareTunnelIdDraft=inferredTunnelId;
+                        const route=await configureCloudflareTunnelRoute(deviceId,siteId,inferredTunnelId);
+                        if(route.ok){cloudflareRoute=route.data;notify('Tunnel подключён, DNS и публичный маршрут настроены','success')}
+                        else notify('Tunnel подключён, но публичный маршрут не настроен: '+(route.error||'проверь Cloudflare API permissions'),'warning');
+                    }else{
+                        notify(r.data?.message||'Cloudflare Tunnel подключён','success');
+                    }
                     domainBusy=false;
-                    if(r.ok){domainTunnelToken='';if(r.data?.ok){notify(r.data?.message||'Домен обновлён','success')}else{notify(r.data?.message||'Домен сохранён, но Tunnel не активирован','error')}await refresh()}else notify(r.error||'Не удалось сохранить домен','error')
+                    await refresh()
                 }}>Save domain</Button>
                 <Button variant="danger" disabled={domainBusy||!site?.domain||!online} on:click={async()=>{
                     if(!confirm('Удалить домен и остановить Cloudflare Tunnel?'))return;
