@@ -760,6 +760,7 @@
             <p class="page-desc">{site.path} · порт {site.port} · {site.runtime}</p>
         </div>
         <div class="device-state">
+            <Button size="sm" on:click={() => goto('/backups?resource_type=site&resource_id=' + encodeURIComponent(deviceId + ':' + siteId))}>Backups</Button>
             <StatusDot status={online ? 'online' : 'offline'} />
             <span>{online ? 'Устройство онлайн' : 'Устройство офлайн'}</span>
         </div>
