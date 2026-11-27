@@ -30,10 +30,11 @@ Stopping a website process does not stop its tunnel connector; the connector rem
 
 ## Automatic public hostname routing
 
-1. Connect a Cloudflare API token and Zone ID in the site's Domains tab.
+1. Connect a Cloudflare API token and Zone ID in the site's Domains tab before saving the site's Tunnel token if you want the route to be configured automatically.
 2. The API token needs **Account: Cloudflare Tunnel — Edit** (API permission `Cloudflare Tunnel Write`), **Zone: DNS — Edit**, and **Zone — Read**.
-3. Save the site's Cloudflare Tunnel token so the Agent starts `cloudflared`.
-4. Enter the Tunnel ID and select **Configure public route**. Yevqo updates the remotely managed ingress configuration to `http://127.0.0.1:<site-port>` and creates the matching proxied CNAME.
-5. Remove the managed route before changing the hostname or disconnecting the Cloudflare API integration. Deleting a site or unpairing its device also removes its managed routes first; the operation is blocked if Cloudflare cleanup fails.
+3. Save the site's hostname and Cloudflare Tunnel token. Yevqo stores the Tunnel token encrypted and sends it only to the owning Agent, which starts `cloudflared` and waits for an edge connection.
+4. When the Cloudflare API integration is already connected, the UI extracts the Tunnel UUID from the supplied token and automatically asks the existing route API to configure the remotely managed ingress to `http://127.0.0.1:<site-port>` and create the matching proxied CNAME. If the API integration was connected later, use **Configure public route** with the Tunnel ID shown in Cloudflare.
+5. A successful route API response confirms that ingress and DNS configuration were accepted; it does not prove that the public HTTP origin is healthy. Verify the hostname from an external network.
+6. Remove the managed route before changing the hostname or disconnecting the Cloudflare API integration. Deleting a site or unpairing its device also removes its managed routes first; the operation is blocked if Cloudflare cleanup fails.
 
-Existing unrelated ingress rules are preserved. Only the matching Yevqo-managed hostname and CNAME are removed when you remove a route. Workspace members must ask the workspace owner to configure Cloudflare.
+The API token and Tunnel token serve different purposes: the API token authorizes Cloudflare configuration, while the Tunnel token authenticates the Agent connector. The Tunnel token is never sent to the route API. Existing unrelated ingress rules are preserved. Only the matching Yevqo-managed hostname and CNAME are removed when you remove a route. Workspace members must ask the workspace owner to configure Cloudflare.
