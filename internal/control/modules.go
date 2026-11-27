@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -681,8 +682,11 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if in.DeviceID < 1 || !validBackupSiteID(in.SiteID) { apiError(w, shared.ErrBadRequest("invalid device or site")); return }
-		ownerID, accessErr := s.authorizeDeviceOwner(r.Context(), in.DeviceID, u.ID, "backup.manage")
-		if accessErr != nil { apiError(w, accessErr); return }
+		var ownerID int64
+		if err := s.db.conn.QueryRowContext(r.Context(), "SELECT user_id FROM devices WHERE id=?", in.DeviceID).Scan(&ownerID); err != nil {
+			apiError(w, shared.ErrNotFound("device not found")); return
+		}
+		if err := s.authorizeSiteProjects(r.Context(), in.DeviceID, in.SiteID, ownerID, u.ID, "backup.manage"); err != nil { apiError(w, err); return }
 		var count int
 		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites st JOIN devices d ON d.id=st.device_id WHERE st.device_id=? AND st.site_id=? AND d.user_id=?`, in.DeviceID, in.SiteID, ownerID).Scan(&count); err != nil || count != 1 {
 			apiError(w, shared.ErrNotFound("site not found")); return
@@ -705,7 +709,7 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 	for _, ownerID := range owners {
 		role, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
 		if roleErr != nil { apiError(w, roleErr); return }
-		if !allowed || !CanWorkspaceAction(role, "backup.read") { continue }
+		if !allowed { continue }
 		query := `SELECT id,device_id,resource_type,resource_id,file_name,size_bytes,status,created_at FROM backups WHERE user_id=?`
 		args := []interface{}{ownerID}
 		if resourceType := strings.TrimSpace(r.URL.Query().Get("resource_type")); resourceType != "" {
@@ -729,6 +733,13 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 			var typ, resource, file, status string
 			var created time.Time
 			if err := rows.Scan(&id, &deviceID, &typ, &resource, &file, &size, &status, &created); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read backups")); return }
+			if _, _, accessErr := s.authorizeBackup(r.Context(), id, u.ID, "backup.read"); accessErr != nil {
+				var apiErr *shared.APIError
+				if errors.As(accessErr, &apiErr) && apiErr.Code == http.StatusForbidden { continue }
+				rows.Close()
+				apiError(w, accessErr)
+				return
+			}
 			out = append(out, map[string]interface{}{"id": id, "device_id": deviceID, "resource_type": typ, "resource_id": resource, "file_name": file, "size_bytes": size, "status": status, "created_at": created})
 		}
 		if err := rows.Err(); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read backups")); return }
