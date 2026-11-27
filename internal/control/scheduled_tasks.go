@@ -108,6 +108,7 @@ func (s *Server) handleScheduledTasks(w http.ResponseWriter, r *http.Request) {
 			res, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM scheduled_tasks WHERE id=? AND user_id=?`, id, ownerID)
 			if err != nil { apiError(w, shared.ErrInternal("could not delete task")); return }
 			n, _ := res.RowsAffected(); if n == 0 { apiError(w, shared.ErrNotFound("task not found")); return }
+			_ = s.db.Log(r.Context(), &shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),DeviceID:shared.PtrInt64(deviceID),Action:"scheduled_task_deleted",Details:map[string]interface{}{"task_id":id,"site_id":siteID},IP:clientIP(r)})
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true}); return
 		}
 		var in struct { Enabled bool `json:"enabled"` }
@@ -115,6 +116,7 @@ func (s *Server) handleScheduledTasks(w http.ResponseWriter, r *http.Request) {
 		res, err := s.db.conn.ExecContext(r.Context(), `UPDATE scheduled_tasks SET enabled=?,next_run_at=IF(?,DATE_ADD(UTC_TIMESTAMP(),INTERVAL interval_minutes MINUTE),next_run_at) WHERE id=? AND user_id=?`, in.Enabled,in.Enabled,id,ownerID)
 		if err != nil { apiError(w, shared.ErrInternal("could not update task")); return }
 		n, _ := res.RowsAffected(); if n == 0 { apiError(w, shared.ErrNotFound("task not found")); return }
+		_ = s.db.Log(r.Context(), &shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(ownerID),DeviceID:shared.PtrInt64(deviceID),Action:"scheduled_task_updated",Details:map[string]interface{}{"task_id":id,"site_id":siteID,"enabled":in.Enabled},IP:clientIP(r)})
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"enabled":in.Enabled}); return
 	}
 	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
