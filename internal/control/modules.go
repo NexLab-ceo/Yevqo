@@ -255,9 +255,9 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 			allOwners, ownerErr := s.db.WorkspaceOwnerIDs(r.Context(), u.ID)
 			if ownerErr != nil { apiError(w, ownerErr); return }
 			for _, ownerID := range allOwners {
-				role, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
+				_, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
 				if roleErr != nil { apiError(w, roleErr); return }
-				if allowed && CanWorkspaceAction(role, "database.read") { owners = append(owners, ownerID) }
+				if allowed { owners = append(owners, ownerID) }
 			}
 		}
 		if raw := r.URL.Query().Get("environment_id"); raw != "" {
@@ -282,6 +282,11 @@ func (s *Server) handleDatabaseServers(w http.ResponseWriter,r *http.Request) {
 				var port int
 				var created time.Time
 				if err := rows.Scan(&id,&deviceID,&name,&engine,&version,&port,&dir,&network,&status,&created); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read database servers")); return }
+				if _, _, accessErr := s.authorizeDatabaseServer(r.Context(), id, u.ID, "database.read"); accessErr != nil {
+					var apiErr *shared.APIError
+					if errors.As(accessErr, &apiErr) && apiErr.Code == http.StatusForbidden { continue }
+					rows.Close(); apiError(w, accessErr); return
+				}
 				out = append(out, map[string]interface{}{"id":id,"device_id":deviceID,"workspace_owner_id":ownerID,"name":name,"engine":engine,"version":version,"port":port,"data_directory":dir,"network_access":network,"status":status,"created_at":created})
 			}
 			if err := rows.Err(); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read database servers")); return }
@@ -468,9 +473,9 @@ func (s *Server) handleDatabases(w http.ResponseWriter, r *http.Request) {
 		allOwners, ownerErr := s.db.WorkspaceOwnerIDs(r.Context(), u.ID)
 		if ownerErr != nil { apiError(w, ownerErr); return }
 		for _, ownerID := range allOwners {
-			role, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
+			_, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
 			if roleErr != nil { apiError(w, roleErr); return }
-			if allowed && CanWorkspaceAction(role, "database.read") { owners = append(owners, ownerID) }
+			if allowed { owners = append(owners, ownerID) }
 		}
 	}
 	if raw := r.URL.Query().Get("environment_id"); raw != "" {
@@ -496,6 +501,11 @@ func (s *Server) handleDatabases(w http.ResponseWriter, r *http.Request) {
 			var name, status, serverName, engine string
 			var created time.Time
 			if err := rows.Scan(&id,&serverID,&name,&status,&created,&serverName,&engine,&deviceID); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read databases")); return }
+			if _, _, _, accessErr := s.authorizeDatabaseInstance(r.Context(), id, u.ID, "database.read"); accessErr != nil {
+				var apiErr *shared.APIError
+				if errors.As(accessErr, &apiErr) && apiErr.Code == http.StatusForbidden { continue }
+				rows.Close(); apiError(w, accessErr); return
+			}
 			out = append(out, map[string]interface{}{"id":id,"server_id":serverID,"name":name,"status":status,"created_at":created,"server_name":serverName,"engine":engine,"device_id":deviceID})
 		}
 		if err := rows.Err(); err != nil { rows.Close(); apiError(w, shared.ErrInternal("could not read databases")); return }
