@@ -84,6 +84,10 @@ func (s *Server) handleAdminUserByID(w http.ResponseWriter, r *http.Request) {
 		s.handleAdminUnblock(w, r, userID)
 		return
 	}
+	if r.Method == http.MethodPost && len(parts) == 2 && parts[1] == "plan" {
+		s.handleAdminSetPlan(w, r, userID)
+		return
+	}
 
 	http.NotFound(w, r)
 }
@@ -127,6 +131,32 @@ func (s *Server) handleAdminBlock(w http.ResponseWriter, r *http.Request, userID
 	s.logAdminAction(r, "block_user", userID)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+}
+
+func (s *Server) handleAdminSetPlan(w http.ResponseWriter, r *http.Request, userID int64) {
+	var in struct { Plan string `json:"plan"` }
+	if err := decodeJSON(r, &in); err != nil || (in.Plan != shared.UserFree && in.Plan != shared.UserPro) {
+		apiError(w, shared.ErrBadRequest("plan must be free or pro"))
+		return
+	}
+	target, err := s.db.GetUserByID(r.Context(), userID)
+	if err != nil { apiError(w, err); return }
+	if target.Username == s.adminUsername {
+		apiError(w, shared.ErrBadRequest("the primary administrator account always has unlimited access"))
+		return
+	}
+	res, err := s.db.conn.ExecContext(r.Context(), `UPDATE users SET status=? WHERE id=? AND status<>'blocked'`, in.Plan, userID)
+	if err != nil { apiError(w, shared.ErrInternal("could not update account plan")); return }
+	changed, _ := res.RowsAffected()
+	if changed == 0 {
+		apiError(w, shared.ErrConflict("account is blocked or plan is unchanged"))
+		return
+	}
+	if in.Plan == shared.UserFree {
+		_, _ = s.db.conn.ExecContext(r.Context(), `UPDATE api_keys SET revoked_at=UTC_TIMESTAMP() WHERE user_id=? AND revoked_at IS NULL`, userID)
+	}
+	s.logAdminAction(r, "account_plan_changed", userID)
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"plan":in.Plan})
 }
 
 func (s *Server) handleAdminUnblock(w http.ResponseWriter, r *http.Request, userID int64) {
