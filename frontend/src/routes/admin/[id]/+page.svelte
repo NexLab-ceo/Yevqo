@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { adminGetUser, adminBlockUser, adminUnblockUser } from '$lib/api.js';
+    import { adminGetUser, adminBlockUser, adminUnblockUser, adminSetUserPlan } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -53,15 +53,25 @@
         }
     }
 
+    async function togglePlan() {
+        const plan = user.status === 'pro' ? 'free' : 'pro';
+        busy = true;
+        const res = await adminSetUserPlan(user.id, plan);
+        busy = false;
+        if (res.ok) { notify(plan === 'pro' ? 'Тариф Pro назначен' : 'Тариф Free назначен', 'success'); await loadUser(); }
+        else notify(res.error || 'Не удалось изменить тариф', 'error');
+    }
+
     function statusLabel(status) {
-        if (status === 'free') return 'Бесплатный';
+        if (status === 'free') return 'Free';
+        if (status === 'pro') return 'Pro';
         if (status === 'commercial') return 'Коммерческий';
         if (status === 'blocked') return 'Заблокирован';
         return status;
     }
 
     function statusClass(status) {
-        if (status === 'commercial') return 'status-commercial';
+        if (status === 'commercial' || status === 'pro') return 'status-commercial';
         if (status === 'blocked') return 'status-blocked';
         return 'status-free';
     }
@@ -82,6 +92,9 @@
             <p class="page-desc">{user.email} · ID {user.id}</p>
         </div>
         <div class="header-actions">
+            {#if !user.is_admin && user.status !== 'blocked'}
+                <Button variant="secondary" size="sm" on:click={togglePlan} disabled={busy}>{user.status === 'pro' ? 'Перевести на Free' : 'Назначить Pro'}</Button>
+            {/if}
             {#if user.status === 'blocked'}
                 <Button variant="primary" size="sm" on:click={() => askBlock('unblock')} disabled={busy}>
                     Разблокировать
@@ -107,7 +120,7 @@
             </div>
             <div class="info-item">
                 <div class="info-label">Лимит устройств</div>
-                <div class="info-value mono">{user.max_devices + user.bonus_devices} ({user.max_devices} базовых + {user.bonus_devices} бонусных)</div>
+                <div class="info-value mono">{user.is_admin || user.status === 'pro' ? 'Без ограничений' : `${user.max_devices + user.bonus_devices} (${user.max_devices} базовых + ${user.bonus_devices} бонусных)`}</div>
             </div>
             <div class="info-item">
                 <div class="info-label">Создан</div>
