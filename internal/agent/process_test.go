@@ -242,3 +242,12 @@ func TestKillProcessGroupStopsTermIgnoringDescendants(t *testing.T) {
  if processGroupAlive(pid) { t.Fatal("process group is still alive after forced shutdown") }
  _ = cmd.Wait()
 }
+
+
+func TestGitRepositoryCommandScopesSafeDirectory(t *testing.T) {
+ repositoryDir := filepath.Join(t.TempDir(), "staging", "repo")
+ cmd := gitRepositoryCommand(context.Background(), repositoryDir, "rev-parse", "--verify", "HEAD^{commit}")
+ want := []string{"git", "-c", "safe.directory=" + repositoryDir, "-C", repositoryDir, "rev-parse", "--verify", "HEAD^{commit}"}
+ if len(cmd.Args) != len(want) { t.Fatalf("git args = %#v, want %#v", cmd.Args, want) }
+ for i := range want { if cmd.Args[i] != want[i] { t.Fatalf("git args = %#v, want %#v", cmd.Args, want) } }
+}
