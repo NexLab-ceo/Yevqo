@@ -15,19 +15,21 @@ import (
 	"veltrix/internal/agent"
 )
 
+func resolveAgentConfigPath(prefix, override string) string {
+	if override != "" { return override }
+	privateConfig := filepath.Join(prefix, "var", "lib", "veltrix-agent", "config", "agent.json")
+	if _, err := os.Stat(privateConfig); err == nil { return privateConfig }
+	// Preserve an existing legacy config, but never create a new token-bearing
+	// config in shared storage on a fresh install.
+	if _, err := os.Stat(agent.LegacyDefaultConfigPath); err == nil { return agent.LegacyDefaultConfigPath }
+	return privateConfig
+}
+
 func main() {
 	// Флаги.
 	prefix := os.Getenv("PREFIX")
 	if prefix == "" { prefix = "/data/data/com.termux/files/usr" }
-	defaultConfigPath := os.Getenv("VELTRIX_AGENT_CONFIG")
-	if defaultConfigPath == "" {
-		privateConfig := filepath.Join(prefix, "var", "lib", "veltrix-agent", "config", "agent.json")
-		if _, err := os.Stat(privateConfig); err == nil {
-			defaultConfigPath = privateConfig
-		} else {
-			defaultConfigPath = agent.DefaultConfigPath
-		}
-	}
+	defaultConfigPath := resolveAgentConfigPath(prefix, os.Getenv("VELTRIX_AGENT_CONFIG"))
 	configPath := flag.String("config", defaultConfigPath, "path to agent.json (default: "+defaultConfigPath+")")
 	flag.Parse()
 
