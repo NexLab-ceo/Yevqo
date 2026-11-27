@@ -102,6 +102,7 @@ func (s *Server) handleV1(w http.ResponseWriter,r *http.Request) {
 		return
 	}
 	r2:=r.Clone(r.Context())
+	r2.URL.Path="/api"+path
 	switch {
 	case path=="/projects" || strings.HasPrefix(path,"/projects/"):
 		r2.URL.Path="/api"+path
