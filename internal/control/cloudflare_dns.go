@@ -249,7 +249,15 @@ func (s *Server) removeCloudflareRouteForSite(ctx context.Context, userID, devic
 	accountID,zoneID,_,token,err:=s.cloudflareCredentials(ctx,userID);if err!=nil{return false,"",err}
 	workCtx,cancel:=context.WithTimeout(ctx,30*time.Second);defer cancel()
 	if ingressManaged {
-		if err:=updateCloudflareTunnelIngress(workCtx,token,accountID,tunnelID,hostname,"",true,false);err!=nil{return false,"",err}
+		source,err:=cloudflareTunnelConfigSource(workCtx,token,accountID,tunnelID)
+		if err!=nil{return false,"",err}
+		if source=="cloudflare" {
+			if err:=updateCloudflareTunnelIngress(workCtx,token,accountID,tunnelID,hostname,"",true,false);err!=nil{return false,"",err}
+		} else {
+			// A tunnel may have been switched to local management after this
+			// route was first registered. Never try to edit local config remotely.
+			ingressManaged=false
+		}
 	}
 	if err:=deleteCloudflareTunnelDNS(workCtx,token,zoneID,hostname,tunnelID);err!=nil{return false,"",fmt.Errorf("could not remove managed DNS record; route metadata was retained for retry: %w",err)}
 	if _,err:=s.db.conn.ExecContext(workCtx,`DELETE FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,userID,deviceID,siteID);err!=nil{return false,"",err}
