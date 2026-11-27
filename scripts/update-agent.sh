@@ -19,8 +19,46 @@ fi
 
 CURRENT="$(dpkg-query -W -f='${Version}' "$PACKAGE" 2>/dev/null || true)"
 curl -fsSL --connect-timeout 20 --max-time 300 --retry 3 -H 'Accept: application/vnd.github+json' -H 'User-Agent: Yevqo-Updater' "$API" -o "$TMP/release.json"
-LATEST="$(jq -er '.tag_name | sub("^v"; "")' "$TMP/release.json")"
+TAG="$(jq -er '.tag_name' "$TMP/release.json")"
+LATEST="${TAG#v}"
+if ! printf '%s' "$LATEST" | grep -Eq '^[0-9][0-9A-Za-z.+:~_-]*
+
+if [ -n "$CURRENT" ] && dpkg --compare-versions "$LATEST" le "$CURRENT"; then
+  echo "Yevqo Agent is up to date ($CURRENT)."
+  exit 0
+fi
+
+curl -fL --connect-timeout 20 --max-time 300 --retry 3 --progress-bar "$URL" -o "$TMP/$ASSET"
+curl -fsSL --connect-timeout 20 --max-time 300 --retry 3 "$CHECKSUM_URL" -o "$TMP/SHA256SUMS"
+EXPECTED="$(awk -v file="$ASSET" '$2 == file { print $1; exit }' "$TMP/SHA256SUMS")"
+ACTUAL="$(sha256sum "$TMP/$ASSET" | awk '{ print $1 }')"
+[ -n "$EXPECTED" ] && [ "$EXPECTED" = "$ACTUAL" ] || { echo "Yevqo Agent package checksum verification failed" >&2; exit 1; }
+
+dpkg-deb --field "$TMP/$ASSET" Package | grep -Fx "$PACKAGE" >/dev/null
+dpkg-deb --field "$TMP/$ASSET" Architecture | grep -Fx aarch64 >/dev/null
+dpkg-deb --field "$TMP/$ASSET" Version | grep -Fx "$LATEST" >/dev/null
+
+echo "Installing Yevqo Agent $LATEST (current: ${CURRENT:-not registered})"
+YEVQO_NONINTERACTIVE=1 dpkg -i "$TMP/$ASSET"
+
+if command -v sv >/dev/null 2>&1 && { [ -d "$PREFIX/var/service/yevqo" ] || [ -L "$PREFIX/var/service/yevqo" ]; }; then
+  sv restart yevqo >/dev/null 2>&1 || sv up yevqo >/dev/null 2>&1 || true
+fi
+
+echo "Yevqo Agent updated to $LATEST. Existing Agent configuration and data were preserved."
+; then
+  echo "Latest release tag '$TAG' is not a Debian package version; refusing to update." >&2
+  exit 1
+fi
 ASSET="${PACKAGE}_${LATEST}_aarch64.deb"
+if ! jq -e --arg name "$ASSET" '[.assets[]? | select(.name == $name)] | length == 1' "$TMP/release.json" >/dev/null; then
+  echo "Latest release '$TAG' is missing the expected package asset: $ASSET. Refusing to update." >&2
+  exit 1
+fi
+if ! jq -e '[.assets[]? | select(.name == "SHA256SUMS")] | length == 1' "$TMP/release.json" >/dev/null; then
+  echo "Latest release '$TAG' is missing SHA256SUMS. Refusing to install an unverified package." >&2
+  exit 1
+fi
 URL="$(jq -er --arg name "$ASSET" '.assets[] | select(.name == $name) | .browser_download_url' "$TMP/release.json")"
 CHECKSUM_URL="$(jq -er '.assets[] | select(.name == "SHA256SUMS") | .browser_download_url' "$TMP/release.json")"
 
