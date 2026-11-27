@@ -531,11 +531,11 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		if accessErr != nil { apiError(w, accessErr); return }
 		projectID, ownerID = parsed, resolved
 	}
-	query := `SELECT l.id,l.action,l.details,l.ip,l.created_at,COALESCE(d.hostname,'')
+	query := `SELECT l.id,l.action,l.details,l.ip,l.created_at,l.device_id,COALESCE(d.hostname,'')
 		FROM logs l LEFT JOIN devices d ON d.id=l.device_id WHERE l.user_id=?`
 	args := []interface{}{ownerID}
 	if projectID > 0 {
-		query = `SELECT l.id,l.action,l.details,l.ip,l.created_at,COALESCE(d.hostname,'')
+		query = `SELECT l.id,l.action,l.details,l.ip,l.created_at,l.device_id,COALESCE(d.hostname,'')
 			FROM logs l LEFT JOIN devices d ON d.id=l.device_id
 			WHERE (l.user_id=? OR l.user_id IN (SELECT wm.member_user_id FROM workspace_members wm WHERE wm.owner_user_id=? AND wm.status='active'))`
 		args = []interface{}{ownerID, ownerID}
@@ -553,10 +553,23 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	out := make([]map[string]interface{}, 0)
 	for rows.Next() {
-		var id int64; var action, ip, host string; var details []byte; var created time.Time
-		if err := rows.Scan(&id, &action, &details, &ip, &created, &host); err != nil { apiError(w, shared.ErrInternal("could not read logs")); return }
+		var id int64; var action, ip, host string; var details []byte; var created time.Time; var deviceID sql.NullInt64
+		if err := rows.Scan(&id, &action, &details, &ip, &created, &deviceID, &host); err != nil { apiError(w, shared.ErrInternal("could not read logs")); return }
 		var parsed interface{}
-		if len(details) > 0 { _ = json.Unmarshal(details, &parsed) }
+		var detailMap map[string]interface{}
+		if len(details) > 0 { _ = json.Unmarshal(details, &parsed); _ = json.Unmarshal(details, &detailMap) }
+		if projectID > 0 && deviceID.Valid {
+			if siteID, ok := detailMap["site_id"].(string); ok && siteID != "" {
+				var linked int
+				if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites WHERE project_id=? AND device_id=? AND site_id=?`, projectID, deviceID.Int64, siteID).Scan(&linked); err != nil { apiError(w, shared.ErrInternal("could not check project log scope")); return }
+				if linked == 0 { continue }
+				if accessErr := s.authorizeSiteProjects(r.Context(), deviceID.Int64, siteID, ownerID, u.ID, "get_logs"); accessErr != nil {
+					var apiErr *shared.APIError
+					if errors.As(accessErr, &apiErr) && apiErr.Code == http.StatusForbidden { continue }
+					apiError(w, accessErr); return
+				}
+			}
+		}
 		out = append(out, map[string]interface{}{"id":id,"action":action,"details":parsed,"ip":ip,"created_at":created,"device":host})
 	}
 	if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read logs")); return }
