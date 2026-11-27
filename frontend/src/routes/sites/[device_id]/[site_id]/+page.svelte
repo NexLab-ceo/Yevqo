@@ -970,14 +970,14 @@
                     if(!r.ok){domainBusy=false;notify(r.error||'Не удалось сохранить домен','error');return}
                     domainTunnelToken='';
                     if(!r.data?.ok){domainBusy=false;notify(r.data?.message||'Домен сохранён, но Tunnel не активирован','error');await refresh();return}
-                    const inferredTunnelId=cloudflareTunnelIDFromToken(suppliedTunnelToken);
+                    const inferredTunnelId=cloudflareTunnelIDFromToken(suppliedTunnelToken)||cloudflareTunnelIdDraft.trim();
                     if(inferredTunnelId && cloudflareConfig.connected){
                         cloudflareTunnelIdDraft=inferredTunnelId;
                         const route=await configureCloudflareTunnelRoute(deviceId,siteId,inferredTunnelId);
                         if(route.ok){cloudflareRoute=route.data;notify('Tunnel подключён, DNS и публичный маршрут настроены','success')}
                         else notify('Tunnel подключён, но публичный маршрут не настроен: '+(route.error||'проверь Cloudflare API permissions'),'warning');
                     }else{
-                        notify(r.data?.message||'Cloudflare Tunnel подключён','success');
+                        notify('Tunnel подключён, но публичный маршрут не настроен. Укажи Tunnel ID и подключи Cloudflare API для автоматической маршрутизации.','warning');
                     }
                     domainBusy=false;
                     await refresh()
