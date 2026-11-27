@@ -738,7 +738,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 		if err != nil { apiError(w, err); return }
 		dev, err := s.db.GetDeviceByID(r.Context(), deviceID)
 		if err != nil { apiError(w, shared.ErrNotFound("site not found")); return }
-		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
+		if err := s.authorizeSiteProjects(r.Context(), deviceID, parts[1], dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
 		if !validBackupSiteID(parts[1]) { apiError(w, shared.ErrBadRequest("invalid site id")); return }
 		conn, online := s.hub.Get(deviceID)
 		if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
@@ -796,7 +796,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 		apiError(w, shared.ErrForbidden("not your device"))
 		return
 	}
-	if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil {
+	if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, dev.UserID, user.ID, "device.read"); err != nil {
 		apiError(w, err)
 		return
 	}
@@ -821,7 +821,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				var in struct { Keep int `json:"keep"` }
 				if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
 				if in.Keep < 1 || in.Keep > 50 { apiError(w, shared.ErrBadRequest("keep must be between 1 and 50")); return }
-				if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
+				if err := s.authorizeSiteProjects(r.Context(), deviceID, st.SiteID, dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
 				ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute); defer cancel()
 				result, err := conn.SendCommand(ctx, "prune_site_releases", &shared.PruneSiteReleases{SiteId:st.SiteID, Keep:in.Keep})
 				if err != nil { apiError(w, shared.ErrInternal("release cleanup failed: "+err.Error())); return }
@@ -854,6 +854,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				if projectErr != nil { apiError(w, projectErr); return }
 				if projectOwnerID != dev.UserID { apiError(w, shared.ErrNotFound("project not found")); return }
 				if projectErr := s.requireProjectSite(r.Context(), effectiveProjectID, deviceID, siteID); projectErr != nil { apiError(w, projectErr); return }
+				if projectErr := s.authorizeSiteProjects(r.Context(), deviceID, siteID, dev.UserID, user.ID, in.Action); projectErr != nil { apiError(w, projectErr); return }
 				if in.EnvironmentID > 0 {
 					var assigned int
 					if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM project_environment_sites WHERE project_id=? AND environment_id=? AND device_id=? AND site_id=?", effectiveProjectID, in.EnvironmentID, deviceID, siteID).Scan(&assigned); err != nil || assigned != 1 {
@@ -966,7 +967,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodPatch {
-			if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
+			if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, dev.UserID, user.ID, "site.configure"); err != nil { apiError(w, err); return }
 			var in struct { Domain string `json:"domain"`; TunnelToken string `json:"tunnel_token"` }
 			if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid JSON"));return}
 			domain:=strings.ToLower(strings.TrimSpace(in.Domain))
