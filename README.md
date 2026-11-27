@@ -11,7 +11,7 @@ The `main` branch is the active Yevqo implementation. The all-in-one package kee
 
 Пакет `yevqo-all` требует MariaDB, PHP, Git и `termux-services`. Пакет `yevqo` требует PHP, Git и `termux-services`. Оба пакета автоматически проверяют публичные [релизы VELTRIX Dock](https://github.com/NexLab-ceo/veltrix-dock/releases) каждые 6 часов, проверяют SHA-256 и устанавливают обновления в фоне. Отключить автообновления: `sv down yevqo-updater`; включить снова: `sv up yevqo-updater`. Подробности — в [обновлениях](docs/updates.md). `cloudflared` не является обязательной зависимостью: экран Domains может установить нативный пакет Termux при настройке Cloudflare Tunnel. См. [инструкцию по Cloudflare Tunnel](docs/cloudflare-tunnel.md).
 
-Перед настройкой Control Plane или Agent выполните `termux-setup-storage` в Termux и разрешите доступ к общему хранилищу: конфигурация и данные по умолчанию размещаются в `/sdcard/yevqo-control` и `/sdcard/yevqo-agent`.
+Перед настройкой Control Plane или Agent выполните `termux-setup-storage` в Termux и разрешите доступ к общему хранилищу. Данные Control Plane по умолчанию находятся в `/sdcard/yevqo`, файлы и рабочие каталоги Agent — в `/sdcard/yevqo-agent`. Конфигурация Agent с pairing token хранится отдельно в приватном каталоге Termux: `$PREFIX/var/lib/veltrix-agent/config/agent.json`.
 
 Для автозапуска после перезагрузки Android установите приложение **Termux:Boot** из того же источника, что и Termux, и откройте его один раз. Также разрешите Termux работать в фоне в настройках батареи Android.
 
@@ -41,7 +41,7 @@ PostgreSQL and MariaDB/MySQL now have typed Agent workflows for server installat
 
 ### Website lifecycle and operations
 - Site creation is an explicit typed Agent command. It creates a new site directory and a starter file without overwriting an existing directory.
-- Site processes bind to localhost by default; occupied ports are rejected before launch.
+- Application processes listen on a private loopback backend; the Agent-owned stable public site proxy binds to `0.0.0.0` so LAN clients can reach the configured site port. This exposes that port to reachable network interfaces; use firewall/router rules for external exposure and keep the application backend loopback-only.
 - Site IDs and paths are validated on the Agent. Site log files are private to the Termux account.
 - Removing a website from the panel removes its metadata only; its device files are deliberately preserved.
 - Domains can be assigned as metadata to a site. DNS and reverse-proxy / tunnel routing are not reported as active until verified separately.
