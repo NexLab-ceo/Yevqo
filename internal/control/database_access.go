@@ -144,6 +144,12 @@ func (s *Server) authorizeProjectLogDetails(ctx context.Context, projectID, owne
 	var details map[string]interface{}
 	if err := json.Unmarshal(raw, &details); err != nil { return shared.ErrForbidden("log details cannot be scoped to this project") }
 
+	if deviceID < 1 {
+		if detailDeviceID, exists := projectLogDetailID(details, "device_id"); exists {
+			if detailDeviceID < 1 { return shared.ErrForbidden("log has no valid device scope") }
+			deviceID = detailDeviceID
+		}
+	}
 	if rawSiteID, exists := details["site_id"]; exists {
 		siteID, ok := rawSiteID.(string)
 		if !ok || strings.TrimSpace(siteID) == "" || deviceID < 1 { return shared.ErrForbidden("site log has no valid resource scope") }
