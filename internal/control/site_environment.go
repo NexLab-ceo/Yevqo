@@ -35,6 +35,7 @@ func (s *Server) handleSiteEnvironment(w http.ResponseWriter, r *http.Request, u
 		ownerID, authErr := s.authorizeProjectOwner(r.Context(), projectID, user.ID, action)
 		if authErr != nil { apiError(w, authErr); return }
 		if ownerID != dev.UserID { apiError(w, shared.ErrNotFound("site not found")); return }
+		if authErr := s.authorizeSiteProjects(r.Context(), deviceID, siteID, dev.UserID, user.ID, action); authErr != nil { apiError(w, authErr); return }
 	} else {
 		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
 		if r.Method != http.MethodGet {
