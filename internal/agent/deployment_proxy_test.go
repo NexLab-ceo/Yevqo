@@ -20,6 +20,10 @@ func reserveTestPort(t *testing.T) int {
 	return port
 }
 
+func deploymentProxyTestURL(proxy *deploymentProxy) string {
+	return fmt.Sprintf("http://127.0.0.1:%d/", proxy.listener.Addr().(*net.TCPAddr).Port)
+}
+
 func TestDeploymentProxySwitchesBackendAtomically(t *testing.T) {
 	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, "first") }))
 	defer first.Close()
@@ -75,7 +79,7 @@ func TestDeploymentProxyDrainWaitsForInflightRequests(t *testing.T) {
 
 	responseDone := make(chan error, 1)
 	go func() {
-		resp, requestErr := http.Get(fmt.Sprintf("http://%s/", proxy.listener.Addr().String()))
+		resp, requestErr := http.Get(deploymentProxyTestURL(proxy))
 		if requestErr != nil { responseDone <- requestErr; return }
 		_, readErr := io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
@@ -110,7 +114,7 @@ func TestDeploymentProxyPreservesPublicHostAndForwardedProtocol(t *testing.T) {
 	if err != nil { t.Fatal(err) }
 	defer proxy.close()
 
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s/", proxy.listener.Addr().String()), nil)
+	req, err := http.NewRequest(http.MethodGet, deploymentProxyTestURL(proxy), nil)
 	if err != nil { t.Fatal(err) }
 	req.Host = "app.example.test"
 	req.Header.Set("X-Forwarded-Proto", "https")
@@ -122,4 +126,25 @@ func TestDeploymentProxyPreservesPublicHostAndForwardedProtocol(t *testing.T) {
 	if got, want := string(body), "app.example.test|app.example.test|https"; got != want {
 		t.Fatalf("proxy did not preserve public request identity: got %q want %q", got, want)
 	}
+}
+
+func TestDeploymentProxyBindsAllIPv4Interfaces(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer backend.Close()
+
+	proxy, err := newDeploymentProxy(reserveTestPort(t), backend.Listener.Addr().(*net.TCPAddr).Port)
+	if err != nil { t.Fatal(err) }
+	defer proxy.close()
+
+	address, ok := proxy.listener.Addr().(*net.TCPAddr)
+	if !ok { t.Fatalf("unexpected listener address type: %T", proxy.listener.Addr()) }
+	if !address.IP.IsUnspecified() || address.IP.To4() == nil {
+		t.Fatalf("public listener must bind all IPv4 interfaces, got %s", address)
+	}
+	response, err := http.Get(deploymentProxyTestURL(proxy))
+	if err != nil { t.Fatalf("request public listener through loopback: %v", err) }
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusOK { t.Fatalf("unexpected HTTP status: %d", response.StatusCode) }
 }
