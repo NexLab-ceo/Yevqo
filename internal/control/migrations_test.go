@@ -138,6 +138,21 @@ func TestCloudflareTunnelRouteMigrationIsAdditive(t *testing.T) {
 	for _, forbidden := range []string{"drop table","truncate table","delete from","drop column"} { if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) } }
 }
 
+func TestCloudflareRouteIngressModeMigrationIsAdditive(t *testing.T) {
+	path := filepath.Join("..", "..", "migrations", "027_cloudflare_route_ingress_mode.sql")
+	content, err := os.ReadFile(path)
+	if err != nil { t.Fatalf("read Cloudflare route ingress mode migration: %v", err) }
+	statements := splitSQL(string(content))
+	if len(statements) != 1 { t.Fatalf("migration has %d statements, want 1", len(statements)) }
+	normalized := strings.ToLower(strings.TrimSpace(statements[0]))
+	for _, required := range []string{"alter table site_cloudflare_routes", "add column ingress_managed tinyint(1) not null default 1"} {
+		if !strings.Contains(normalized, required) { t.Errorf("migration is missing %q", required) }
+	}
+	for _, forbidden := range []string{"drop table", "truncate table", "delete from", "drop column"} {
+		if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) }
+	}
+}
+
 func TestAgentPairingTokenMigrationIsAdditive(t *testing.T) {
 	path := filepath.Join("..", "..", "migrations", "023_agent_pairing_tokens.sql")
 	content, err := os.ReadFile(path)
