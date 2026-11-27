@@ -21,6 +21,52 @@ Do not use the generic Linux release binary on Android/Termux. The Termux packag
 5. Connect a Cloudflare API token and Zone ID in the Domains tab, then enter the Tunnel ID and choose **Configure public route**. Yevqo adds the ingress rule and matching proxied CNAME.
 6. The Agent waits for Cloudflare to report a registered edge connection before the Control Plane changes the connector status to active.
 
+
+## Existing locally-managed Tunnel (Termux config.yml)
+
+A locally-managed Tunnel is different from the remotely-managed flow above. Its ingress rules live in the Termux cloudflared configuration file, not in Cloudflare's remotely-managed Tunnel configuration API. A route shown in the Dashboard therefore does not, by itself, prove that a public DNS record exists.
+
+Keep the existing config.yml and add the hostname rule before its final catch-all rule. For a site listening on port 8085, the relevant ingress entry is:
+
+```yaml
+- hostname: <hostname>
+  service: http://127.0.0.1:8085
+```
+
+Keep the final catch-all entry (normally `- service: http_status:404`) last. Do not replace unrelated ingress rules.
+
+### Create the DNS record
+
+The DNS CNAME is separate from the local ingress rule. For a locally-managed Tunnel, create it with the Cloudflare CLI:
+
+```bash
+cloudflared tunnel route dns <TUNNEL-NAME-OR-UUID> <hostname>
+```
+
+This creates a CNAME pointing to `<TUNNEL-UUID>.cfargotunnel.com`; it does not edit config.yml or start the Tunnel. The command requires the account certificate (`cert.pem`) created by `cloudflared tunnel login`. If that certificate is not available on the Termux device, create the equivalent CNAME in Cloudflare DNS manually:
+
+- Type: `CNAME`
+- Name: the hostname (use `@` for the zone apex when configuring the root domain)
+- Target: `<TUNNEL-UUID>.cfargotunnel.com`
+- Proxy status: Proxied
+
+Do not overwrite an existing DNS record unless you have confirmed it belongs to this Tunnel.
+
+### Yevqo Domains integration
+
+When Yevqo detects a locally-managed Tunnel, **Configure public route** creates and tracks only the matching DNS CNAME. It deliberately does not attempt to edit the device's local ingress file. The Domains tab labels this as a DNS-only setup and shows the expected hostname-to-origin mapping. Confirm that the local config.yml contains the same hostname and origin port.
+
+For a remotely-managed Tunnel, Yevqo continues to configure both the ingress rule and the proxied CNAME through the Cloudflare API.
+
+### Verify each layer separately
+
+1. Confirm the local origin responds: `curl -I http://127.0.0.1:<port>`.
+2. Confirm DNS resolves: `nslookup <hostname>` (or query a public resolver such as `1.1.1.1` / `8.8.8.8`).
+3. Confirm the Tunnel connector is running and connected: `cloudflared tunnel info <TUNNEL-NAME-OR-UUID>`.
+4. Test the public hostname: `curl -I --max-time 15 https://<hostname>`.
+
+A successful origin response proves only the local service is available. A successful DNS lookup proves only that the hostname resolves. A running Tunnel does not prove that the local ingress points to the correct origin.
+
 ## Status semantics
 
 **Tunnel connected** means the connector registered a connection to Cloudflare Edge. It does not prove that the Public Hostname route or application origin is healthy. Yevqo can create the hostname ingress route and CNAME when the Cloudflare API integration is configured. HTTP-origin health checks are a separate capability and are not implied by the connector status.
