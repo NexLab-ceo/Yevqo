@@ -791,7 +791,7 @@
         gitHubRepositoriesError = '';
         const result = await listIntegrations();
         if (!result.ok) { gitHubRepositoriesError = result.error || 'Не удалось загрузить GitHub integration'; return; }
-        gitHubIntegrations = (result.data.integrations || []).filter(item => item.provider === 'github_app' || item.provider === 'github');
+        gitHubIntegrations = (result.data.integrations || []).filter(item => item.provider === 'github_app');
         const savedRepo = String(gitForm.repository_url || '').trim().replace(/\.git$/, '').replace(/\/$/, '');
         const preferred = gitHubIntegrations.find(item => String(item.id) === String(selectedGitHubIntegration)) || gitHubIntegrations[0];
         selectedGitHubIntegration = preferred ? String(preferred.id) : '';
