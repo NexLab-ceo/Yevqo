@@ -794,8 +794,19 @@
         gitHubIntegrations = (result.data.integrations || []).filter(item => item.provider === 'github_app');
         const savedRepo = String(gitForm.repository_url || '').trim().replace(/\.git$/, '').replace(/\/$/, '');
         const preferred = gitHubIntegrations.find(item => String(item.id) === String(selectedGitHubIntegration)) || gitHubIntegrations[0];
+        if (savedRepo) {
+            // Search every connected installation so a saved repository is
+            // restored even when the user has multiple GitHub App accounts.
+            for (const integration of gitHubIntegrations) {
+                selectedGitHubIntegration = String(integration.id);
+                selectedGitHubRepository = '';
+                await loadGitHubRepositories(savedRepo);
+                if (selectedGitHubRepository) return;
+            }
+        }
         selectedGitHubIntegration = preferred ? String(preferred.id) : '';
-        if (selectedGitHubIntegration) await loadGitHubRepositories(savedRepo);
+        selectedGitHubRepository = '';
+        if (selectedGitHubIntegration) await loadGitHubRepositories();
     }
 
     async function loadGitHubRepositories(savedRepo = '') {
@@ -814,7 +825,7 @@
             selectedGitHubRepository = selected.full_name;
             if (!gitForm.repository_url || match) gitForm.repository_url = selected.clone_url || `https://github.com/${selected.full_name}.git`;
             if (!gitForm.branch || !gitForm.branch.trim()) gitForm.branch = selected.default_branch || 'main';
-        } else if (!selectedGitHubRepository && gitHubRepositories.length === 1) {
+        } else if (!normalizedSaved && !selectedGitHubRepository && gitHubRepositories.length === 1) {
             selectedGitHubRepository = gitHubRepositories[0].full_name;
             gitForm.repository_url = gitHubRepositories[0].clone_url || `https://github.com/${gitHubRepositories[0].full_name}.git`;
             gitForm.branch = gitHubRepositories[0].default_branch || 'main';
