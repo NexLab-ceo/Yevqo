@@ -3,7 +3,7 @@
  import {onMount} from 'svelte';
  import {page} from '$app/stores';
  import {goto} from '$app/navigation';
- import {user,isAuthenticated,uiMode,theme,notify,workspaceName,compactMode} from '$lib/stores.js';
+ import {user,isAuthenticated,uiMode,theme,notify,notifications,workspaceName,compactMode} from '$lib/stores.js';
  import {logout,me,getSettings,saveSettings,listProjects,listDevices,listDeployments,listLogs,listNotifications,markNotificationRead,listIntegrations,listIntegrationRepositories} from '$lib/api.js';
  import {locale} from '$lib/i18n.js';
  import {setDatePreferences,formatDate} from '$lib/date.js';
@@ -65,6 +65,13 @@
   </header>
   <div class="page-scroll"><div class="page-container"><slot/></div></div>
  </main>
+ {#if $notifications.length}
+  <div class="toast-stack" aria-live="polite" aria-relevant="additions">
+   {#each $notifications as item (item.id)}
+    <div class={"toast-item toast-"+(item.type||"info")} role={item.type==="error"?"alert":"status"}>{item.message}</div>
+   {/each}
+  </div>
+ {/if}
 </div>
 {/if}
 <style>
@@ -117,4 +124,4 @@
 @media(max-width:900px){.sidebar{width:240px;flex-basis:240px}.page-scroll{padding:20px}}
 @media(max-width:700px){.sidebar{width:276px}.topbar{padding:0 14px}.page-scroll{padding:18px 14px}}
 
-</style>
+.toast-stack{position:fixed;z-index:200;right:22px;bottom:22px;display:grid;gap:8px;width:min(380px,calc(100vw - 28px));pointer-events:none}.toast-item{padding:12px 14px;border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;background:var(--bg-card);color:var(--text-main);box-shadow:0 12px 34px #0006;font-size:11px;line-height:1.5;overflow-wrap:anywhere;animation:toast-in .16s ease-out}.toast-item.toast-error{border-left-color:var(--danger)}.toast-item.toast-warning{border-left-color:var(--warning)}@keyframes toast-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@media(max-width:700px){.toast-stack{right:14px;bottom:14px}}\n</style>
