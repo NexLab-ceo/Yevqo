@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO="NexLab-ceo/veltrix-dock"
 API="https://api.github.com/repos/$REPO/releases/latest"
-PREFIX="\${PREFIX:-/data/data/com.termux/files/usr}"
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 PACKAGE="yevqo"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -11,21 +11,21 @@ trap 'rm -rf "$TMP"' EXIT
 command -v curl >/dev/null || { echo "Install curl: pkg install curl" >&2; exit 1; }
 command -v jq >/dev/null || { echo "Install jq: pkg install jq" >&2; exit 1; }
 command -v dpkg-deb >/dev/null || { echo "dpkg-deb is unavailable" >&2; exit 1; }
-if ! dpkg-query -W -f='\${Status}' coreutils 2>/dev/null | grep -q 'install ok installed'; then
+if ! dpkg-query -W -f='${Status}' coreutils 2>/dev/null | grep -q 'install ok installed'; then
   command -v pkg >/dev/null || { echo "Install coreutils: pkg install coreutils" >&2; exit 1; }
   pkg install -y coreutils
 fi
 [ "$(uname -m)" = "aarch64" ] || { echo "Yevqo requires Android ARM64" >&2; exit 1; }
 
-CURRENT="$(dpkg-query -W -f='\${Version}' "$PACKAGE" 2>/dev/null || true)"
+CURRENT="$(dpkg-query -W -f='${Version}' "$PACKAGE" 2>/dev/null || true)"
 curl -fsSL --connect-timeout 20 --max-time 300 --retry 3 -H 'Accept: application/vnd.github+json' -H 'User-Agent: Yevqo-Updater' "$API" -o "$TMP/release.json"
 TAG="$(jq -er '.tag_name' "$TMP/release.json")"
-LATEST="\${TAG#v}"
+LATEST="${TAG#v}"
 case "$LATEST" in
   [0-9]*) ;;
   *) echo "Latest release tag '$TAG' is not a Debian package version; refusing to update." >&2; exit 1 ;;
 esac
-ASSET="\${PACKAGE}_\${LATEST}_aarch64.deb"
+ASSET="${PACKAGE}_${LATEST}_aarch64.deb"
 if ! jq -e --arg name "$ASSET" '[.assets[]? | select(.name == $name)] | length == 1' "$TMP/release.json" >/dev/null; then
   echo "Latest release '$TAG' is missing the expected package asset: $ASSET. Refusing to update." >&2
   exit 1
@@ -52,7 +52,7 @@ dpkg-deb --field "$TMP/$ASSET" Package | grep -Fx "$PACKAGE" >/dev/null
 dpkg-deb --field "$TMP/$ASSET" Architecture | grep -Fx aarch64 >/dev/null
 dpkg-deb --field "$TMP/$ASSET" Version | grep -Fx "$LATEST" >/dev/null
 
-echo "Installing Yevqo Agent $LATEST (current: \${CURRENT:-not registered})"
+echo "Installing Yevqo Agent $LATEST (current: ${CURRENT:-not registered})"
 YEVQO_NONINTERACTIVE=1 dpkg -i "$TMP/$ASSET"
 
 if command -v sv >/dev/null 2>&1 && { [ -d "$PREFIX/var/service/yevqo" ] || [ -L "$PREFIX/var/service/yevqo" ]; }; then
