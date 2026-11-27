@@ -164,6 +164,8 @@ func (srv *Server) RequireAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		user.IsAdmin = user.Username == srv.adminUsername
+
 		if user.Status == shared.UserBlocked {
 			_ = srv.db.DeleteSession(r.Context(), sess.ID)
 			ClearSessionCookie(w)
