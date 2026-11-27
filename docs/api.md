@@ -48,6 +48,10 @@ The v1 API currently exposes the existing authenticated Control Plane operations
 
 HTTP methods and request bodies follow the matching Dashboard API endpoint. Responses use the existing JSON response format. Unsupported routes return 404; invalid credentials return 401; account plan restrictions return 403.
 
+## Administrator plan control
+
+The configured primary administrator can assign or remove Pro from another account through the admin panel, or via `POST /admin/api/users/{id}/plan` with `{"plan":"pro"}` or `{"plan":"free"}`. Moving an account back to Free revokes its active API keys. The primary administrator cannot downgrade itself.
+
 ## Security and limits
 
 - API keys have full account-level API access; they do not bypass workspace roles, project permissions, resource ownership or server-side validation.
