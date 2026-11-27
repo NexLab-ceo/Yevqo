@@ -41,6 +41,17 @@
     let logStatus = 'disconnected';
     const logReconnectDelays = [1000, 2000, 5000, 10000, 20000, 30000];
     let activeTab = 'general';
+    const siteTabs = ['general','deployments','build','tasks','monitoring','databases','logs','domains','environment','git','previews'];
+    function selectTab(tab) {
+        if (!siteTabs.includes(tab)) return;
+        activeTab = tab;
+        const url = new URL($page.url);
+        if (tab === 'general') url.searchParams.delete('tab'); else url.searchParams.set('tab', tab);
+        goto(url.pathname + url.search, { replaceState: true, keepfocus: true, noScroll: true });
+        if (tab === 'tasks') refreshScheduledTasks();
+        if (tab === 'deployments') loadReleases();
+        if (tab === 'monitoring') loadProcessMetrics();
+    }
     let domainDraft = '';
     let domainTunnelToken = '';
     let domainBusy = false;
@@ -111,11 +122,16 @@
         siteId = $page.params.site_id;
         projectId = $page.url.searchParams.get('project_id') || '';
         environmentId = $page.url.searchParams.get('environment_id') || '';
+        const requestedTab = $page.url.searchParams.get('tab') || 'general';
+        activeTab = siteTabs.includes(requestedTab) ? requestedTab : 'general';
         await refresh();
+        if (activeTab === 'deployments') loadReleases();
+        if (activeTab === 'monitoring') loadProcessMetrics();
+        if (activeTab === 'tasks') refreshScheduledTasks();
         loading = false;
         metricsPoller = setInterval(() => {
             if (!online) return;
-            if (activeTab === 'general') loadProcessMetrics();
+            if (activeTab === 'general' || activeTab === 'monitoring') loadProcessMetrics();
             if (activeTab === 'tasks') refreshScheduledTasks();
         }, 10000);
     });
@@ -798,15 +814,17 @@
     </Card>
 
     <nav class="tabs">
-        <button class:active={activeTab === 'general'} on:click={() => activeTab = 'general'}>General</button>
-        <button class:active={activeTab === 'logs'} on:click={openTerminal}>Logs</button>
-        <button class:active={activeTab === 'domains'} on:click={() => activeTab = 'domains'}>Domains</button>
-        <button class:active={activeTab === 'environment'} on:click={() => activeTab = 'environment'}>Environment</button>
-        <button class:active={activeTab === 'build'} on:click={() => activeTab = 'build'}>Build</button>
-        <button class:active={activeTab === 'git'} on:click={() => activeTab = 'git'}>Git</button>
-        <button class:active={activeTab === 'releases'} on:click={() => { activeTab = 'releases'; loadReleases(); }}>Releases</button>
-        {#if String(device?.platform || '').toLowerCase() === 'android'}<button class:active={activeTab === 'previews'} on:click={() => { activeTab = 'previews'; loadPreviews(); }}>Previews</button>{/if}
-        <button class:active={activeTab === 'tasks'} on:click={() => { activeTab = 'tasks'; refreshScheduledTasks(); }}>Scheduled Tasks</button>
+        <button class:active={activeTab === 'general'} on:click={() => selectTab('general')}>Обзор</button>
+        <button class:active={activeTab === 'deployments'} on:click={() => selectTab('deployments')}>Развёртывания</button>
+        <button class:active={activeTab === 'build'} on:click={() => selectTab('build')}>Сборки</button>
+        <button class:active={activeTab === 'tasks'} on:click={() => selectTab('tasks')}>Расписания</button>
+        <button class:active={activeTab === 'monitoring'} on:click={() => selectTab('monitoring')}>Мониторинг</button>
+        <button class:active={activeTab === 'databases'} on:click={() => selectTab('databases')}>Базы данных</button>
+        <button class:active={activeTab === 'logs'} on:click={openTerminal}>Журналы</button>
+        <button class:active={activeTab === 'domains'} on:click={() => selectTab('domains')}>Домены</button>
+        <button class:active={activeTab === 'environment'} on:click={() => selectTab('environment')}>Переменные</button>
+        <button class:active={activeTab === 'git'} on:click={() => selectTab('git')}>Git</button>
+        {#if String(device?.platform || '').toLowerCase() === 'android'}<button class:active={activeTab === 'previews'} on:click={() => { selectTab('previews'); loadPreviews(); }}>Previews</button>{/if}
     </nav>
 
     {#if activeTab === 'general'}
@@ -978,21 +996,39 @@
                 <p class="muted">Ничего не найдено по запросу «{envSearch}».</p>
             {:else}<div class="env-empty"><strong>No environment variables yet</strong><span>Добавь первую переменную или импортируй готовый .env.</span></div>{/if}
             <p class="env-security-note">Значения намеренно не возвращаются в браузер после сохранения — поэтому показать или скопировать ранее сохранённый секрет нельзя. Чтобы заменить значение, укажи новое для существующего ключа.</p>
+        </Card>
+    {:else if activeTab === 'monitoring'}
+        <Card>
+            <div class="metrics-card-head"><div><h2 class="details-title">Мониторинг приложения</h2><p class="muted">Метрики процесса именно этого приложения на выбранном устройстве.</p></div><Button size="sm" disabled={!online || metricsBusy} on:click={loadProcessMetrics}>Обновить</Button></div>
+            {#if !online}<p class="muted">Устройство офлайн — метрики недоступны.</p>
+            {:else if processMetrics}
+                <div class="process-metrics">
+                    <div><span>CPU</span><strong>{Number(processMetrics.cpu_percent || 0).toFixed(1)}%</strong></div>
+                    <div><span>RSS memory</span><strong>{formatBytes(processMetrics.rss_bytes)}</strong></div>
+                    <div><span>Processes</span><strong>{processMetrics.process_count || 1}</strong></div>
+                    <div><span>Main PID</span><strong>{processMetrics.pid}</strong></div>
+                </div>
+                <p class="muted">CPU и RSS суммируются по выделенной process group приложения, включая дочерние процессы и workers. Это метрики ОС, не контейнерные лимиты или cgroup-метрики.</p>
+            {:else}<p class="muted">Нет активного управляемого процесса для сбора метрик.</p>{/if}
+        </Card>
+    {:else if activeTab === 'databases'}
+        <Card>
+            <div class="metrics-card-head"><div><h2 class="details-title">Базы данных приложения</h2><p class="muted">Подключения, назначенные этому приложению. Секреты не раскрываются.</p></div><span class="env-count">{connections.length} подключений</span></div>
             {#if connections.length}
                 <div class="env-managed">
-                    <h3>Managed database variables</h3>
-                    <p class="muted">Эти параметры создаются подключениями баз данных и не редактируются здесь.</p>
                     {#each connections as connection}
                         <div class="env-group">
                             <strong>{connection.database} · {connection.username}</strong>
-                            <div class="env-row"><code>DB_HOST</code><code>{connection.host}</code></div>
-                            <div class="env-row"><code>DB_PORT</code><code>{connection.port}</code></div>
-                            <div class="env-row"><code>DB_DATABASE</code><code>{connection.database}</code></div>
-                            <div class="env-row"><code>DB_USERNAME</code><code>{connection.username}</code></div>
-                            <div class="env-row"><code>DB_PASSWORD</code><code>••••••••••</code></div>
+                            <div class="env-row"><code>HOST</code><code>{connection.host}</code></div>
+                            <div class="env-row"><code>PORT</code><code>{connection.port}</code></div>
+                            <div class="env-row"><code>DATABASE</code><code>{connection.database}</code></div>
+                            <div class="env-row"><code>USERNAME</code><code>{connection.username}</code></div>
+                            <div class="env-row"><code>PASSWORD</code><code>••••••••••</code></div>
                         </div>
                     {/each}
                 </div>
+            {:else}
+                <div class="empty-state"><strong>Базы данных не подключены</strong><p>Назначь базу этому приложению в разделе управления базами данных проекта.</p></div>
             {/if}
         </Card>
     {:else if activeTab === 'build'}
@@ -1060,7 +1096,7 @@
             {/if}
         </Card>
 
-    {:else if activeTab === 'releases'}
+    {:else if activeTab === 'deployments'}
         <Card>
             <div class="release-heading">
                 <div><h2 class="details-title">Release history</h2><p class="muted">Неизменяемые версии из .yevqo/releases. Откат не запускает повторную сборку.</p></div>
