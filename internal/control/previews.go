@@ -54,6 +54,7 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 	if scopeErr != nil { apiError(w, scopeErr); return }
 	if projectID > 0 {
 		if _, err := s.authorizeProjectOwner(r.Context(), projectID, user.ID, "device.read"); err != nil { apiError(w, err); return }
+		if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
 	} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
 	ownerID := dev.UserID
 
@@ -78,6 +79,7 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 		case http.MethodPost:
 			if projectID > 0 {
 				if _, err := s.authorizeProjectOwner(r.Context(), projectID, user.ID, "preview.deploy"); err != nil { apiError(w, err); return }
+				if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, dev.UserID, user.ID, "preview.deploy"); err != nil { apiError(w, err); return }
 			} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "preview.deploy"); err != nil { apiError(w, err); return }
 			var in previewCreateInput
 			if err := decodeJSON(r,&in); err != nil { apiError(w,shared.ErrBadRequest("invalid JSON")); return }
@@ -123,6 +125,7 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 	if r.Method != http.MethodDelete { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
 	if projectID > 0 {
 		if _, err := s.authorizeProjectOwner(r.Context(), projectID, user.ID, "preview.delete"); err != nil { apiError(w, err); return }
+			if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, dev.UserID, user.ID, "preview.delete"); err != nil { apiError(w, err); return }
 	} else if err := s.authorizeWorkspace(r.Context(),dev.UserID,user.ID,"preview.delete"); err != nil { apiError(w,err); return }
 	if len(previewKey)!=32 { apiError(w,shared.ErrBadRequest("invalid preview key")); return }
 	var status string
