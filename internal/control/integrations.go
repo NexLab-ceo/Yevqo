@@ -243,18 +243,30 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 	}
 	var repos []providerRepository
 	if provider=="github" || isGitHubApp {
-		endpoint := "https://api.github.com/user/repos?per_page=100&sort=updated"
-		if isGitHubApp { endpoint = "https://api.github.com/installation/repositories?per_page=100" }
-		resp,err:=providerRequest(ctx,"github",string(token),endpoint)
-		if err!=nil { apiError(w,shared.ErrInternal("GitHub API is unavailable"));return }
 		type githubRepository struct { ID int64 `json:"id"`; Name string `json:"name"`; FullName string `json:"full_name"`; CloneURL string `json:"clone_url"`; DefaultBranch string `json:"default_branch"`; Private bool `json:"private"`; HTMLURL string `json:"html_url"` }
-		var values []githubRepository
+		appendRepositories := func(values []githubRepository) {
+			for _,v := range values { repos=append(repos,providerRepository{ID:strconv.FormatInt(v.ID,10),Name:v.Name,FullName:v.FullName,CloneURL:v.CloneURL,DefaultBranch:v.DefaultBranch,Private:v.Private,WebURL:v.HTMLURL}) }
+		}
 		if isGitHubApp {
-			var page struct { Repositories []githubRepository `json:"repositories"` }
-			if err:=readProviderJSON(resp,&page);err!=nil { apiError(w,shared.ErrBadRequest("GitHub App repository access was rejected"));return }
-			values=page.Repositories
-		} else if err:=readProviderJSON(resp,&values);err!=nil { apiError(w,shared.ErrBadRequest("GitHub rejected repository access"));return }
-		for _,v:=range values { repos=append(repos,providerRepository{ID:strconv.FormatInt(v.ID,10),Name:v.Name,FullName:v.FullName,CloneURL:v.CloneURL,DefaultBranch:v.DefaultBranch,Private:v.Private,WebURL:v.HTMLURL}) }
+			// GitHub returns at most 100 installation repositories per page.
+			// Load up to 10 pages so installations with larger repositories sets
+			// are not silently truncated to the first 100 entries.
+			for pageNumber:=1;pageNumber<=10;pageNumber++ {
+				endpoint:=fmt.Sprintf("https://api.github.com/installation/repositories?per_page=100&page=%d",pageNumber)
+				resp,requestErr:=providerRequest(ctx,"github",string(token),endpoint)
+				if requestErr!=nil { apiError(w,shared.ErrInternal("GitHub API is unavailable"));return }
+				var page struct { TotalCount int `json:"total_count"`; Repositories []githubRepository `json:"repositories"` }
+				if decodeErr:=readProviderJSON(resp,&page);decodeErr!=nil { apiError(w,shared.ErrBadRequest("GitHub App repository access was rejected"));return }
+				appendRepositories(page.Repositories)
+				if len(page.Repositories)<100 || len(repos)>=page.TotalCount { break }
+			}
+		} else {
+			resp,requestErr:=providerRequest(ctx,"github",string(token),"https://api.github.com/user/repos?per_page=100&sort=updated")
+			if requestErr!=nil { apiError(w,shared.ErrInternal("GitHub API is unavailable"));return }
+			var values []githubRepository
+			if decodeErr:=readProviderJSON(resp,&values);decodeErr!=nil { apiError(w,shared.ErrBadRequest("GitHub rejected repository access"));return }
+			appendRepositories(values)
+		}
 	} else if provider=="gitlab" {
 		resp,err:=providerRequest(ctx,provider,string(token),"https://gitlab.com/api/v4/projects?membership=true&per_page=100&order_by=last_activity_at")
 		if err!=nil { apiError(w,shared.ErrInternal("GitLab API is unavailable"));return }
