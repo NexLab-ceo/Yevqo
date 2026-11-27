@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"encoding/json"
 	"net/http"
 	"path/filepath"
@@ -209,6 +210,11 @@ func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Reques
 				var siteID, name, username, engine string
 				var port int
 				if err := rows.Scan(&id, &deviceID, &siteID, &name, &username, &port, &engine); err != nil { apiError(w, shared.ErrInternal("could not read database links")); return }
+				if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, ownerID, u.ID, "device.read"); err != nil {
+					var apiErr *shared.APIError
+					if errors.As(err, &apiErr) && apiErr.Code == http.StatusForbidden { continue }
+					apiError(w, err); return
+				}
 				out = append(out, map[string]interface{}{"id": id, "device_id": deviceID, "site_id": siteID, "database": name, "engine": engine, "username": username, "host": "127.0.0.1", "port": port})
 			}
 			if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read database links")); return }
@@ -218,9 +224,11 @@ func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Reques
 		deviceID, _ := strconv.ParseInt(r.URL.Query().Get("device_id"), 10, 64)
 		siteID := r.URL.Query().Get("site_id")
 		if deviceID < 1 || siteID == "" { apiError(w, shared.ErrBadRequest("device_id and site_id are required")); return }
-		ownerID, accessErr := s.authorizeDeviceOwner(r.Context(), deviceID, u.ID, "device.read")
-		if accessErr != nil { apiError(w, accessErr); return }
-		if err := s.authorizeWorkspace(r.Context(), ownerID, u.ID, "database.read"); err != nil { apiError(w, err); return }
+		var ownerID int64
+		if err := s.db.conn.QueryRowContext(r.Context(), "SELECT user_id FROM devices WHERE id=?", deviceID).Scan(&ownerID); err != nil {
+			apiError(w, shared.ErrNotFound("device not found")); return
+		}
+		if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, ownerID, u.ID, "device.read"); err != nil { apiError(w, err); return }
 		rows, err := s.db.conn.QueryContext(r.Context(), `SELECT c.id,c.database_id,d.name,ds.port,dc.username
 			FROM site_database_connections c JOIN db_instances d ON d.id=c.database_id
 			JOIN database_servers ds ON ds.id=d.server_id JOIN database_credentials dc ON dc.database_id=d.id
@@ -233,6 +241,11 @@ func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Reques
 			var name, username string
 			var port int
 			if err := rows.Scan(&id, &databaseID, &name, &port, &username); err != nil { apiError(w, shared.ErrInternal("could not read connections")); return }
+			if _, _, _, accessErr := s.authorizeDatabaseInstance(r.Context(), databaseID, u.ID, "database.read"); accessErr != nil {
+				var apiErr *shared.APIError
+				if errors.As(accessErr, &apiErr) && apiErr.Code == http.StatusForbidden { continue }
+				apiError(w, accessErr); return
+			}
 			out = append(out, map[string]interface{}{"id": id, "database_id": databaseID, "database": name, "username": username, "host": "127.0.0.1", "port": port})
 		}
 		if err := rows.Err(); err != nil { apiError(w, shared.ErrInternal("could not read connections")); return }
@@ -248,6 +261,7 @@ func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Reques
 		siteOwnerID, siteErr := s.authorizeDeviceOwner(r.Context(), in.DeviceID, u.ID, "device.read")
 		if siteErr != nil { apiError(w, siteErr); return }
 		if siteOwnerID != ownerID { apiError(w, shared.ErrNotFound("website not found")); return }
+		if err := s.authorizeSiteProjects(r.Context(), in.DeviceID, in.SiteID, ownerID, u.ID, "site.configure"); err != nil { apiError(w, err); return }
 		var dbStatus, serverStatus string
 		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT d.status,ds.status FROM db_instances d JOIN database_servers ds ON ds.id=d.server_id WHERE d.id=? AND d.user_id=?`, in.DatabaseID, ownerID).Scan(&dbStatus, &serverStatus); err != nil {
 			apiError(w, shared.ErrInternal("could not inspect database")); return
@@ -264,11 +278,17 @@ func (s *Server) handleDatabaseConnections(w http.ResponseWriter, r *http.Reques
 	case http.MethodDelete:
 		var in struct { ID int64 `json:"id"` }
 		if err := decodeJSON(r, &in); err != nil || in.ID < 1 { apiError(w, shared.ErrBadRequest("invalid connection id")); return }
-		var ownerID int64
-		err := s.db.conn.QueryRowContext(r.Context(), `SELECT user_id FROM site_database_connections WHERE id=?`, in.ID).Scan(&ownerID)
+		var ownerID, deviceID, databaseID int64
+		var siteID string
+		err := s.db.conn.QueryRowContext(r.Context(), `SELECT user_id,device_id,site_id,database_id FROM site_database_connections WHERE id=?`, in.ID).Scan(&ownerID, &deviceID, &siteID, &databaseID)
 		if err == sql.ErrNoRows { apiError(w, shared.ErrNotFound("connection not found")); return }
 		if err != nil { apiError(w, shared.ErrInternal("could not resolve database connection owner")); return }
-		if err := s.authorizeWorkspace(r.Context(), ownerID, u.ID, "database.manage"); err != nil { apiError(w, err); return }
+		databaseOwnerID, _, databaseDeviceID, accessErr := s.authorizeDatabaseInstance(r.Context(), databaseID, u.ID, "database.manage")
+		if accessErr != nil { apiError(w, accessErr); return }
+		if databaseOwnerID != ownerID || databaseDeviceID != deviceID { apiError(w, shared.ErrNotFound("connection not found")); return }
+		var siteOwnerID int64
+		if err := s.db.conn.QueryRowContext(r.Context(), "SELECT user_id FROM devices WHERE id=?", deviceID).Scan(&siteOwnerID); err != nil || siteOwnerID != ownerID { apiError(w, shared.ErrNotFound("connection not found")); return }
+		if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, ownerID, u.ID, "site.configure"); err != nil { apiError(w, err); return }
 		res, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM site_database_connections WHERE id=? AND user_id=?`, in.ID, ownerID)
 		if err != nil { apiError(w, shared.ErrInternal("could not remove site connection")); return }
 		n, _ := res.RowsAffected()
