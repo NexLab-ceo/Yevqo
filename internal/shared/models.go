@@ -14,6 +14,7 @@ import "time"
 const (
 	UserFree       = "free"
 	UserCommercial = "commercial"
+	UserPro        = "pro"
 	UserBlocked    = "blocked"
 )
 
@@ -76,6 +77,7 @@ type User struct {
 // Free is intentionally capped at one phone; referral bonuses never bypass it.
 func DeviceLimitFor(status string, maxDevices, bonusDevices int) int {
 	if status == UserFree { return 1 }
+	if status == UserPro { return int(^uint(0) >> 1) }
 	limit := maxDevices + bonusDevices
 	if limit < 1 { return 1 }
 	return limit
