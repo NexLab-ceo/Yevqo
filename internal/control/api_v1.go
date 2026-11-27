@@ -1,6 +1,7 @@
 package control
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -88,7 +89,7 @@ func (s *Server) requireProAPI(next http.HandlerFunc) http.HandlerFunc {
 		if err!=nil { apiError(w,shared.ErrUnauthorized("API account unavailable")); return }
 		_,_=s.db.conn.ExecContext(r.Context(),`UPDATE api_keys SET last_used_at=UTC_TIMESTAMP() WHERE id=?`,keyID)
 		ctx:=r.Context()
-		ctx=withAPIUser(ctx,user)
+		ctx=context.WithValue(ctx,ctxKeyUser,user)
 		next(w,r.WithContext(ctx))
 	}
 }
