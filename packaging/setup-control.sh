@@ -37,8 +37,30 @@ if [ -z "${YEVQO_DATA_ROOT:-}" ] && [ -z "${VELTRIX_DATA_ROOT:-}" ] && [ -e "$LE
   fi
 fi
 
-CONFIG_FILE="$DATA_ROOT/config/config.json"
+LEGACY_CONFIG_FILE="$DATA_ROOT/config/config.json"
+CONFIG_DIR="$PREFIX/var/lib/yevqo-control/config"
+CONFIG_FILE="$CONFIG_DIR/config.json"
 SERVICE_DIR="$PREFIX/var/service/yevqo-control"
+mkdir -p "$CONFIG_DIR"
+chmod 700 "$PREFIX/var/lib/yevqo-control" "$CONFIG_DIR"
+if [ -L "$CONFIG_FILE" ] || { [ -e "$CONFIG_FILE" ] && [ ! -f "$CONFIG_FILE" ]; }; then
+  echo "Unsafe private Control Plane config path; refusing to follow it." >&2
+  exit 1
+fi
+if [ ! -e "$CONFIG_FILE" ] && [ -e "$LEGACY_CONFIG_FILE" ]; then
+  if [ -L "$LEGACY_CONFIG_FILE" ] || [ ! -f "$LEGACY_CONFIG_FILE" ]; then
+    echo "Unsafe legacy Control Plane config; refusing migration." >&2
+    exit 1
+  fi
+  TMP_CONFIG="$CONFIG_FILE.tmp"
+  cp "$LEGACY_CONFIG_FILE" "$TMP_CONFIG"
+  chmod 600 "$TMP_CONFIG"
+  cmp -s "$LEGACY_CONFIG_FILE" "$TMP_CONFIG" || { rm -f "$TMP_CONFIG"; echo "Control Plane config migration verification failed." >&2; exit 1; }
+  mv "$TMP_CONFIG" "$CONFIG_FILE"
+  rm -f "$LEGACY_CONFIG_FILE"
+  log "Migrated Control Plane credentials into Termux private storage"
+fi
+if [ -f "$CONFIG_FILE" ]; then chmod 600 "$CONFIG_FILE"; fi
 command -v mysql >/dev/null 2>&1 || { echo "MariaDB client missing; install package mariadb first" >&2; exit 1; }
 mkdir -p "$DATA_ROOT"/{config,logs,data,migrations,public,backups}
 if [ ! -d "$PREFIX/var/lib/mysql/mysql" ]; then
