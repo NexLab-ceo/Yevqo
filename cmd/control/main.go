@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -56,6 +57,24 @@ func main() {
 	log.Println("shutting down...")
 }
 
+
+func secureConfigFile(path string) (bool, error) {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("inspect config file: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return false, fmt.Errorf("config must be a regular file, not a symlink or special file")
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return false, fmt.Errorf("restrict config permissions: %w", err)
+	}
+	return true, nil
+}
+
 // loadConfig загружает конфиг из файла или создаёт дефолтный.
 func loadConfig(path, dataRoot string) control.Config {
 	cfg := defaultConfig
@@ -70,18 +89,26 @@ func loadConfig(path, dataRoot string) control.Config {
 		path = filepath.Join(cfg.DataRoot, "config", "config.json")
 	}
 
-	// Если файла нет — создаём дефолтный.
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	exists, err := secureConfigFile(path)
+	if err != nil {
+		log.Fatalf("secure config: %v", err)
+	}
+	if !exists {
 		log.Printf("config not found, creating default at %s", path)
-		_ = os.MkdirAll(filepath.Dir(path), 0o755)
-		b, _ := json.MarshalIndent(cfg, "", "  ")
-		if err := os.WriteFile(path, b, 0o644); err != nil {
-			log.Printf("warning: cannot write default config: %v", err)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			log.Fatalf("create config directory: %v", err)
+		}
+		b, err := json.MarshalIndent(cfg, "", "  ")
+		if err != nil {
+			log.Fatalf("encode default config: %v", err)
+		}
+		if err := os.WriteFile(path, b, 0o600); err != nil {
+			log.Fatalf("write default config: %v", err)
 		}
 		return cfg
 	}
 
-	// Читаем файл.
+	// Читаем файл после проверки типа и ограничения прав доступа.
 	b, err := os.ReadFile(path)
 	if err != nil {
 		log.Fatalf("read config: %v", err)
