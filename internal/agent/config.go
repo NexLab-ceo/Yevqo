@@ -30,7 +30,8 @@ func LoadConfig(path string) (*Config, error) {
 		path = DefaultConfigPath
 	}
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
 		cfg := &Config{
 			DataRoot: DefaultDataRoot,
 		}
@@ -41,6 +42,17 @@ func LoadConfig(path string) (*Config, error) {
 			return nil, err
 		}
 		return cfg, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("inspect agent.json: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("agent.json must be a regular file, not a symlink or special file")
+	}
+	// Existing configs may have been created by older releases with broader
+	// permissions. Tighten them before reading the pairing token.
+	if err := os.Chmod(path, 0o600); err != nil {
+		return nil, fmt.Errorf("secure agent.json permissions: %w", err)
 	}
 
 	b, err := os.ReadFile(path)
