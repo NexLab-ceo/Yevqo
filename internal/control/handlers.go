@@ -514,6 +514,7 @@ func (s *Server) handleSendCommand(w http.ResponseWriter, r *http.Request, dev *
 		}
 		if siteID != "" {
 			if err := s.requireProjectSite(r.Context(), effectiveProjectID, dev.ID, siteID); err != nil { apiError(w, err); return }
+			if err := s.authorizeSiteProjects(r.Context(), dev.ID, siteID, dev.UserID, user.ID, req.Action); err != nil { apiError(w, err); return }
 		}
 	} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, req.Action); err != nil {
 		apiError(w, err)
