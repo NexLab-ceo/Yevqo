@@ -163,9 +163,9 @@ func (s *Server) authorizeProjectLogDetails(ctx context.Context, projectID, owne
 
 	if databaseID, exists := projectLogDetailID(details, "database_id"); exists {
 		if databaseID < 1 { return shared.ErrForbidden("database log has no valid resource scope") }
-		resourceOwnerID, _, _, err := s.authorizeDatabaseInstance(ctx, databaseID, actorID, "database.read")
+		resourceOwnerID, _, resourceDeviceID, err := s.authorizeDatabaseInstance(ctx, databaseID, actorID, "database.read")
 		if err != nil { return err }
-		if resourceOwnerID != ownerID { return shared.ErrForbidden("database log is outside this workspace") }
+		if resourceOwnerID != ownerID || (deviceID > 0 && resourceDeviceID != deviceID) { return shared.ErrForbidden("database log is outside this workspace or device") }
 		if projectID > 0 {
 			var linked int
 			if err := s.db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM project_database_servers pds JOIN db_instances d ON d.server_id=pds.database_server_id WHERE pds.project_id=? AND d.id=? AND d.user_id=?`, projectID, databaseID, ownerID).Scan(&linked); err != nil { return shared.ErrInternal("could not check project database log scope") }
@@ -175,9 +175,9 @@ func (s *Server) authorizeProjectLogDetails(ctx context.Context, projectID, owne
 	for _, key := range []string{"database_server_id"} {
 		if serverID, exists := projectLogDetailID(details, key); exists {
 			if serverID < 1 { return shared.ErrForbidden("database server log has no valid resource scope") }
-			resourceOwnerID, _, err := s.authorizeDatabaseServer(ctx, serverID, actorID, "database.read")
+			resourceOwnerID, resourceDeviceID, err := s.authorizeDatabaseServer(ctx, serverID, actorID, "database.read")
 			if err != nil { return err }
-			if resourceOwnerID != ownerID { return shared.ErrForbidden("database server log is outside this workspace") }
+			if resourceOwnerID != ownerID || (deviceID > 0 && resourceDeviceID != deviceID) { return shared.ErrForbidden("database server log is outside this workspace or device") }
 			if projectID > 0 {
 				var linked int
 				if err := s.db.conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM project_database_servers WHERE project_id=? AND database_server_id=?`, projectID, serverID).Scan(&linked); err != nil { return shared.ErrInternal("could not check project database server log scope") }
@@ -187,9 +187,9 @@ func (s *Server) authorizeProjectLogDetails(ctx context.Context, projectID, owne
 	}
 	if backupID, exists := projectLogDetailID(details, "backup_id"); exists {
 		if backupID < 1 { return shared.ErrForbidden("backup log has no valid resource scope") }
-		resourceOwnerID, _, err := s.authorizeBackup(ctx, backupID, actorID, "backup.read")
+		resourceOwnerID, resourceDeviceID, err := s.authorizeBackup(ctx, backupID, actorID, "backup.read")
 		if err != nil { return err }
-		if resourceOwnerID != ownerID { return shared.ErrForbidden("backup log is outside this workspace") }
+		if resourceOwnerID != ownerID || (deviceID > 0 && resourceDeviceID != deviceID) { return shared.ErrForbidden("backup log is outside this workspace or device") }
 	}
 	return nil
 }
