@@ -99,6 +99,7 @@ func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request, user
 		return
 	}
 
+	user.IsAdmin = user.Username == s.adminUsername
 	devices, _ := s.db.ListDevicesByUser(r.Context(), userID)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
