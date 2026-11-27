@@ -648,7 +648,7 @@ func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 			FROM build_jobs b WHERE b.user_id=? AND b.created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? DAY)
 			AND EXISTS(SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=b.device_id AND ps.site_id=b.site_id)`, ownerID, days, projectID).Scan(&buildJobs,&buildSucceeded,&buildFailed)
 		if err != nil { apiError(w, shared.ErrInternal("could not load project build analytics")); return }
-	} else {
+	} else if projectID == 0 {
 		err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*),COALESCE(SUM(status='succeeded'),0),COALESCE(SUM(status='failed'),0)
 			FROM build_jobs WHERE user_id=? AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? DAY)`, ownerID, days).Scan(&buildJobs,&buildSucceeded,&buildFailed)
 		if err != nil { apiError(w, shared.ErrInternal("could not load build analytics")); return }
@@ -660,7 +660,7 @@ func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 			AND ((b.resource_type='site' AND EXISTS(SELECT 1 FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=b.device_id AND b.resource_id=CONCAT(ps.device_id,':',ps.site_id)))
 			OR (b.resource_type='database' AND EXISTS(SELECT 1 FROM project_database_servers pds JOIN db_instances d ON d.server_id=pds.database_server_id WHERE pds.project_id=? AND d.user_id=b.user_id AND CAST(d.id AS CHAR)=b.resource_id)))`, ownerID, days, projectID, projectID).Scan(&backups,&backupsCompleted,&backupsFailed)
 		if err != nil { apiError(w, shared.ErrInternal("could not load project backup analytics")); return }
-	} else {
+	} else if projectID == 0 {
 		err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*),COALESCE(SUM(status IN ('completed','verified')),0),COALESCE(SUM(status='failed'),0)
 			FROM backups WHERE user_id=? AND created_at>=DATE_SUB(UTC_TIMESTAMP(),INTERVAL ? DAY)`, ownerID, days).Scan(&backups,&backupsCompleted,&backupsFailed)
 		if err != nil { apiError(w, shared.ErrInternal("could not load backup analytics")); return }
@@ -891,12 +891,15 @@ func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
 	ownerID := u.ID
 	projectID := int64(0)
+	role := "owner"
 	if raw := r.URL.Query().Get("project_id"); raw != "" {
 		parsed, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
 		resolved, accessErr := s.authorizeProjectOwner(r.Context(), parsed, u.ID, "device.metrics")
 		if accessErr != nil { apiError(w, accessErr); return }
 		projectID, ownerID = parsed, resolved
+		role, roleErr := s.projectAccessRole(r.Context(), projectID, u.ID, ownerID)
+		if roleErr != nil { apiError(w, roleErr); return }
 	}
 	var totalDevices, onlineDevices, totalSites, runningSites, totalDB int
 	var rows *sql.Rows
@@ -906,7 +909,9 @@ func (s *Server) handleMonitoring(w http.ResponseWriter, r *http.Request) {
 		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_devices pd JOIN devices d ON d.id=pd.device_id WHERE pd.project_id=? AND d.user_id=? AND d.status='online'`, projectID, ownerID).Scan(&onlineDevices)
 		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites ps JOIN sites st ON st.device_id=ps.device_id AND st.site_id=ps.site_id WHERE ps.project_id=?`, projectID).Scan(&totalSites)
 		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_sites ps JOIN sites st ON st.device_id=ps.device_id AND st.site_id=ps.site_id WHERE ps.project_id=? AND st.status='running'`, projectID).Scan(&runningSites)
-		_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.user_id=?`, projectID, ownerID).Scan(&totalDB)
+		if CanWorkspaceAction(role, "database.read") {
+			_ = s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM project_database_servers pds JOIN database_servers ds ON ds.id=pds.database_server_id WHERE pds.project_id=? AND ds.user_id=?`, projectID, ownerID).Scan(&totalDB)
+		}
 		rows, err = s.db.conn.QueryContext(r.Context(), `SELECT d.id,COALESCE(d.hostname,'Android host'),d.status,d.agent_version,d.last_seen,
 			(SELECT COUNT(*) FROM project_sites ps WHERE ps.project_id=? AND ps.device_id=d.id),
 			(SELECT COUNT(*) FROM project_sites ps JOIN sites st ON st.device_id=ps.device_id AND st.site_id=ps.site_id WHERE ps.project_id=? AND ps.device_id=d.id AND st.status='running'),
