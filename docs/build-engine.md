@@ -176,6 +176,14 @@ install/build commands are used by default; a saved build command can override t
 detected build step. The active release is not replaced when build or readiness
 checks fail.
 
+The stable listener for a deployed site's configured public port binds to
+`0.0.0.0`, so the site can accept connections through the Android device's LAN
+interfaces as well as loopback and a local Cloudflare Tunnel. The selected release
+backend remains bound to `127.0.0.1`; only the Agent-owned reverse proxy is exposed.
+This makes published site ports reachable by other devices on networks that can
+route to the phone. Use a trusted LAN or an explicit firewall/network policy; do
+not assume the Android device's Wi-Fi network is isolated from untrusted clients.
+
 Built-in PHP, Go, Static and Node.js runtimes retain their existing launch behavior.
 The **Custom Language App** runtime can launch any installed Termux tool or an
 executable file inside the release directory through an explicit shell-free
