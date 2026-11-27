@@ -93,7 +93,7 @@
         </div>
         <div class="header-actions">
             {#if !user.is_admin && user.status !== 'blocked'}
-                <Button variant="secondary" size="sm" on:click={togglePlan} disabled={busy}>{user.status === 'pro' ? 'Перевести на Free' : 'Назначить Pro'}</Button>
+                <Button variant="default" size="sm" on:click={togglePlan} disabled={busy}>{user.status === 'pro' ? 'Перевести на Free' : 'Назначить Pro'}</Button>
             {/if}
             {#if user.status === 'blocked'}
                 <Button variant="primary" size="sm" on:click={() => askBlock('unblock')} disabled={busy}>
