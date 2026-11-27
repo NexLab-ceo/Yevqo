@@ -44,6 +44,7 @@ func TestLoadConfigMigratesLegacyStaticPathToExplicitDataRoot(t *testing.T) {
 
 func TestLoadConfigPreservesCustomStaticPath(t *testing.T) {
 	root := t.TempDir()
+	t.Setenv("PREFIX", filepath.Join(root, "prefix"))
 	configDir := filepath.Join(root, "config")
 	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatal(err)
