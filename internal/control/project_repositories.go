@@ -114,7 +114,7 @@ func (s *Server) handleProjectRepository(w http.ResponseWriter, r *http.Request)
 	}
 	action := "project.manage"
 	if r.Method == http.MethodGet { action = "project.read" }
-	if err := s.authorizeWorkspace(r.Context(), ownerID, u.ID, action); err != nil { apiError(w, err); return }
+	if err := s.authorizeProjectAction(r.Context(), projectID, u.ID, action); err != nil { apiError(w, err); return }
 
 	sub := ""
 	if len(parts) == 3 { sub = parts[2] }
