@@ -50,6 +50,7 @@
         goto(url.pathname + url.search, { replaceState: true, keepfocus: true, noScroll: true });
         if (tab === 'tasks') refreshScheduledTasks();
         if (tab === 'deployments') loadReleases();
+        if (tab === 'build') loadBuildHistory();
         if (tab === 'monitoring') loadProcessMetrics();
     }
     let domainDraft = '';
@@ -95,6 +96,8 @@
     let allowProjectCode = false;
     let allowDeployCode = false;
     let buildResult = null;
+    let buildHistory = [];
+    let buildHistoryLoading = false;
     let processMetrics = null;
     let metricsPoller = null;
     let metricsBusy = false;
@@ -126,6 +129,7 @@
         activeTab = siteTabs.includes(requestedTab) ? requestedTab : 'general';
         await refresh();
         if (activeTab === 'deployments') loadReleases();
+        if (activeTab === 'build') loadBuildHistory();
         if (activeTab === 'monitoring') loadProcessMetrics();
         if (activeTab === 'tasks') refreshScheduledTasks();
         loading = false;
@@ -641,6 +645,23 @@
         }
     }
 
+    async function loadBuildHistory() {
+        if (!online || buildHistoryLoading) { if (!online) buildHistory = []; return; }
+        buildHistoryLoading = true;
+        const res = await sendCommand(deviceId, 'list_build_history', { site_id: siteId, limit: 10 }, projectId);
+        buildHistoryLoading = false;
+        if (!res.ok || !res.data?.ok) { buildHistory = []; return; }
+        try { buildHistory = JSON.parse(decodeLogs(res.data.payload)).records || []; }
+        catch { buildHistory = []; }
+    }
+    async function viewBuildHistory(record) {
+        if (!record?.id || !online) return;
+        const res = await sendCommand(deviceId, 'get_build_history', { site_id: siteId, id: record.id }, projectId);
+        if (!res.ok || !res.data?.ok) { notify(res.error || res.data?.message || 'Не удалось открыть лог сборки', 'error'); return; }
+        try { buildResult = JSON.parse(decodeLogs(res.data.payload)); }
+        catch { notify('Не удалось прочитать запись сборки', 'error'); }
+    }
+
     async function analyzeBuild() {
         if (!online || analyzingBuild) return;
         analyzingBuild = true;
@@ -1079,6 +1100,18 @@
                     {:else}
                         <p class="build-warning">Этот тип проекта пока не поддерживается локальным Android provider. Сборка не будет запускаться.</p>
                     {/if}
+                    <div class="build-history">
+                        <div class="metrics-card-head"><h3>История сборок</h3><Button size="sm" on:click={loadBuildHistory} disabled={!online || buildHistoryLoading}>{buildHistoryLoading?'Загрузка…':'Обновить'}</Button></div>
+                        {#if buildHistoryLoading}<p class="muted">Загрузка истории сборок…</p>
+                        {:else if buildHistory.length}
+                            {#each buildHistory as record (record.id)}
+                                <button class="build-history-row" on:click={() => viewBuildHistory(record)}>
+                                    <span><strong>{record.id}</strong><small>{record.started_at ? new Date(record.started_at).toLocaleString() : record.created_at ? new Date(record.created_at).toLocaleString() : '—'}</small></span>
+                                    <em class:build-success-text={record.result?.success} class:build-failure-text={record.result?.success===false}>{record.result?.success===true?'Успешно':record.result?.success===false?'Ошибка':record.status||'Запись'}</em>
+                                </button>
+                            {/each}
+                        {:else}<p class="muted">История сборок пока пуста.</p>{/if}
+                    </div>
                     {#if buildResult}
                         <div class:build-success={buildResult.success} class:build-failure={!buildResult.success} class="build-result">
                             <strong>{buildResult.success ? 'Build completed' : 'Build failed'}</strong>
@@ -1218,6 +1251,7 @@
 
 <style>
 .task-create{display:grid;gap:8px;margin:14px 0;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--bg-base)}.task-command{width:100%;font:11px/1.5 ui-monospace,monospace;resize:vertical}.task-create-actions{display:flex;gap:8px}.task-create-actions .input{flex:1}.task-list{display:grid;gap:8px}.task-item{display:grid;gap:7px;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--bg-base)}.task-item-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.task-item-head>div:first-child{display:flex;align-items:center;gap:9px}.task-item-head strong{font-size:11px}.task-state{font-size:9px;color:var(--success)}.task-state.task-failed,.task-failed{color:var(--danger)}.task-buttons{display:flex;gap:6px}.task-item code{font-size:10px;color:var(--text-main);overflow-wrap:anywhere}.task-item small{font-size:9px;color:var(--text-muted)}.task-output-toggle{justify-self:start;background:transparent;border:0;color:#8AB4FF;font-size:10px}.task-output{max-height:220px;overflow:auto;padding:10px;background:var(--bg-base);border-radius:7px;color:var(--text-muted);font-size:10px;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:560px){.task-create-actions{flex-direction:column}.task-item-head{align-items:flex-start;flex-direction:column}}
+.build-history{margin-top:18px;border-top:1px solid var(--border);padding-top:14px}.build-history-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border:0;border-bottom:1px solid var(--border);background:transparent;color:var(--text-main);text-align:left}.build-history-row span{display:grid;gap:4px}.build-history-row strong{font:10px var(--mono,monospace)}.build-history-row small,.build-history-row em{font-size:9px;color:var(--text-muted);font-style:normal}.build-history-row .build-success-text{color:var(--success)}.build-history-row .build-failure-text{color:var(--danger)}
 .metrics-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.process-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.process-metrics>div{display:grid;gap:5px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-base)}.process-metrics span{font-size:9px;color:var(--text-muted)}.process-metrics strong{font-size:15px;color:var(--text-main)}@media(max-width:560px){.process-metrics{grid-template-columns:1fr}}
 .webhook-panel{display:grid;gap:9px;margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-base)}.webhook-panel h3{font-size:13px}.webhook-state{color:var(--success);font-size:11px}.webhook-url{display:flex;align-items:center;justify-content:space-between;gap:8px}.webhook-url code,.webhook-secret code{overflow-wrap:anywhere;color:var(--accent);font-size:11px}.webhook-consent{display:flex;gap:8px;align-items:flex-start;color:var(--warning);font-size:11px}.webhook-secret{display:grid;gap:8px;padding:10px;border:1px solid var(--warning);border-radius:8px}.webhook-secret small{color:var(--text-muted);font-size:10px;line-height:1.5}
 .env-header,.env-list-head,.env-import-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
