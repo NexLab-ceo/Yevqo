@@ -813,7 +813,7 @@
         if (selected) {
             selectedGitHubRepository = selected.full_name;
             if (!gitForm.repository_url || match) gitForm.repository_url = selected.clone_url || `https://github.com/${selected.full_name}.git`;
-            if (!gitForm.branch || match || !gitForm.branch.trim()) gitForm.branch = selected.default_branch || 'main';
+            if (!gitForm.branch || !gitForm.branch.trim()) gitForm.branch = selected.default_branch || 'main';
         } else if (!selectedGitHubRepository && gitHubRepositories.length === 1) {
             selectedGitHubRepository = gitHubRepositories[0].full_name;
             gitForm.repository_url = gitHubRepositories[0].clone_url || `https://github.com/${gitHubRepositories[0].full_name}.git`;
