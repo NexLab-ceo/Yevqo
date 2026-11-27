@@ -3,7 +3,7 @@
  import {onMount} from 'svelte';
  import {page} from '$app/stores';
  import {goto} from '$app/navigation';
- import {user,isAuthenticated,uiMode,theme,notify,notifications,workspaceName,compactMode} from '$lib/stores.js';
+ import {user,isAuthenticated,uiMode,theme,notify,notifications as toastNotifications,workspaceName,compactMode} from '$lib/stores.js';
  import {logout,me,getSettings,saveSettings,listProjects,listDevices,listDeployments,listLogs,listNotifications,markNotificationRead,listIntegrations,listIntegrationRepositories} from '$lib/api.js';
  import {locale} from '$lib/i18n.js';
  import {setDatePreferences,formatDate} from '$lib/date.js';
@@ -75,9 +75,9 @@
   </header>
   <div class="page-scroll"><div class="page-container"><slot/></div></div>
  </main>
- {#if $notifications.length}
+ {#if $toastNotifications.length}
   <div class="toast-stack" aria-live="polite" aria-relevant="additions">
-   {#each $notifications as item (item.id)}
+   {#each $toastNotifications as item (item.id)}
     <div class={"toast-item toast-"+(item.type||"info")} role={item.type==="error"?"alert":"status"}>{item.message}</div>
    {/each}
   </div>
