@@ -201,7 +201,7 @@ func (s *Server) Start() error {
 		Handler:           s.loggingMiddleware(s.mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      7 * time.Minute,
 		IdleTimeout:       60 * time.Second,
 	}
 
