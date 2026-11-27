@@ -16,16 +16,19 @@ termux-setup-storage
 
 ## Install the current CI package
 
-1. Open the successful [Yevqo build workflow run #989](https://github.com/NexLab-ceo/veltrix/actions/runs/44488615633).
-2. Download the `veltrix-android-aarch64-989` artifact and extract the ZIP in Termux-accessible storage.
-3. Install the all-in-one package (the artifact contains both all-in-one and Agent-only packages):
+1. Open the [Yevqo repository Actions page](https://github.com/NexLab-ceo/Yevqo/actions).
+2. Select the latest **successful** `Test Build` run for the current `main` commit. Confirm its commit SHA matches the code you intend to test.
+3. Download the artifact named `yevqo-android-aarch64-<run-number>` and extract it in Termux-accessible storage.
+4. Inspect the extracted filenames, then install the all-in-one package:
 
 ```sh
 cd ~/storage/downloads
-dpkg -i ./yevqo-all_0.1.0-dev.977_aarch64.deb
+ls -lh yevqo-*.deb SHA256SUMS
+sha256sum -c SHA256SUMS
+dpkg -i ./yevqo-all_<version>_aarch64.deb
 ```
 
-If the ZIP was extracted to another directory, change the `cd` path accordingly. The package targets Android/Termux aarch64. The Agent-only package is also included in the artifact; both packages now carry the same shared Termux boot hook.
+Replace `<version>` with the exact version in the extracted filename. If the ZIP was extracted elsewhere, change the `cd` path. The artifact contains both the all-in-one and Agent-only packages, built for Android/Termux aarch64. Do not install both editions into the same Termux environment. A successful CI artifact is for testing; it is not a published stable release.
 
 ## First Control Plane start
 
@@ -70,7 +73,8 @@ Record PASS/FAIL and the exact error for each step:
 - [ ] A new test site can be created without overwriting an existing directory.
 - [ ] The Agent can be paired with the Control Plane on the same phone.
 - [ ] Agent status changes to online and remains connected for at least 10 minutes.
-- [ ] A simple static site can be built/deployed and opened locally.
+- [ ] A simple static site can be built/deployed and opened locally on the phone.
+- [ ] From a second device on the same Wi-Fi/LAN, open `http://<PHONE_LAN_IP>:<SITE_PORT>` and verify the site responds. This tests LAN reachability only; it does not expose the site to the public Internet.
 - [ ] Stop/start the site and verify status and logs.
 - [ ] Restart the Control Plane and Agent services; verify the site state is reconciled.
 - [ ] Reboot the phone only after the above passes; verify Termux:Boot behavior separately.
