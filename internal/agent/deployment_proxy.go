@@ -56,7 +56,7 @@ func newDeploymentProxy(publicPort, backendPort int) (*deploymentProxy, error) {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       90 * time.Second,
 	}
-	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", publicPort))
+	listener, err := net.Listen("tcp4", fmt.Sprintf("0.0.0.0:%d", publicPort))
 	if err != nil {
 		return nil, fmt.Errorf("bind stable site listener on port %d: %w", publicPort, err)
 	}
