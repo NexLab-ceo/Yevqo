@@ -59,7 +59,7 @@
     <section class="nav-group app-context-nav">
      <div class="nav-label">{ru?'ТЕКУЩЕЕ ПРИЛОЖЕНИЕ':'CURRENT APPLICATION'}</div>
      {#each [['Обзор','general','◉'],['Развёртывания','deployments','↗'],['Сборки','build','⌁'],['Расписания','tasks','◷'],['Мониторинг','monitoring','⌁'],['Базы данных','databases','◈'],['Журналы','logs','⌘']] as item}
-      <a href={siteTabHref(item[1])} class:active={$page.url.searchParams.get('tab')===(item[1]==='general'?'':item[1])||(item[1]==='general'&&!$page.url.searchParams.get('tab'))} class="nav-item" on:click={()=>mobileNavOpen=false}><span class="nav-icon">{item[2]}</span><span>{ru?item[0]:({'Обзор':'Overview','Развёртывания':'Deployments','Сборки':'Builds','Расписания':'Schedules','Мониторинг':'Monitoring','Базы данных':'Databases','Журналы':'Logs'}[item[0]]||item[0])}</span></a>
+      <a href={siteTabHref(item[1])} class:active={($page.url.searchParams.get('tab')||'general')===item[1]} class="nav-item" on:click={()=>mobileNavOpen=false}><span class="nav-icon">{item[2]}</span><span>{ru?item[0]:({'Обзор':'Overview','Развёртывания':'Deployments','Сборки':'Builds','Расписания':'Schedules','Мониторинг':'Monitoring','Базы данных':'Databases','Журналы':'Logs'}[item[0]]||item[0])}</span></a>
      {/each}
     </section>
    {/if}
