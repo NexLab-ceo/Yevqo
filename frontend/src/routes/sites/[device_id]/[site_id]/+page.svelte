@@ -108,7 +108,6 @@
     let analyzingBuild = false;
     let buildRunning = false;
     let allowProjectCode = false;
-    let allowDeployCode = false;
     let buildResult = null;
     let buildHistory = [];
     let buildHistoryLoading = false;
@@ -436,10 +435,6 @@
 
     async function runAction(action) {
         if (!online || busyAction) return;
-        if ((action === 'deploy' || action === 'rebuild') && !allowDeployCode) {
-            notify('Подтвердите выполнение кода репозитория перед деплоем', 'warning');
-            return;
-        }
         busyAction = action;
         if (action === 'deploy' || action === 'rebuild') {
             deploymentJobBusy = true;
@@ -454,7 +449,7 @@
                 site_id: site.site_id, path: site.path, port: site.port, runtime: site.runtime
             }, projectId);
         } else {
-            res = await runSiteCommand(deviceId, siteId, action, action === 'deploy' || action === 'rebuild' ? allowDeployCode : false, '', action === 'deploy' || action === 'rebuild' ? deployCommit.trim() : '', projectId, environmentId);
+            res = await runSiteCommand(deviceId, siteId, action, action === 'deploy' || action === 'rebuild', '', action === 'deploy' || action === 'rebuild' ? deployCommit.trim() : '', projectId, environmentId);
         }
         busyAction = '';
         if (action === 'deploy' || action === 'rebuild') deploymentJobBusy = false;
@@ -894,13 +889,9 @@
                 <span>{site.status === 'running' ? 'Running' : site.status === 'error' ? 'Error' : 'Stopped'}</span>
             </div>
         </div>
-        <div class="deploy-consent">
-            <label><input type="checkbox" bind:checked={allowDeployCode} /> Я доверяю этому Git-репозиторию и разрешаю выполнять его install/build-скрипты на устройстве.</label>
-            <small>Код сборки выполняется с правами пользователя Agent; это не изолированная песочница.</small>
-        </div>
         <div class="actions">
-            <Button variant="primary" disabled={!online || !!busyAction || !allowDeployCode} loading={busyAction === 'deploy'} on:click={() => runAction('deploy')}>Deploy</Button>
-            <Button disabled={!online || !!busyAction || !allowDeployCode} loading={busyAction === 'rebuild'} on:click={() => runAction('rebuild')}>Rebuild</Button>
+            <Button variant="primary" disabled={!online || !!busyAction} loading={busyAction === 'deploy'} on:click={() => runAction('deploy')}>Deploy</Button>
+            <Button disabled={!online || !!busyAction} loading={busyAction === 'rebuild'} on:click={() => runAction('rebuild')}>Rebuild</Button>
             <Button disabled={!online || !!busyAction} loading={busyAction === 'restart'} on:click={() => runAction('restart')}>Reload</Button>
             {#if site.status === 'running'}
                 <Button variant="danger" disabled={!online || !!busyAction} loading={busyAction === 'stop'} on:click={() => runAction('stop')}>Stop</Button>
@@ -1360,10 +1351,6 @@
 .env-group{display:grid;gap:6px;margin:8px 0;padding:12px;border:1px solid var(--border);border-radius:8px}.env-group>strong{font-size:11px;color:var(--text-main)}
 @media(max-width:700px){.env-add{grid-template-columns:1fr}.env-list .env-row{flex-wrap:wrap}.env-search{max-width:100%;width:100%}.env-list-head{align-items:stretch;flex-direction:column}}
 .env-add{display:grid;grid-template-columns:1fr 1.4fr auto;gap:8px}.env-list{display:grid;gap:6px}.env-list .env-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-base)}.env-list .env-row code{flex:1;color:var(--accent)}.env-list .env-row span{color:var(--text-muted);font-size:10px}@media(max-width:700px){.env-add{grid-template-columns:1fr}.env-list .env-row{flex-wrap:wrap}}
-    .deploy-consent{display:grid;gap:5px;margin:12px 0;padding:10px 12px;border:1px solid var(--warning);background:var(--bg-elevated);border-radius:8px}
-    .deploy-consent label{display:flex;gap:8px;align-items:flex-start;font-size:12px;color:var(--warning);line-height:1.5}
-    .deploy-consent input{accent-color:var(--warning);margin:2px 0 0}
-    .deploy-consent small{font-size:11px;color:var(--text-muted);margin-left:22px;line-height:1.5}
     .deployment-job{display:flex;align-items:center;gap:16px;justify-content:space-between}.deployment-job p{margin:4px 0 0}.deployment-progress{height:6px;background:#27272A;border-radius:999px;overflow:hidden;margin-top:12px}.deployment-progress div{height:100%;background:var(--accent);transition:width .2s ease}
     .field-label{display:block;margin:12px 0 6px;color:var(--text-muted);font-size:11px}.tabs{display:flex;gap:6px;border-bottom:1px solid #27272A;margin:24px 0 18px;overflow:auto}
     .tabs button{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--text-muted);padding:11px 14px;cursor:pointer;white-space:nowrap;font-size:13px}
