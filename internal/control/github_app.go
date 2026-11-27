@@ -207,14 +207,20 @@ func (s *Server) githubAppTokenForRepository(ctx context.Context, userID int64, 
 
 	rows, err := s.db.conn.QueryContext(ctx, `SELECT id,account_name FROM integrations WHERE user_id=? AND provider='github_app' ORDER BY connected_at DESC`, userID)
 	if err != nil { return "", err }
-	defer rows.Close()
+	var matchedIntegrationID int64
 	for rows.Next() {
 		var integrationID int64
 		var account string
-		if err := rows.Scan(&integrationID, &account); err != nil { return "", err }
-		if !strings.EqualFold(account, owner) { continue }
-		return s.githubAppTokenForIntegrationRepository(ctx, userID, integrationID, fullName)
+		if err := rows.Scan(&integrationID, &account); err != nil { rows.Close(); return "", err }
+		if strings.EqualFold(account, owner) {
+			matchedIntegrationID = integrationID
+			break
+		}
 	}
-	if err := rows.Err(); err != nil { return "", err }
-	return "", nil
+	rowsErr := rows.Err()
+	closeErr := rows.Close()
+	if rowsErr != nil { return "", rowsErr }
+	if closeErr != nil { return "", closeErr }
+	if matchedIntegrationID == 0 { return "", nil }
+	return s.githubAppTokenForIntegrationRepository(ctx, userID, matchedIntegrationID, fullName)
 }
