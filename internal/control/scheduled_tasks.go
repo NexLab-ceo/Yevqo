@@ -26,8 +26,24 @@ type scheduledTaskView struct {
 	LastError string `json:"last_error,omitempty"`
 }
 
+func scheduledTaskPermission(method string) (string, bool) {
+	switch method {
+	case http.MethodGet:
+		return "device.read", true
+	case http.MethodPost, http.MethodPatch, http.MethodDelete:
+		return "site.configure", true
+	default:
+		return "", false
+	}
+}
+
 func (s *Server) handleScheduledTasks(w http.ResponseWriter, r *http.Request) {
 	u := UserFromContext(r.Context())
+	permission, allowedMethod := scheduledTaskPermission(r.Method)
+	if !allowedMethod {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	if r.Method == http.MethodGet {
 		deviceID, err := strconv.ParseInt(r.URL.Query().Get("device_id"), 10, 64)
 		if err != nil || deviceID < 1 { apiError(w, shared.ErrBadRequest("device_id is required")); return }
@@ -37,7 +53,7 @@ func (s *Server) handleScheduledTasks(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.conn.QueryRowContext(r.Context(), "SELECT user_id FROM devices WHERE id=?", deviceID).Scan(&ownerID); err != nil {
 			apiError(w, shared.ErrNotFound("device not found")); return
 		}
-		if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, ownerID, u.ID, "device.read"); err != nil { apiError(w, err); return }
+		if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, ownerID, u.ID, permission); err != nil { apiError(w, err); return }
 		var owned int
 		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites WHERE device_id=? AND site_id=?`, deviceID, siteID).Scan(&owned); err != nil || owned != 1 {
 			apiError(w, shared.ErrNotFound("site not found")); return
@@ -66,7 +82,7 @@ func (s *Server) handleScheduledTasks(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.conn.QueryRowContext(r.Context(), "SELECT user_id FROM devices WHERE id=?", in.DeviceID).Scan(&ownerID); err != nil {
 			apiError(w, shared.ErrNotFound("device not found")); return
 		}
-		if err := s.authorizeSiteProjects(r.Context(), in.DeviceID, in.SiteID, ownerID, u.ID, "site.configure"); err != nil { apiError(w, err); return }
+		if err := s.authorizeSiteProjects(r.Context(), in.DeviceID, in.SiteID, ownerID, u.ID, permission); err != nil { apiError(w, err); return }
 		var owned int
 		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM sites WHERE device_id=? AND site_id=?`, in.DeviceID, in.SiteID).Scan(&owned); err != nil || owned != 1 {
 			apiError(w, shared.ErrNotFound("site not found")); return
@@ -87,7 +103,7 @@ func (s *Server) handleScheduledTasks(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT user_id,device_id,site_id FROM scheduled_tasks WHERE id=?`, id).Scan(&ownerID, &deviceID, &siteID); err != nil {
 			apiError(w, shared.ErrNotFound("task not found")); return
 		}
-		if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, ownerID, u.ID, "site.configure"); err != nil { apiError(w, err); return }
+		if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, ownerID, u.ID, permission); err != nil { apiError(w, err); return }
 		if r.Method == http.MethodDelete {
 			res, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM scheduled_tasks WHERE id=? AND user_id=?`, id, ownerID)
 			if err != nil { apiError(w, shared.ErrInternal("could not delete task")); return }
