@@ -271,7 +271,7 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 		deviceID,err:=strconv.ParseInt(r.URL.Query().Get("device_id"),10,64);if err!=nil||deviceID<1{apiError(w,shared.ErrBadRequest("invalid device id"));return}
 		siteID:=r.URL.Query().Get("site_id");if !validBackupSiteID(siteID){apiError(w,shared.ErrBadRequest("invalid site id"));return}
 		dev,err:=s.db.GetDeviceByID(r.Context(),deviceID);if err!=nil{apiError(w,shared.ErrNotFound("device not found"));return}
-		if err:=s.authorizeWorkspace(r.Context(),dev.UserID,u.ID,"device.read");err!=nil{apiError(w,err);return}
+		if err:=s.authorizeSiteProjects(r.Context(),deviceID,siteID,dev.UserID,u.ID,"device.read");err!=nil{apiError(w,err);return}
 		var tunnelID,hostname string;var port int;var ingressManaged bool
 		err=s.db.conn.QueryRowContext(r.Context(),`SELECT tunnel_id,hostname,origin_port,ingress_managed FROM site_cloudflare_routes WHERE user_id=? AND device_id=? AND site_id=?`,dev.UserID,deviceID,siteID).Scan(&tunnelID,&hostname,&port,&ingressManaged)
 		if err==sql.ErrNoRows{writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"configured":false});return}
@@ -281,7 +281,7 @@ func (s *Server) handleCloudflareTunnelRoutes(w http.ResponseWriter,r *http.Requ
 	var in struct{DeviceID int64 `json:"device_id"`;SiteID string `json:"site_id"`;TunnelID string `json:"tunnel_id"`}
 	if err:=decodeJSON(r,&in);err!=nil||in.DeviceID<1||!validBackupSiteID(in.SiteID){apiError(w,shared.ErrBadRequest("invalid Cloudflare route request"));return}
 	dev,err:=s.db.GetDeviceByID(r.Context(),in.DeviceID);if err!=nil{apiError(w,shared.ErrNotFound("device not found"));return}
-	if err:=s.authorizeWorkspace(r.Context(),dev.UserID,u.ID,"site.configure");err!=nil{apiError(w,err);return}
+	if err:=s.authorizeSiteProjects(r.Context(),in.DeviceID,in.SiteID,dev.UserID,u.ID,"site.configure");err!=nil{apiError(w,err);return}
 	if r.Method==http.MethodPost {
 		if u.ID!=dev.UserID{apiError(w,shared.ErrForbidden("only the workspace owner can manage Cloudflare routes"));return}
 		if !validCloudflareTunnelID(in.TunnelID){apiError(w,shared.ErrBadRequest("invalid Cloudflare Tunnel ID"));return}
