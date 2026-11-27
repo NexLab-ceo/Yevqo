@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -58,6 +59,65 @@ func main() {
 }
 
 
+func resolveControlConfigPath(explicitPath, dataRoot, prefix string) (string, error) {
+	if explicitPath != "" {
+		return explicitPath, nil
+	}
+	if prefix == "" {
+		prefix = "/data/data/com.termux/files/usr"
+	}
+	privatePath := filepath.Join(prefix, "var", "lib", "yevqo-control", "config", "config.json")
+	legacyPath := filepath.Join(dataRoot, "config", "config.json")
+
+	privateInfo, privateErr := os.Lstat(privatePath)
+	if privateErr == nil {
+		if privateInfo.Mode()&os.ModeSymlink != 0 || !privateInfo.Mode().IsRegular() {
+			return "", fmt.Errorf("private Control Plane config must be a regular file")
+		}
+		return privatePath, nil
+	}
+	if !os.IsNotExist(privateErr) {
+		return "", fmt.Errorf("inspect private Control Plane config: %w", privateErr)
+	}
+
+	legacyInfo, legacyErr := os.Lstat(legacyPath)
+	if legacyErr == nil {
+		if legacyInfo.Mode()&os.ModeSymlink != 0 || !legacyInfo.Mode().IsRegular() {
+			return "", fmt.Errorf("legacy Control Plane config must be a regular file")
+		}
+		contents, err := os.ReadFile(legacyPath)
+		if err != nil {
+			return "", fmt.Errorf("read legacy Control Plane config: %w", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(privatePath), 0o700); err != nil {
+			return "", fmt.Errorf("create private Control Plane config directory: %w", err)
+		}
+		tmpPath := privatePath + ".tmp"
+		if err := os.WriteFile(tmpPath, contents, 0o600); err != nil {
+			return "", fmt.Errorf("write private Control Plane config: %w", err)
+		}
+		if err := os.Rename(tmpPath, privatePath); err != nil {
+			_ = os.Remove(tmpPath)
+			return "", fmt.Errorf("activate private Control Plane config: %w", err)
+		}
+		copied, err := os.ReadFile(privatePath)
+		if err != nil || !bytes.Equal(contents, copied) {
+			return "", fmt.Errorf("verify private Control Plane config migration")
+		}
+		// Remove the shared-storage copy only after byte-for-byte verification.
+		if err := os.Remove(legacyPath); err != nil {
+			log.Printf("warning: private config migrated, but old shared-storage copy remains at %s: %v", legacyPath, err)
+		} else {
+			log.Printf("migrated Control Plane config from shared storage to %s", privatePath)
+		}
+		return privatePath, nil
+	}
+	if !os.IsNotExist(legacyErr) {
+		return "", fmt.Errorf("inspect legacy Control Plane config: %w", legacyErr)
+	}
+	return privatePath, nil
+}
+
 func secureConfigFile(path string) (bool, error) {
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
@@ -84,9 +144,13 @@ func loadConfig(path, dataRoot string) control.Config {
 		cfg.DataRoot = dataRoot
 	}
 
-	// Если configPath не задан — ищем в <data_root>/config/config.json.
+	// Keep credential-bearing Control Plane config in Termux private storage.
 	if path == "" {
-		path = filepath.Join(cfg.DataRoot, "config", "config.json")
+		var err error
+		path, err = resolveControlConfigPath("", cfg.DataRoot, os.Getenv("PREFIX"))
+		if err != nil {
+			log.Fatalf("resolve config path: %v", err)
+		}
 	}
 
 	exists, err := secureConfigFile(path)
