@@ -333,3 +333,9 @@ export async function cancelProjectDeployment(projectId, runId) { return request
 export async function redeployProjectDeployment(projectId, runId) { return request('POST', `/api/projects/${projectId}/deployments/${runId}/redeploy`, {}); }
 
 export async function rollbackProjectDeployment(projectId, runId) { return request('POST', `/api/projects/${projectId}/deployments/${runId}/rollback`, {}); }
+
+
+// === Pro REST API keys ===
+export async function listAPIKeys() { return request('GET', '/api/api-keys'); }
+export async function createAPIKey(name) { return request('POST', '/api/api-keys', { name }); }
+export async function revokeAPIKey(id) { return request('DELETE', `/api/api-keys/${encodeURIComponent(id)}`); }
