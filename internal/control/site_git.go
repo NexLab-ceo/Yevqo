@@ -119,6 +119,7 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 		ownerID, authErr := s.authorizeProjectOwner(r.Context(), projectID, user.ID, action)
 		if authErr != nil { apiError(w, authErr); return }
 		if ownerID != dev.UserID { apiError(w, shared.ErrNotFound("site not found")); return }
+		if authErr := s.authorizeSiteProjects(r.Context(), deviceID, siteID, dev.UserID, user.ID, action); authErr != nil { apiError(w, authErr); return }
 	} else {
 		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
 		if r.Method != http.MethodGet {
@@ -145,7 +146,8 @@ func (s *Server) handleSiteGit(w http.ResponseWriter, r *http.Request, user *sha
 		var mappedProjectID int64;var mappedRepositoryURL,mappedRepositoryName,mappedBranch,mappedCommitSHA string
 		mapErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT prs.project_id,pr.clone_url,pr.full_name,prs.deploy_branch FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id WHERE prs.device_id=? AND prs.site_id=? LIMIT 1`,deviceID,siteID).Scan(&mappedProjectID,&mappedRepositoryURL,&mappedRepositoryName,&mappedBranch)
 		if mapErr==nil {
-			if err:=s.authorizeWorkspace(r.Context(),dev.UserID,user.ID,"project.manage");err!=nil{apiError(w,err);return}
+			if err:=s.authorizeProjectAction(r.Context(),mappedProjectID,user.ID,"project.manage");err!=nil{apiError(w,err);return}
+			if err:=s.requireProjectSite(r.Context(),mappedProjectID,deviceID,siteID);err!=nil{apiError(w,err);return}
 			if in.RepositoryURL!=""{owner,name,_,parseErr:=parseGitHubRepositoryName(in.RepositoryURL);expectedOwner,expectedName,_,expectedErr:=parseGitHubRepositoryName(mappedRepositoryName);if parseErr!=nil||expectedErr!=nil||!strings.EqualFold(owner,expectedOwner)||!strings.EqualFold(name,expectedName){apiError(w,shared.ErrBadRequest("the Git repository is managed by this project's Source Repository settings"));return}}
 			in.RepositoryURL=mappedRepositoryURL
 			if in.Branch==""{in.Branch=mappedBranch}
