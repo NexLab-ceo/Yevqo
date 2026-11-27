@@ -339,3 +339,7 @@ export async function rollbackProjectDeployment(projectId, runId) { return reque
 export async function listAPIKeys() { return request('GET', '/api/api-keys'); }
 export async function createAPIKey(name) { return request('POST', '/api/api-keys', { name }); }
 export async function revokeAPIKey(id) { return request('DELETE', `/api/api-keys/${encodeURIComponent(id)}`); }
+
+export async function adminSetUserPlan(id, plan) {
+    return request('POST', `/admin/api/users/${encodeURIComponent(id)}/plan`, { plan });
+}
