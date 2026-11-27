@@ -2,7 +2,7 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteMetrics, updateSiteDomain, listSitePreviews, createSitePreview, deleteSitePreview, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteDatabaseConnections, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream, getCloudflareConfig, saveCloudflareConfig, disconnectCloudflare, getCloudflareTunnelRoute, configureCloudflareTunnelRoute, removeCloudflareTunnelRoute } from '$lib/api.js';
+    import { getDevice, getSite, getSiteMetrics, updateSiteDomain, listSitePreviews, createSitePreview, deleteSitePreview, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream, getCloudflareConfig, saveCloudflareConfig, disconnectCloudflare, getCloudflareTunnelRoute, configureCloudflareTunnelRoute, removeCloudflareTunnelRoute } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import { listIntegrations, listIntegrationRepositories } from '$lib/api.js';
     import Button from '$lib/components/Button.svelte';
@@ -42,7 +42,7 @@
     let logStatus = 'disconnected';
     const logReconnectDelays = [1000, 2000, 5000, 10000, 20000, 30000];
     let activeTab = 'general';
-    const siteTabs = ['general','deployments','build','tasks','monitoring','databases','logs','domains','environment','git','previews'];
+    const siteTabs = ['general','environment','domains','git','deployments','build','tasks','monitoring','logs','previews'];
     $: routeTab = $page.url.searchParams.get('tab') || 'general';
     $: if (siteTabs.includes(routeTab) && routeTab !== activeTab) {
         activeTab = routeTab;
@@ -92,7 +92,6 @@
     let gitHubRepositoriesLoading = false;
     let gitHubRepositoriesError = '';
     let deployCommit = '';
-    let connections = [];
     let envVariables = [];
     let newEnvName = '';
     let newEnvValue = '';
@@ -157,9 +156,9 @@
     });
 
     async function refresh() {
-        const [deviceRes, siteRes, gitRes, connectionsRes, variablesRes, webhookRes, tasksRes] = await Promise.all([
+        const [deviceRes, siteRes, gitRes, variablesRes, webhookRes, tasksRes] = await Promise.all([
             getDevice(deviceId), getSite(deviceId, siteId), getSiteGit(deviceId, siteId),
-            listSiteDatabaseConnections(deviceId, siteId), listSiteEnvironment(deviceId, siteId), getSiteWebhook(deviceId, siteId), listScheduledTasks(deviceId, siteId)
+            listSiteEnvironment(deviceId, siteId), getSiteWebhook(deviceId, siteId), listScheduledTasks(deviceId, siteId)
         ]);
         if (!deviceRes.ok || !siteRes.ok) {
             notify(deviceRes.error || siteRes.error || 'Не удалось загрузить сайт', 'error');
@@ -178,7 +177,6 @@
                 health_check_path: git.health_check_path || '', clone_timeout_seconds: Number(git.clone_timeout_seconds || 600), build_timeout_seconds: Number(git.build_timeout_seconds || 1200), health_check_timeout_seconds: Number(git.health_check_timeout_seconds || 15), start_command: git.start_command || '', github_token: ''
             };
         }
-        connections = connectionsRes.ok ? (connectionsRes.data.connections || []) : [];
         envVariables = variablesRes.ok ? (variablesRes.data.variables || []) : [];
         if (webhookRes.ok) { webhookEnabled = !!webhookRes.data.enabled; webhookPath = webhookRes.data.path || ''; }
         scheduledTasks = tasksRes.ok ? (tasksRes.data.tasks || []) : [];
@@ -918,14 +916,13 @@
 
     <nav class="tabs">
         <button class:active={activeTab === 'general'} on:click={() => selectTab('general')}>Обзор</button>
+        <button class:active={activeTab === 'environment'} on:click={() => selectTab('environment')}>Переменные</button>
+        <button class:active={activeTab === 'domains'} on:click={() => selectTab('domains')}>Домены</button>
         <button class:active={activeTab === 'deployments'} on:click={() => selectTab('deployments')}>Развёртывания</button>
         <button class:active={activeTab === 'build'} on:click={() => selectTab('build')}>Сборки</button>
         <button class:active={activeTab === 'tasks'} on:click={() => selectTab('tasks')}>Расписания</button>
         <button class:active={activeTab === 'monitoring'} on:click={() => selectTab('monitoring')}>Мониторинг</button>
-        <button class:active={activeTab === 'databases'} on:click={() => selectTab('databases')}>Базы данных</button>
         <button class:active={activeTab === 'logs'} on:click={openTerminal}>Журналы</button>
-        <button class:active={activeTab === 'domains'} on:click={() => selectTab('domains')}>Домены</button>
-        <button class:active={activeTab === 'environment'} on:click={() => selectTab('environment')}>Переменные</button>
         <button class:active={activeTab === 'git'} on:click={() => selectTab('git')}>Git</button>
         {#if String(device?.platform || '').toLowerCase() === 'android'}<button class:active={activeTab === 'previews'} on:click={() => { selectTab('previews'); loadPreviews(); }}>Previews</button>{/if}
     </nav>
@@ -1130,26 +1127,6 @@
                 <p class="muted">CPU и RSS суммируются по выделенной process group приложения, включая дочерние процессы и workers. Это метрики ОС, не контейнерные лимиты или cgroup-метрики.</p>
             {:else}<p class="muted">Нет активного управляемого процесса для сбора метрик.</p>{/if}
         </Card>
-    {:else if activeTab === 'databases'}
-        <Card>
-            <div class="metrics-card-head"><div><h2 class="details-title">Базы данных приложения</h2><p class="muted">Подключения, назначенные этому приложению. Секреты не раскрываются.</p></div><span class="env-count">{connections.length} подключений</span></div>
-            {#if connections.length}
-                <div class="env-managed">
-                    {#each connections as connection}
-                        <div class="env-group">
-                            <strong>{connection.database} · {connection.username}</strong>
-                            <div class="env-row"><code>HOST</code><code>{connection.host}</code></div>
-                            <div class="env-row"><code>PORT</code><code>{connection.port}</code></div>
-                            <div class="env-row"><code>DATABASE</code><code>{connection.database}</code></div>
-                            <div class="env-row"><code>USERNAME</code><code>{connection.username}</code></div>
-                            <div class="env-row"><code>PASSWORD</code><code>••••••••••</code></div>
-                        </div>
-                    {/each}
-                </div>
-            {:else}
-                <div class="empty-state"><strong>Базы данных не подключены</strong><p>Назначь базу этому приложению в разделе управления базами данных проекта.</p></div>
-            {/if}
-        </Card>
     {:else if activeTab === 'build'}
         <Card>
             <div class="logs-head">
@@ -1263,7 +1240,10 @@
     {:else if activeTab === 'git'}
         <Card>
             <h2 class="details-title">Git Repository</h2>
-            <p class="muted">Первый Deploy выполнит clone, следующие — fast-forward pull. Build Command запускается после обновления исходников.</p>
+            <p class="muted">Выбери Git-провайдера и репозиторий. Адрес репозитория подставляется автоматически; вручную вводить URL не нужно.</p>
+            <div class="git-form">
+                <label>Git provider<select class="input" value="github" disabled><option value="github">GitHub</option><option value="gitlab" disabled>GitLab — скоро</option></select><small>Сейчас подключение репозиториев доступно через GitHub App. Поддержка GitLab появится отдельно.</small></label>
+            </div>
             {#if gitHubIntegrations.length}
                 <div class="git-form">
                     <label>GitHub connection<select class="input" bind:value={selectedGitHubIntegration} on:change={() => { selectedGitHubRepository = ''; gitHubRepositories = []; loadGitHubRepositories(); }}><option value="">Select connection</option>{#each gitHubIntegrations as integration (integration.id)}<option value={String(integration.id)}>{integration.account_name} · {integration.provider === 'github_app' ? 'GitHub App' : 'GitHub'}</option>{/each}</select></label>
@@ -1274,7 +1254,6 @@
                 <p class="muted">GitHub App не подключён. Подключите его в Settings → Integrations, чтобы автоматически выбирать доступные репозитории.</p>
             {/if}
             <div class="git-form">
-                <label>Repository URL<input class="input" bind:value={gitForm.repository_url} placeholder="https://github.com/user/repo.git" /></label>
                 <label>Branch<input class="input" bind:value={gitForm.branch} placeholder="main" /></label>
                 <label class="wide">Commit SHA for next deploy (optional)<input class="input" bind:value={deployCommit} placeholder="Leave empty to deploy current branch HEAD" maxlength="64" /><small>Можно указать полный SHA-1 или SHA-256. Agent fetches and checks out exactly this commit; the field is not saved as the default branch.</small></label>
                 <label class="wide">Build Command<input class="input" bind:value={gitForm.build_command} placeholder="npm run build или composer install" /></label>
