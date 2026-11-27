@@ -95,7 +95,7 @@ func (s *Server) siteGitSettings(ctx context.Context, deviceID int64, siteID str
 		var fullName string
 		mapErr:=s.db.conn.QueryRowContext(ctx,`SELECT pr.integration_id,pr.full_name,i.user_id FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id JOIN integrations i ON i.id=pr.integration_id WHERE prs.device_id=? AND prs.site_id=? LIMIT 1`,deviceID,siteID).Scan(&integrationID,&fullName,&integrationUserID)
 		if mapErr==nil {
-			owner,_,_,parseErr:=parseGitHubRepositoryName(fullName);if parseErr!=nil{return nil,shared.ErrInternal("linked GitHub repository metadata is invalid")}
+			if _,_,_,parseErr:=parseGitHubRepositoryName(fullName);parseErr!=nil{return nil,shared.ErrInternal("linked GitHub repository metadata is invalid")}
 			token,tokenErr:=s.githubAppTokenForIntegrationRepository(ctx,integrationUserID,integrationID,fullName);if tokenErr!=nil{return nil,shared.ErrInternal("could not refresh linked GitHub App installation token")};out.GitToken=token
 		} else if mapErr==sql.ErrNoRows && out.GitToken=="" {
 			var userID int64
