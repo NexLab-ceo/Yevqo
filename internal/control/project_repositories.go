@@ -185,7 +185,7 @@ func (s *Server) projectRepositoryToken(ctx context.Context,userID,projectID int
 	var integrationID int64
 	var fullName,cloneURL,branch,account string;var ownerID int64
 	if err:=s.db.conn.QueryRowContext(ctx,`SELECT pr.integration_id,pr.full_name,pr.clone_url,pr.deploy_branch,i.account_name,i.user_id FROM project_repositories pr JOIN integrations i ON i.id=pr.integration_id WHERE pr.project_id=? AND i.provider='github_app'`,projectID).Scan(&integrationID,&fullName,&cloneURL,&branch,&account,&ownerID);err!=nil{return "","","","",err}
-	owner,_,_,err:=parseGitHubRepositoryName(fullName);if err!=nil{return "","","","",err}
+	if _,_,_,err:=parseGitHubRepositoryName(fullName);err!=nil{return "","","","",err}
 	token,err:=s.githubAppTokenForIntegrationRepository(ctx,ownerID,integrationID,fullName)
 	return token,fullName,cloneURL,branch,err
 }
