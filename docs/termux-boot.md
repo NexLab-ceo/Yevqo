@@ -4,7 +4,7 @@
 
 1. Установите приложение **Termux:Boot** из того же источника, что и Termux (рекомендуется F-Droid). Не смешивайте сборки Termux из разных источников.
 2. Откройте Termux:Boot вручную хотя бы один раз.
-3. В Termux выполните `termux-setup-storage` и разрешите доступ к общему хранилищу. Control Plane использует `/sdcard/yevqo`, а рабочие файлы Agent — `/sdcard/yevqo-agent`; pairing token Agent хранится в приватном каталоге `$PREFIX/var/lib/veltrix-agent`.
+3. В Termux выполните `termux-setup-storage` и разрешите доступ к общему хранилищу. Control Plane использует `/sdcard/yevqo`, а рабочие файлы Agent — `/sdcard/yevqo-agent`. Конфигурации с DB credentials и pairing token хранятся отдельно в приватных каталогах `$PREFIX/var/lib/yevqo-control` и `$PREFIX/var/lib/veltrix-agent`.
 4. В настройках Android разрешите Termux и Termux:Boot работать в фоне и отключите для них оптимизацию батареи. На некоторых прошивках автозапуск также нужно разрешить отдельно.
 
 ## Установка
