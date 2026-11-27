@@ -13,7 +13,7 @@
  async function removeAPIKey(id){const r=await revokeAPIKey(id);if(r.ok){apiKeys=apiKeys.filter(k=>k.id!==id);notify('API key отозван','success')}else notify(r.error||'Не удалось отозвать API key','error')}
  $: referralLink=typeof window!=='undefined'&&$user?window.location.origin+'/register?ref='+$user.referral_code:'';
  async function copy(value){try{await navigator.clipboard.writeText(value);copied=true;notify('Скопировано','success');setTimeout(()=>copied=false,1800)}catch{notify('Не удалось скопировать','error')}}
- function statusLabel(s){return s==='free'?'Free':s==='commercial'?'Commercial':s==='blocked'?'Blocked':s}
+ function statusLabel(s){return s==='free'?'Free':s==='pro'?'Pro':s==='commercial'?'Commercial':s==='blocked'?'Blocked':s}
  async function createAgentToken(){
   agentTokenBusy=true;agentToken='';
   const result=await rotateAgentToken();
@@ -33,7 +33,7 @@
 </script>
 <div class="page-header"><div><div class="eyebrow">ACCOUNT</div><h1 class="page-title">Профиль</h1><p class="page-desc">Данные аккаунта, безопасность и реферальная программа.</p></div></div>
 {#if $user}
-<section class="panel"><h2>Account details</h2><div class="details"><div><small>Username</small><strong>{$user.username}</strong></div><div><small>Email</small><strong>{$user.email}</strong></div><div><small>Plan status</small><strong>{statusLabel($user.status)}</strong></div><div><small>Device limit</small><strong>{$user.max_devices+$user.bonus_devices} <em>({$user.max_devices} base + {$user.bonus_devices} bonus)</em></strong></div></div></section>
+<section class="panel"><h2>Account details</h2><div class="details"><div><small>Username</small><strong>{$user.username}</strong></div><div><small>Email</small><strong>{$user.email}</strong></div><div><small>Plan status</small><strong>{statusLabel($user.status)}</strong></div><div><small>Device limit</small><strong>{canUseAPI?"Без ограничений":$user.max_devices+$user.bonus_devices}</strong></div></div></section>
 {#if canUseAPI}
 <section class="panel"><h2>Yevqo Pro REST API</h2><p>Управляйте проектами, устройствами, приложениями, базами данных, резервными копиями, доменами, мониторингом и журналами через HTTPS API. Ключи имеют полный доступ в рамках прав вашего аккаунта.</p><label>Название ключа</label><div class="copy-row"><input bind:value={apiKeyName} maxlength="64" placeholder="CI / Personal integration"/><Button variant="primary" loading={apiKeyBusy} on:click={addAPIKey}>Создать API key</Button></div>{#if apiKeyOnce}<label>Новый ключ — отображается один раз</label><div class="copy-row"><input readonly value={apiKeyOnce}/><Button on:click={()=>copy(apiKeyOnce)}>Копировать</Button></div><small class="token-warning">Сохраните ключ сейчас. В базе хранится только его SHA-256 хеш.</small>{/if}<div class="api-key-list">{#each apiKeys as key}<div class="api-key-row"><div><strong>{key.name}</strong><small>{key.prefix}… · создан {new Date(key.created_at).toLocaleDateString()}</small></div><Button variant="danger" on:click={()=>removeAPIKey(key.id)}>Отозвать</Button></div>{/each}{#if apiKeysLoaded && apiKeys.length===0}<small>Активных ключей пока нет.</small>{/if}</div><p class="api-example">Authorization: Bearer YOUR_API_KEY<br/>GET /v1/projects</p></section>
 {/if}
