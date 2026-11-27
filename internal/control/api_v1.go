@@ -87,6 +87,7 @@ func (s *Server) requireProAPI(next http.HandlerFunc) http.HandlerFunc {
 		if err!=nil { apiError(w,shared.ErrUnauthorized("invalid or inactive API key")); return }
 		user,err:=s.db.GetUserByID(r.Context(),userID)
 		if err!=nil { apiError(w,shared.ErrUnauthorized("API account unavailable")); return }
+		user.IsAdmin = user.Username == s.adminUsername
 		_,_=s.db.conn.ExecContext(r.Context(),`UPDATE api_keys SET last_used_at=UTC_TIMESTAMP() WHERE id=?`,keyID)
 		ctx:=r.Context()
 		ctx=context.WithValue(ctx,ctxKeyUser,user)
