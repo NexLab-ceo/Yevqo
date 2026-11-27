@@ -28,7 +28,7 @@ var defaultConfig = control.Config{
 
 func main() {
 	// Флаги командной строки.
-	configPath := flag.String("config", "", "path to config.json (default: <data_root>/config/config.json)")
+	configPath := flag.String("config", "", "path to config.json (default: private Termux config; legacy shared config is migrated)")
 	dataRoot := flag.String("data", "", "data root directory (overrides config)")
 	flag.Parse()
 
