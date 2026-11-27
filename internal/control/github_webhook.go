@@ -27,6 +27,7 @@ func (s *Server) handleSiteWebhookSettings(w http.ResponseWriter, r *http.Reques
 		action := "project.read"
 		if r.Method != http.MethodGet { action = "project.manage" }
 		if _, err := s.authorizeProjectOwner(r.Context(), projectID, user.ID, action); err != nil { apiError(w, err); return }
+		if err := s.authorizeSiteProjects(r.Context(), deviceID, siteID, dev.UserID, user.ID, action); err != nil { apiError(w, err); return }
 	} else {
 		if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "device.read"); err != nil { apiError(w, err); return }
 		if r.Method != http.MethodGet {
