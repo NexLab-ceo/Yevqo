@@ -20,13 +20,58 @@ func (s *Server) authorizeDatabaseServer(ctx context.Context, serverID, actorID 
 	if err != nil {
 		return 0, 0, shared.ErrInternal("could not resolve database server owner")
 	}
-	if err = s.authorizeWorkspace(ctx, ownerID, actorID, action); err != nil {
+	if err = s.authorizeDatabaseServerProjects(ctx, serverID, ownerID, actorID, action); err != nil {
 		return 0, 0, err
 	}
 	return ownerID, deviceID, nil
 }
 
  
+
+// authorizeDatabaseServerProjects applies project-specific role overrides to a
+// database server attached to one or more projects. A server not attached to a
+// project keeps the workspace-level permission model. When shared by projects,
+// the actor must be authorized for every attached project (fail closed).
+func (s *Server) authorizeDatabaseServerProjects(ctx context.Context, serverID, ownerID, actorID int64, action string) error {
+	rows, err := s.db.conn.QueryContext(ctx, `SELECT p.id,p.user_id
+		FROM project_database_servers pds
+		JOIN projects p ON p.id=pds.project_id
+		WHERE pds.database_server_id=?
+		ORDER BY p.id`, serverID)
+	if err != nil {
+		return shared.ErrInternal("could not resolve database server project access")
+	}
+	type projectOwner struct { id, ownerID int64 }
+	projects := make([]projectOwner, 0)
+	for rows.Next() {
+		var item projectOwner
+		if err := rows.Scan(&item.id, &item.ownerID); err != nil {
+			rows.Close()
+			return shared.ErrInternal("could not read database server project access")
+		}
+		projects = append(projects, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return shared.ErrInternal("could not read database server project access")
+	}
+	if err := rows.Close(); err != nil {
+		return shared.ErrInternal("could not close database server project access")
+	}
+	if len(projects) == 0 {
+		return s.authorizeWorkspace(ctx, ownerID, actorID, action)
+	}
+	for _, project := range projects {
+		if project.ownerID != ownerID {
+			return shared.ErrInternal("database server project ownership is inconsistent")
+		}
+		if err := s.authorizeProjectAction(ctx, project.id, actorID, action); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // authorizeDatabaseInstance resolves the database and its server together,
 // rejecting inconsistent ownership before granting workspace access.
 func (s *Server) authorizeDatabaseInstance(ctx context.Context, databaseID, actorID int64, action string) (ownerID, serverID, deviceID int64, err error) {
@@ -42,7 +87,7 @@ func (s *Server) authorizeDatabaseInstance(ctx context.Context, databaseID, acto
 	if err != nil {
 		return 0, 0, 0, shared.ErrInternal("could not resolve database owner")
 	}
-	if err = s.authorizeWorkspace(ctx, ownerID, actorID, action); err != nil {
+	if err = s.authorizeDatabaseServerProjects(ctx, serverID, ownerID, actorID, action); err != nil {
 		return 0, 0, 0, err
 	}
 	return ownerID, serverID, deviceID, nil
