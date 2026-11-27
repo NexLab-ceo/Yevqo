@@ -4,6 +4,7 @@ run-name: Yevqo build #${{ github.run_number }}
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build:
