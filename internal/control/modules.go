@@ -707,7 +707,7 @@ func (s *Server) handleBackups(w http.ResponseWriter, r *http.Request) {
 	if err != nil { apiError(w, err); return }
 	out := make([]map[string]interface{}, 0)
 	for _, ownerID := range owners {
-		role, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
+		_, allowed, roleErr := s.db.WorkspaceRole(r.Context(), ownerID, u.ID)
 		if roleErr != nil { apiError(w, roleErr); return }
 		if !allowed { continue }
 		query := `SELECT id,device_id,resource_type,resource_id,file_name,size_bytes,status,created_at FROM backups WHERE user_id=?`
