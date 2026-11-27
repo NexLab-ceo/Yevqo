@@ -13,14 +13,17 @@
  $: unreadCount=notifications.filter(n=>!n.read_at&&!n.read).length;
  const globalGroups=[
   {label:'',items:[['Обзор','/overview','◉'],['Проекты','/projects','▦']]},
-  {label:'ОПЕРАЦИИ',items:[['Развёртывания','/deployments','↗'],['Сборки','/builds','⌁'],['Расписания','/schedules','◷'],['Журналы','/logs','⌘'],['Отчёты','/reports','▤']]},
-  {label:'ИНФРАСТРУКТУРА',items:[['Устройства','/devices','▣'],['Приложения','/sites','◫'],['Домены','/domains','◎'],['Мониторинг','/monitoring','⌁'],['Базы данных','/databases','◈'],['Резервные копии','/backups','⤓']]},
+  {label:'ОПЕРАЦИИ',items:[['Журналы','/logs','⌘'],['Отчёты','/reports','▤']]},
+  {label:'ИНФРАСТРУКТУРА',items:[['Устройства','/devices','▣'],['Домены','/domains','◎'],['Резервные копии','/backups','⤓']]},
   {label:'УПРАВЛЕНИЕ',items:[['Команда','/team','♧'],['Уведомления','/notifications','◌'],['Обслуживание','/maintenance','⚙'],['Настройки','/settings','⚙']]}
  ];
  $: pathParts=$page.url.pathname.split('/');
  $: projectId=(pathParts[1]==='projects'&&Number.isInteger(Number(pathParts[2]))&&Number(pathParts[2])>0?pathParts[2]:'')||$page.url.searchParams.get('project_id')||'';
  $: inProject=!!projectId;
+ $: inSite=pathParts[1]==='sites'&&!!pathParts[2]&&!!pathParts[3];
+ $: siteContextBase=inSite?'/sites/'+encodeURIComponent(pathParts[2])+'/'+encodeURIComponent(pathParts[3]):'';
  $: groups=globalGroups;
+ function siteTabHref(tab){const q=new URLSearchParams();for(const key of ['project_id','environment_id']){const value=$page.url.searchParams.get(key);if(value)q.set(key,value)}q.set('tab',tab);return siteContextBase+'?'+q.toString()}
  onMount(async()=>{const [a,b]=await Promise.all([me(),getSettings()]);if(a.ok&&a.data?.user)user.set(a.data.user);if(b.ok){uiMode.set(b.data.settings?.mode||'simple');theme.set(b.data.settings?.theme||'dark');locale.set(b.data.settings?.locale||'ru');workspaceName.set(b.data.settings?.workspace_name||'Personal workspace');compactMode.set(!!b.data.settings?.compact_mode);setDatePreferences(b.data.settings)}loading=false;loadNotifications()});
  $: if(!loading&&!$isAuthenticated&&!$page.url.pathname.startsWith('/login')&&!$page.url.pathname.startsWith('/register'))goto('/login');
  $: currentTitle=groups.flatMap(g=>g.items).find(i=>{const href=i[1].split('?')[0];return $page.url.pathname===href||($page.url.pathname.startsWith(href+'/')&&href!=='/')})?.[0]||'Overview';
@@ -52,7 +55,14 @@
      {/each}
     </section>
    {/each}
-   
+   {#if inSite}
+    <section class="nav-group app-context-nav">
+     <div class="nav-label">{ru?'ТЕКУЩЕЕ ПРИЛОЖЕНИЕ':'CURRENT APPLICATION'}</div>
+     {#each [['Обзор','general','◉'],['Развёртывания','deployments','↗'],['Сборки','build','⌁'],['Расписания','tasks','◷'],['Мониторинг','monitoring','⌁'],['Базы данных','databases','◈'],['Журналы','logs','⌘']] as item}
+      <a href={siteTabHref(item[1])} class:active={$page.url.searchParams.get('tab')===(item[1]==='general'?'':item[1])||(item[1]==='general'&&!$page.url.searchParams.get('tab'))} class="nav-item" on:click={()=>mobileNavOpen=false}><span class="nav-icon">{item[2]}</span><span>{ru?item[0]:({'Обзор':'Overview','Развёртывания':'Deployments','Сборки':'Builds','Расписания':'Schedules','Мониторинг':'Monitoring','Базы данных':'Databases','Журналы':'Logs'}[item[0]]||item[0])}</span></a>
+     {/each}
+    </section>
+   {/if}
   </nav>
   <div class="sidebar-bottom"><div class="sidebar-meta"><span>{ru?"Среда выполнения":"Runtime"}</span><small>Android + Termux · Agent</small></div>
    
