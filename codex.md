@@ -610,3 +610,6 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 - Network failures must be distinguished from HTTP responses. Never fabricate an HTTP status for a connection failure.
 - Never expose access/refresh tokens, passwords, OAuth codes/state, private keys, cookies, raw provider response bodies, stack traces, or sensitive database internals in the UI. Diagnostics must be useful without leaking secrets.
 - Apply this standard to all Admin Panel pages and actions, including user management, platform settings, package uploads, backups, and future administrator operations.
+
+
+- Admin Panel error display preference: provide a persistent switch between **General** and **Full diagnostics**. Store the preference locally in the browser, share it across Admin routes, and default to Full diagnostics. General mode hides technical metadata; Full mode shows safe cause, operation, HTTP status or no-response state, error code, request ID and network details when available. Never expose secrets or unsafe raw internals.
