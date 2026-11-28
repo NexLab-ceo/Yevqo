@@ -249,6 +249,7 @@
         {/if}
     {/if}
 {/if}
+{/if}
 
 <style>
     .admin-tabs { display:flex; gap:8px; margin: 18px 0 24px; border-bottom:1px solid var(--border); }
