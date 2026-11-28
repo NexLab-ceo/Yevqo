@@ -559,4 +559,6 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 
 - 2026-11-28 — Correlated HTTP Request IDs with Agent commands using a trace identifier in the WebSocket command envelope; Agent command result events return that identifier to the centralized journal. Added per-device/user context in the Admin log detail view and GitHub/build/Agent categories. Verification remains pending.
 
-- 2026-11-28 — Added Agent-side warnings for Tailscale detection and metrics collection/push failures; categorized Agent build, deployment, database and backup command results separately in the central journal. No command payloads or credentials are intentionally recorded.
+- 2026-11-28 — Added Agent-side warning/error log forwarding now mirrors the existing private Agent file log to the Control Plane, with sensitive key/value and Bearer redaction; Tailscale and metrics failures and categorized build, deployment, database and backup command results are also recorded. No command payloads or credentials are intentionally recorded.
+
+- 2026-11-28 — Agent now mirrors warning/error entries from its standard runtime logger into the central system journal while preserving local private logs. Sensitive key/value fields and Bearer credentials are redacted before forwarding. Agent event categories include runtime, monitoring, build, deployment, database and backup.
