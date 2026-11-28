@@ -46,24 +46,23 @@ Delete commands require `--confirm`. Project deletion removes only the project g
 
 ```sh
 yevqo-cli previews 12 my-site
-y evqo-cli preview-create 12 my-site --allow-project-code
-y evqo-cli preview-create 12 my-site feature/test abc123 --allow-project-code
+yevqo-cli preview-create 12 my-site nyevqo-cli preview-create 12 my-site feature/test abc123
 y evqo-cli preview-delete 12 my-site <preview-key> --confirm
 ```
 
-Preview creation requires explicit project-code consent. Preview deletion requires `--confirm`.
+Preview creation uses the connected repository and selected branch. Preview deletion requires `--confirm`.
 
 ## Site operations
 
 ```sh
-yevqo-cli deploy 12 my-site --allow-project-code
+yevqo-cli deploy 12 my-site
 yevqo-cli start 12 my-site
 yevqo-cli stop 12 my-site
 yevqo-cli restart 12 my-site
 yevqo-cli logs 12 my-site
 ```
 
-`deploy` requires the explicit `--allow-project-code` flag because it can execute project-controlled build and start commands. Without it, the CLI refuses to send the request.
+`deploy` uses the site's connected repository and configured build/start commands on its selected Android device.
 
 ## Backups
 
