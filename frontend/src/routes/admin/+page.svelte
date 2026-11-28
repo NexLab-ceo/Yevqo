@@ -8,6 +8,12 @@
     import Card from '$lib/components/Card.svelte';
 
     let loading = true;
+    let adminError = null;
+
+    function reportAdminError(title, res) {
+        adminError = { title, message: res?.error || 'Причина не классифицирована сервером.', operation: res?.operation || '', status: res?.status ?? null, code: res?.code || '', requestId: res?.requestId || '' };
+        notify(adminError.message, 'error');
+    }
     let users = [];
     let stats = null;
     let page = 1;
@@ -43,14 +49,14 @@
         if (statsRes.ok) {
             stats = statsRes.data.stats;
         } else {
-            notify(statsRes.error || 'Не удалось загрузить статистику', 'error');
+            reportAdminError('Не удалось загрузить статистику', statsRes);
         }
 
         if (usersRes.ok) {
             users = usersRes.data.users || [];
             total = usersRes.data.total || 0;
         } else {
-            notify(usersRes.error || 'Не удалось загрузить пользователей', 'error');
+            reportAdminError('Не удалось загрузить пользователей', usersRes);
         }
     }
 
@@ -59,7 +65,7 @@
         agentPackageLoading = true;
         const res = await adminGetAgentPackage();
         agentPackageLoading = false;
-        if (!res.ok) { notify(res.error || 'Не удалось загрузить сведения о Agent-пакете', 'error'); return; }
+        if (!res.ok) { reportAdminError('Не удалось загрузить сведения о Agent-пакете', res); return; }
         agentPackage = res.data?.package || null;
     }
 
@@ -80,7 +86,7 @@
         platformLoading = true;
         const res = await adminGetPlatformSettings();
         platformLoading = false;
-        if (!res.ok) { notify(res.error || 'Не удалось загрузить настройки платформы', 'error'); return; }
+        if (!res.ok) { reportAdminError('Не удалось загрузить настройки платформы', res); return; }
         platform = { ...platform, ...res.data, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false, github_app_private_key: '', clear_github_app_private_key: false };
     }
 
@@ -99,7 +105,7 @@
             clear_github_app_private_key: !!platform.clear_github_app_private_key
         });
         platformSaving = false;
-        if (!res.ok) { notify(res.error || 'Не удалось сохранить настройки платформы', 'error'); return; }
+        if (!res.ok) { reportAdminError('Не удалось сохранить настройки платформы', res); return; }
         platform = { ...platform, ...res.data, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false, github_app_private_key: '', clear_github_app_private_key: false };
         notify('Настройки платформы сохранены', 'success');
     }
@@ -144,6 +150,15 @@
             <a class="export-link" href="/admin/api/users/export.csv">Экспорт CSV</a>
     </div>
 </div>
+
+{#if adminError}
+    <section class="admin-error" role="alert">
+        <div class="admin-error-heading"><strong>{adminError.title}</strong><button type="button" on:click={() => adminError = null} aria-label="Закрыть">×</button></div>
+        <p>{adminError.message}</p>
+        <dl>{#if adminError.operation}<div><dt>Операция</dt><dd><code>{adminError.operation}</code></dd></div>{/if}{#if adminError.status !== null}<div><dt>HTTP</dt><dd>{adminError.status}</dd></div>{/if}{#if adminError.code}<div><dt>Код</dt><dd><code>{adminError.code}</code></dd></div>{/if}{#if adminError.requestId}<div><dt>ID диагностики</dt><dd><code>{adminError.requestId}</code></dd></div>{/if}</dl>
+        <small>Если ошибка повторяется, передай администратору ID диагностики и время операции. Секреты и содержимое ключей здесь не отображаются.</small>
+    </section>
+{/if}
 
 {#if loading && !stats}
     <div class="empty">Загрузка...</div>
@@ -320,6 +335,15 @@
 {/if}
 
 <style>
+    .admin-error { max-width:860px; margin:16px 0; padding:14px 16px; border:1px solid var(--danger); border-radius:10px; background:color-mix(in srgb, var(--danger) 7%, var(--bg-surface)); color:var(--text-main); }
+    .admin-error-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+    .admin-error-heading button { border:0; background:transparent; color:var(--text-muted); font-size:20px; cursor:pointer; }
+    .admin-error p { white-space:pre-wrap; overflow-wrap:anywhere; margin:10px 0; }
+    .admin-error dl { display:grid; gap:6px; margin:10px 0; }
+    .admin-error dl div { display:flex; flex-wrap:wrap; gap:8px; }
+    .admin-error dt { color:var(--text-muted); min-width:105px; }
+    .admin-error dd { margin:0; overflow-wrap:anywhere; }
+    .admin-error small { color:var(--text-muted); }
     .admin-tabs { display:flex; gap:8px; margin: 18px 0 24px; border-bottom:1px solid var(--border); }
     .admin-tabs button { background:transparent; color:var(--text-muted); border:0; border-bottom:2px solid transparent; padding:10px 12px; cursor:pointer; }
     .admin-tabs button.active { color:var(--text-main); border-color:var(--accent, #8AB4FF); }
