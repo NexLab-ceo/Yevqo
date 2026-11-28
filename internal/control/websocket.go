@@ -343,7 +343,9 @@ func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 			if metadata == nil { metadata = map[string]interface{}{} }
 			metadata["agent_timestamp"] = event.Timestamp
 			metadata["hostname"] = c.Device.Hostname
-			srv.recordSystemLog(systemLogRecord{Level:level, Category:category, Source:"agent", Message:message, UserID:c.Device.UserID, DeviceID:c.Device.ID, Metadata:metadata})
+			requestID, _ := metadata["request_id"].(string)
+			delete(metadata, "request_id")
+			srv.recordSystemLog(systemLogRecord{Level:level, Category:category, Source:"agent", Message:message, RequestID:requestID, UserID:c.Device.UserID, DeviceID:c.Device.ID, Metadata:metadata})
 		}
 	case "metrics":
 		var metrics shared.MetricsResult
@@ -397,6 +399,7 @@ func (c *AgentConn) SendCommand(ctx context.Context, action string, payload inte
 			Id:      cmdID,
 			Action:  action,
 			Payload: payloadBytes,
+			TraceID: systemRequestIDFromContext(ctx),
 		},
 	}
 	msg, err := shared.Marshal(env)
