@@ -75,7 +75,6 @@ jobs:
           bash -n packaging/setup-all.sh
           bash -n scripts/install-agent.sh
           bash -n scripts/update-agent.sh
-          bash -n scripts/update-all.sh
           bash -n scripts/auto-update-service.sh
           bash -n scripts/termux-boot.sh
           sh -n packaging/postinst-all
@@ -116,8 +115,6 @@ jobs:
           install -m 0755 packaging/setup-all.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-setup"
           install -m 0755 packaging/setup-control.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-setup-control"
           install -m 0755 packaging/setup-agent.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-setup-agent"
-          install -m 0755 scripts/update-all.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-update-all"
-          install -m 0755 scripts/auto-update-service.sh "build-deb-all/$PREFIX_ROOT/bin/yevqo-auto-update-service"
           install -m 0755 packaging/postinst-all "build-deb-all/DEBIAN/postinst"
 
           install -m 0755 packaging/setup-agent.sh "build-deb-agent/$PREFIX_ROOT/bin/yevqo-setup"
@@ -181,8 +178,6 @@ jobs:
           grep -q '/bin/yevqo-control$' /tmp/yevqo-all.contents
           grep -q '/bin/yevqo-agent$' /tmp/yevqo-all.contents
           grep -q '/bin/yevqo-cli$' /tmp/yevqo-all.contents
-          grep -q '/bin/yevqo-update-all$' /tmp/yevqo-all.contents
-          grep -q '/bin/yevqo-auto-update-service$' /tmp/yevqo-all.contents
           grep -q '/bin/yevqo$' /tmp/yevqo.contents
           grep -q '/bin/yevqo-setup$' /tmp/yevqo.contents
           grep -q '/bin/yevqo-update$' /tmp/yevqo.contents
