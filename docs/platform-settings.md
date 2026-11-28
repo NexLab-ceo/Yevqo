@@ -15,3 +15,14 @@ Create a self-managed OAuth client in Cloudflare Dashboard → Manage Account �
 Yevqo encrypts the Client Secret at rest with its Control Plane credential key. The secret is write-only in the admin UI: it is never returned by the settings API. A blank secret field preserves the existing secret; the explicit clear checkbox removes it.
 
 **Important:** this settings storage is only the configuration prerequisite. It does not itself implement Cloudflare OAuth authorization, callback handling, code exchange, token refresh/revocation, or user-level Cloudflare account linking. Those remain separate implementation work and must be completed before the user-facing “Connect Cloudflare” OAuth button is enabled.
+
+
+## GitHub App
+
+The administrator can configure the GitHub App from the same Platform Settings screen:
+
+- **App ID** — numeric ID from GitHub Developer Settings.
+- **App slug** — public installation slug used by the GitHub installation redirect.
+- **Private key** — paste the PEM downloaded from the GitHub App settings. The Control Plane validates the PEM RSA key and encrypts it at rest with the credential key. The private key is write-only and is never returned by the API.
+
+The existing Termux environment variables and protected PEM file remain a backward-compatible fallback. Values stored in the administrator panel take precedence when present. The GitHub App installation/config endpoints now read this shared platform configuration.

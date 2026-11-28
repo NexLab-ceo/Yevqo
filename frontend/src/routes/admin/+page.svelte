@@ -257,7 +257,7 @@
     .platform-settings { display:flex; flex-direction:column; gap:12px; max-width:860px; }
     .platform-settings h3 { margin:0 0 8px; font-size:14px; }
     .platform-settings label { display:block; margin:12px 0 6px; color:var(--text-muted); font-size:12px; }
-    .platform-settings input:not([type=checkbox]) { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-surface); color:var(--text-main); }
+    .platform-settings input:not([type=checkbox]), .platform-settings textarea { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-surface); color:var(--text-main); }
     .setting-help { color:var(--text-muted); font-size:12px; line-height:1.6; margin:4px 0 12px; }
     .callback-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .callback-row code { flex:1; padding:10px; background:var(--bg-elevated); border-radius:7px; overflow-wrap:anywhere; }

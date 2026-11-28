@@ -14,9 +14,11 @@ Create the App in GitHub Developer Settings and configure:
 
 The installation flow uses GitHub's official `/apps/{slug}/installations/new` page. The callback returns `installation_id`, `setup_action` and the one-time `state` created by the authenticated Control Plane session. The state expires after 10 minutes and is consumed once. The Control Plane verifies that the installation belongs to the configured App before showing it as connected.
 
-## Configure the Control Plane on Android / Termux
+## Configure the Control Plane
 
-The Termux installer creates a protected configuration directory at
+The recommended path is **Admin → Platform Settings**. Enter the numeric App ID, App slug and PEM private key there. The private key is validated and encrypted at rest; the settings API never returns it to the browser. The same screen also stores the public Control Plane URL used for GitHub webhook registration.
+
+Existing Android / Termux installations can continue using the protected environment-file setup below as a fallback. The Termux installer creates a protected configuration directory at
 `$PREFIX/etc/yevqo` and never overwrites existing GitHub App credentials:
 
 - `github-app.env` — App ID, slug and optional public URL (mode `0600`).
@@ -68,7 +70,7 @@ Use the narrow permissions required by the features you enable. Metadata and Con
 
 - Repository listing is backed by the verified installation token.
 - Installation linking uses a short-lived, single-use state tied to the signed-in Yevqo account.
-- Set `YEVQO_PUBLIC_URL` to the public HTTPS origin of the Control Plane (for example, the Cloudflare Tunnel hostname) to allow Yevqo to create and update repository push webhooks automatically. Without it, or without Administration: Write, configure the returned one-time webhook URL and secret manually.
+- Set the Public Control Plane URL in Admin → Platform Settings (or `YEVQO_PUBLIC_URL` as a fallback) to allow Yevqo to create and update repository push webhooks automatically. Without it, or without Administration: Write, configure the returned one-time webhook URL and secret manually.
 - Projects can now persist one verified GitHub App repository binding through `POST /api/projects/{id}/repository`. The Control Plane verifies that the selected installation belongs to the repository owner, fetches repository metadata and confirms the selected deployment branch before saving it. The project Source Repository tab supports connect, view and disconnect.
 - The repository binding is stored by additive migration `024_project_repositories.sql`; it is not applied to an existing/production database automatically. Disconnecting the GitHub App first deletes managed push webhooks and restores the original site Git/webhook settings, then removes dependent project repository bindings.
 - The Source Repository tab lists paginated branches, open pull requests, commit status and check runs. Branches are verified with the GitHub App before they can be assigned to a site. Pull requests and checks require the matching read permissions described above.
