@@ -850,7 +850,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(parts) == 3 && parts[2] == "cmd" {
 			if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
-			var in struct { Action string `json:"action"`; AllowProjectCode bool `json:"allow_project_code"`; ReleaseCommit string `json:"release_commit"`; GitCommit string `json:"git_commit"`; ProjectID int64 `json:"project_id"`; EnvironmentID int64 `json:"environment_id"` }
+			var in struct { Action string `json:"action"`; ReleaseCommit string `json:"release_commit"`; GitCommit string `json:"git_commit"`; ProjectID int64 `json:"project_id"`; EnvironmentID int64 `json:"environment_id"` }
 			if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
 			if in.ProjectID < 0 || in.EnvironmentID < 0 || (in.ProjectID == 0 && in.EnvironmentID != 0) { apiError(w, shared.ErrBadRequest("environment_id requires a project_id")); return }
 			if in.Action != "deploy" && in.Action != "rebuild" && in.Action != "restart" && in.Action != "stop" && in.Action != "rollback" {
@@ -876,9 +876,6 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 				}
 				in.ProjectID = effectiveProjectID
 			} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, in.Action); err != nil { apiError(w, err); return }
-			if (in.Action == "deploy" || in.Action == "rebuild") && !in.AllowProjectCode {
-				apiError(w, shared.ErrBadRequest("explicit project-code consent is required before deployment")); return
-			}
 			conn, online := s.hub.Get(deviceID)
 			if !online { apiError(w, shared.ErrBadRequest("device is offline")); return }
 			agentAction := in.Action
@@ -892,7 +889,7 @@ func (s *Server) handleSiteByID(w http.ResponseWriter, r *http.Request) {
 					GitURL: gitCfg.GitURL, GitBranch: gitCfg.GitBranch, GitCommit: in.GitCommit, BuildCommand: gitCfg.BuildCommand,
 					RootDir: gitCfg.RootDir, GitToken: gitCfg.GitToken, HealthCheckPath: gitCfg.HealthCheckPath,
 					CloneTimeoutSeconds: gitCfg.CloneTimeoutSeconds, BuildTimeoutSeconds: gitCfg.BuildTimeoutSeconds, HealthCheckTimeoutSeconds: gitCfg.HealthCheckTimeoutSeconds,
-					StartCommand: gitCfg.StartCommand, AllowProjectCode: in.AllowProjectCode}
+					StartCommand: gitCfg.StartCommand, AllowProjectCode: true}
 			}
 			if in.Action == "rollback" {
 				if !releaseCommitPattern.MatchString(in.ReleaseCommit) { apiError(w, shared.ErrBadRequest("invalid release commit")); return }
