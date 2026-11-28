@@ -96,8 +96,12 @@ func (s *Server) handleCloudflareOAuthCallback(w http.ResponseWriter,r *http.Req
  if _,e=tx.ExecContext(r.Context(),`DELETE FROM cloudflare_oauth_states WHERE state_hash=?`,hex.EncodeToString(digest[:]));e!=nil{_=tx.Rollback();http.Error(w,"Could not consume Cloudflare OAuth state",http.StatusInternalServerError);return}
  if e=tx.Commit();e!=nil{http.Error(w,"Could not consume Cloudflare OAuth state",http.StatusInternalServerError);return}
  redirect:=func(status string,reason string){target,parseErr:=url.Parse(returnTo);if parseErr!=nil{target=&url.URL{Path:"/settings"}};q:=target.Query();q.Set("cloudflare_oauth",status);if reason!=""{q.Set("cloudflare_oauth_error",reason)};target.RawQuery=q.Encode();http.Redirect(w,r,target.String(),http.StatusSeeOther)}
- fail := func(stage string, cause error) { log.Printf("cloudflare OAuth callback failed: stage=%s error=%v", stage, cause); redirect("error", stage) }
- if oauthErr:=strings.TrimSpace(r.URL.Query().Get("error"));oauthErr!=""{if len(oauthErr)>64{oauthErr=oauthErr[:64]};if !regexp.MustCompile("^[A-Za-z0-9_.-]{1,64}$").MatchString(oauthErr){oauthErr="provider_error"};redirect("denied",oauthErr);return}
+ fail := func(stage string, cause error) {
+		log.Printf("cloudflare OAuth callback failed: stage=%s error=%v", stage, cause)
+		s.recordSystemLog(systemLogRecord{Level:"error",Category:"cloudflare",Source:"cloudflare-oauth",Message:"Cloudflare OAuth callback failed at "+stage,Method:r.Method,Path:r.URL.Path,Metadata:map[string]interface{}{"stage":stage,"cause":cause.Error()}})
+		redirect("error", stage)
+	}
+ if oauthErr:=strings.TrimSpace(r.URL.Query().Get("error"));oauthErr!=""{if len(oauthErr)>64{oauthErr=oauthErr[:64]};if !regexp.MustCompile("^[A-Za-z0-9_.-]{1,64}$").MatchString(oauthErr){oauthErr="provider_error"};s.recordSystemLog(systemLogRecord{Level:"warn",Category:"cloudflare",Source:"cloudflare-oauth",Message:"Cloudflare OAuth authorization was rejected by the provider",Method:r.Method,Path:r.URL.Path,Metadata:map[string]interface{}{"provider_error":oauthErr}});redirect("denied",oauthErr);return}
  code:=strings.TrimSpace(r.URL.Query().Get("code"));if code==""{fail("missing_authorization_code",fmt.Errorf("callback did not include code"));return}
  cfg,e:=s.cloudflareOAuthClient(r.Context());if e!=nil{fail("oauth_client_configuration",e);return}
  ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
