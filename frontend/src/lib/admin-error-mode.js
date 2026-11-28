@@ -2,7 +2,9 @@ import { writable } from 'svelte/store';
 
 const STORAGE_KEY = 'yevqo-admin-error-mode';
 
-export const adminErrorMode = writable(true);
+export const errorDisplayMode = writable(true);
+// Backward-compatible alias used by the existing Admin error panels.
+export const adminErrorMode = errorDisplayMode;
 
 let initialized = false;
 
@@ -10,15 +12,15 @@ export function initializeAdminErrorMode() {
     if (initialized) return;
     initialized = true;
     try {
-        adminErrorMode.set(window.localStorage.getItem(STORAGE_KEY) !== 'general');
+        errorDisplayMode.set(window.localStorage.getItem(STORAGE_KEY) !== 'general');
     } catch {
-        adminErrorMode.set(true);
+        errorDisplayMode.set(true);
     }
 }
 
 export function setAdminErrorMode(enabled) {
     const detailed = Boolean(enabled);
-    adminErrorMode.set(detailed);
+    errorDisplayMode.set(detailed);
     try {
         window.localStorage.setItem(STORAGE_KEY, detailed ? 'detailed' : 'general');
     } catch {
