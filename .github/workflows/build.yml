@@ -66,6 +66,7 @@ jobs:
 
       - name: Validate setup and updater scripts
         run: |
+          bash -n packaging/install-agent.sh
           bash -n packaging/setup-agent.sh
           bash -n packaging/setup-control.sh
           bash -n packaging/setup-all.sh

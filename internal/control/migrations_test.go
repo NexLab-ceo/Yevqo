@@ -167,3 +167,17 @@ func TestAgentPairingTokenMigrationIsAdditive(t *testing.T) {
 		if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) }
 	}
 }
+
+
+func TestOneTimeDevicePairingMigrationIsAdditive(t *testing.T) {
+	path := filepath.Join("..", "..", "migrations", "033_device_pairing_codes.sql")
+	content, err := os.ReadFile(path)
+	if err != nil { t.Fatalf("read device pairing migration: %v", err) }
+	normalized := strings.ToLower(strings.Join(splitSQL(string(content)), "\\n"))
+	for _, required := range []string{"create table if not exists agent_pairing_codes","code_hash char(64) not null primary key","expires_at datetime not null","used_at datetime null","create table if not exists device_agent_tokens","device_id varchar(128) not null primary key","token_hash char(64) not null unique","references users(id) on delete cascade"} {
+		if !strings.Contains(normalized, required) { t.Errorf("migration is missing %q", required) }
+	}
+	for _, forbidden := range []string{"drop table","truncate table","delete from","drop column"} {
+		if strings.Contains(normalized, forbidden) { t.Errorf("migration contains destructive SQL %q", forbidden) }
+	}
+}
