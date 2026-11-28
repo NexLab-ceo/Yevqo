@@ -149,6 +149,7 @@
         <h1 class="page-title">Админка</h1>
         <p class="page-desc">Статистика и управление пользователями</p><Button on:click={async () => { loading = true; await loadAll(); loading = false; }}>Обновить данные</Button>
             <a class="export-link" href="/admin/api/users/export.csv">Экспорт CSV</a>
+            <a class="export-link" href="/logs/system">Системные журналы ↗</a>
     </div>
 </div>
 
