@@ -14,7 +14,7 @@ func normalizePlatformURL(raw string) (string, error) {
     raw = strings.TrimRight(strings.TrimSpace(raw), "/")
     if len(raw) > 512 { return "", shared.ErrBadRequest("Public URL is too long") }
     parsed, err := url.Parse(raw)
-    if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Scheme != "https" && !(parsed.Scheme == "http" && (parsed.Hostname() == "localhost" || parsed.Hostname() == "127.0.0.1"))) {
+    if err != nil || parsed.Host == "" || parsed.Path != "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Scheme != "https" && !(parsed.Scheme == "http" && (parsed.Hostname() == "localhost" || parsed.Hostname() == "127.0.0.1"))) {
         return "", shared.ErrBadRequest("Public URL must be an HTTPS origin without a path, query or fragment")
     }
     return raw, nil

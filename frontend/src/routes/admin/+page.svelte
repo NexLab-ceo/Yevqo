@@ -123,11 +123,11 @@
                     <label>Public URL</label>
                     <input bind:value={platform.public_url} placeholder="https://app.yevqo.cc.cd" />
                     <label>Cloudflare OAuth callback URL</label>
-                    <div class="callback-row"><code>{platform.public_url ? platform.public_url.replace(/\/+$/, '') + '/oauth/cloudflare/callback' : 'Сначала укажите Public URL'}</code><button on:click={() => navigator.clipboard.writeText(platform.public_url)}>Копировать</button></div>
+                    <div class="callback-row"><code>{platform.public_url ? platform.public_url.replace(/\/+$/, '') + '/oauth/cloudflare/callback' : 'Сначала укажите Public URL'}</code><button on:click={() => navigator.clipboard.writeText(platform.public_url.replace(/\/+$/, '') + '/oauth/cloudflare/callback')}>Копировать</button></div>
                 </Card>
                 <Card>
                     <h3>Cloudflare OAuth</h3>
-                    <p class="setting-help">Создайте OAuth Client в Cloudflare Dashboard → Manage Account → OAuth clients. Для SaaS выберите Public visibility, Authorization Code, refresh_token и client_secret_post или client_secret_basic. Добавьте callback URL выше. Secret хранится зашифрованным и никогда не показывается повторно.</p>
+                    <p class="setting-help">Создайте OAuth Client в Cloudflare Dashboard → Manage Account → OAuth clients. Для SaaS выберите Public visibility, Authorization Code, refresh_token и client_secret_post или client_secret_basic. Добавьте callback URL выше. Secret хранится зашифрованным и никогда не показывается повторно. Сам OAuth-вход пока не активен — callback появится после отдельной реализации OAuth flow.</p>
                     <label>OAuth Client ID</label>
                     <input bind:value={platform.cloudflare_oauth_client_id} placeholder="Cloudflare OAuth Client ID" autocomplete="off" />
                     <label>OAuth Client Secret</label>
