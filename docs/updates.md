@@ -1,6 +1,15 @@
 # Yevqo package updates
 
-Yevqo packages are distributed through the public GitHub Releases page in [NexLab-ceo/veltrix-dock](https://github.com/NexLab-ceo/veltrix-dock/releases). The source code and CI workflows live in [NexLab-ceo/Yevqo](https://github.com/NexLab-ceo/Yevqo).
+Yevqo All continues to use the public GitHub Releases page in [NexLab-ceo/veltrix-dock](https://github.com/NexLab-ceo/veltrix-dock/releases). **Standalone Yevqo Agent packages are published from Admin → Agent packages** in the Control Plane. The source code and CI workflows live in [NexLab-ceo/Yevqo](https://github.com/NexLab-ceo/Yevqo).
+
+## Standalone Agent: publish from Admin Panel
+
+1. Build the standalone ARM64 package `yevqo_VERSION_aarch64.deb` using the verified Yevqo build.
+2. Open Admin → Agent packages, choose that `.deb`, then upload and publish it.
+3. The Control Plane validates Debian metadata (`Package: yevqo`, `Architecture: aarch64`), accepts only a newer version, computes SHA-256 and stores the immutable package under its own data root.
+4. The Agent updater reads the Control Plane URL from the device's existing Agent config, checks `/updates/agent/latest.json`, downloads the versioned package from the same Control Plane and verifies SHA-256 plus Debian metadata before installation.
+
+The upload endpoint is administrator-only. Published update metadata and package files are public read-only endpoints so paired devices can download them without exposing device credentials. Upload size is limited to 90 MiB. Yevqo All is not affected by this Admin upload flow.
 
 ## Automatic updates
 
