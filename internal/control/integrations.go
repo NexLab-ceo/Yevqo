@@ -291,7 +291,7 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 			}
 		} else {
 			resp,requestErr:=providerRequest(ctx,"github",string(token),"https://api.github.com/user/repos?per_page=100&sort=updated")
-			if requestErr!=nil { apiError(w,shared.ErrInternal("GitHub API is unavailable"));return }
+			if requestErr!=nil { apiError(w,shared.ErrInternal("GitHub API request failed: "+requestErr.Error()));return }
 			var values []githubRepository
 			if decodeErr:=readProviderJSON(resp,&values);decodeErr!=nil { apiError(w,shared.ErrBadRequest("GitHub rejected repository access: "+decodeErr.Error()));return }
 			appendRepositories(values)
