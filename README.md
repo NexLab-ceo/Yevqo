@@ -2,6 +2,10 @@
 
 The `main` branch is the active Yevqo implementation. The all-in-one package keeps explicit `yevqo-control` and `yevqo-agent` names. The standalone Agent package exposes the simple `yevqo`, `yevqo-setup` and `yevqo-update` commands. Both packages check the public [VELTRIX Dock releases](https://github.com/NexLab-ceo/veltrix-dock/releases) automatically every six hours and install verified updates in the background. The deploy helper CLI is `yevqo-cli`; its inventory, deployment and backup commands are documented in [CLI usage](docs/cli.md).
 
+## Архитектура размещения
+
+**Центральная Yevqo Control Panel устанавливается и работает только на Android-устройстве владельца проекта в Termux.** Пользователи не устанавливают собственную панель: они открывают общую панель через браузер и подключают к ней свои устройства с помощью отдельного Yevqo Agent. Сборка и запуск пользовательских сайтов выполняются на устройствах самих пользователей; вычислительные ресурсы владельца для этого не предоставляются. Подробности и границы ответственности описаны в [документе архитектуры](docs/architecture.md).
+
 ## Что скачать
 
 В CI собираются два отдельных Android/Termux-пакета. Оба файла в одном выпуске всегда имеют **одинаковую версию**:
