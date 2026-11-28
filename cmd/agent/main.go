@@ -69,6 +69,7 @@ func main() {
 
 	// 5. Создаём клиент и запускаем.
 	client := agent.NewClient(cfg)
+	client.ForwardLogs(log.Writer())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
