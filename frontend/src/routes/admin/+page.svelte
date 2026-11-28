@@ -9,9 +9,16 @@
 
     let loading = true;
     let adminError = null;
+    let detailedErrors = true;
+    const ERROR_MODE_KEY = 'yevqo-admin-error-mode';
+
+    function setErrorMode(enabled) {
+        detailedErrors = enabled;
+        try { localStorage.setItem(ERROR_MODE_KEY, enabled ? 'detailed' : 'general'); } catch {}
+    }
 
     function reportAdminError(title, res) {
-        adminError = { title, message: res?.error || 'Причина не классифицирована сервером.', operation: res?.operation || '', status: res?.status ?? null, code: res?.code || '', requestId: res?.requestId || '' };
+        adminError = { title, message: res?.error || 'Причина не классифицирована сервером.', operation: res?.operation || '', status: res?.status ?? null, code: res?.code || '', requestId: res?.requestId || '', networkError: res?.networkError || '' };
         notify(adminError.message, 'error');
     }
     let users = [];
@@ -29,6 +36,7 @@
 
     // Загружаем статистику и пользователей.
     onMount(async () => {
+        try { detailedErrors = localStorage.getItem(ERROR_MODE_KEY) !== 'general'; } catch {}
         const session = await me();
         if (!session.ok || !session.data?.user?.is_admin) {
             goto('/overview');
@@ -154,15 +162,23 @@
 {#if adminError}
     <section class="admin-error" role="alert">
         <div class="admin-error-heading"><strong>{adminError.title}</strong><button type="button" on:click={() => adminError = null} aria-label="Закрыть">×</button></div>
-        <p>{adminError.message}</p>
-        <dl>{#if adminError.operation}<div><dt>Операция</dt><dd><code>{adminError.operation}</code></dd></div>{/if}{#if adminError.status !== null}<div><dt>HTTP</dt><dd>{adminError.status}</dd></div>{/if}{#if adminError.code}<div><dt>Код</dt><dd><code>{adminError.code}</code></dd></div>{/if}{#if adminError.requestId}<div><dt>ID диагностики</dt><dd><code>{adminError.requestId}</code></dd></div>{/if}</dl>
-        <small>Если ошибка повторяется, передай администратору ID диагностики и время операции. Секреты и содержимое ключей здесь не отображаются.</small>
+        <p>{detailedErrors ? adminError.message : 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.'}</p>
+        {#if detailedErrors}
+            <dl>{#if adminError.operation}<div><dt>Операция</dt><dd><code>{adminError.operation}</code></dd></div>{/if}{#if adminError.status !== null}<div><dt>HTTP</dt><dd>{adminError.status}</dd></div>{:else if adminError.networkError}<div><dt>Соединение</dt><dd>Нет HTTP-ответа</dd></div>{/if}{#if adminError.code}<div><dt>Код</dt><dd><code>{adminError.code}</code></dd></div>{/if}{#if adminError.requestId}<div><dt>ID диагностики</dt><dd><code>{adminError.requestId}</code></dd></div>{/if}{#if adminError.networkError}<div><dt>Сетевая причина</dt><dd>{adminError.networkError}</dd></div>{/if}</dl>
+            <small>Секреты, токены и приватные данные не отображаются.</small>
+        {/if}
     </section>
 {/if}
 
 {#if loading && !stats}
     <div class="empty">Загрузка...</div>
 {:else}
+
+    <div class="error-mode-control">
+        <span>Ошибки:</span>
+        <label><input type="checkbox" checked={detailedErrors} on:change={(event) => setErrorMode(event.currentTarget.checked)} /> Полная диагностика</label>
+        <small>{detailedErrors ? 'Показывать операцию, HTTP, код и ID диагностики' : 'Показывать только обобщённое сообщение'}</small>
+    </div>
 
     <div class="admin-tabs">
         <button class:active={activeTab === 'overview'} on:click={() => activeTab = 'overview'}>Обзор и пользователи</button>
@@ -335,6 +351,10 @@
 {/if}
 
 <style>
+    .error-mode-control { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:12px 0; color:var(--text-muted); font-size:12px; }
+    .error-mode-control label { display:inline-flex; align-items:center; gap:7px; color:var(--text-main); cursor:pointer; }
+    .error-mode-control input { accent-color:var(--accent); }
+    .error-mode-control small { color:var(--text-muted); }
     .admin-error { max-width:860px; margin:16px 0; padding:14px 16px; border:1px solid var(--danger); border-radius:10px; background:color-mix(in srgb, var(--danger) 7%, var(--bg-surface)); color:var(--text-main); }
     .admin-error-heading { display:flex; justify-content:space-between; align-items:center; gap:12px; }
     .admin-error-heading button { border:0; background:transparent; color:var(--text-muted); font-size:20px; cursor:pointer; }
