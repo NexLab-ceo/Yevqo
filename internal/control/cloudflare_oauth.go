@@ -12,6 +12,7 @@ import (
  "net/http"
  "net/url"
  "os"
+ "regexp"
  "strconv"
  "strings"
  "time"
@@ -93,18 +94,18 @@ func (s *Server) handleCloudflareOAuthCallback(w http.ResponseWriter,r *http.Req
  if e!=nil||time.Now().UTC().After(expires){_=tx.Rollback();http.Error(w,"Cloudflare OAuth state expired. Start again from Yevqo.",http.StatusBadRequest);return}
  if _,e=tx.ExecContext(r.Context(),`DELETE FROM cloudflare_oauth_states WHERE state_hash=?`,hex.EncodeToString(digest[:]));e!=nil{_=tx.Rollback();http.Error(w,"Could not consume Cloudflare OAuth state",http.StatusInternalServerError);return}
  if e=tx.Commit();e!=nil{http.Error(w,"Could not consume Cloudflare OAuth state",http.StatusInternalServerError);return}
- redirect:=func(status string){target,parseErr:=url.Parse(returnTo);if parseErr!=nil{target=&url.URL{Path:"/settings"}};q:=target.Query();q.Set("cloudflare_oauth",status);target.RawQuery=q.Encode();http.Redirect(w,r,target.String(),http.StatusSeeOther)}
- if r.URL.Query().Get("error")!=""{redirect("denied");return}
- code:=strings.TrimSpace(r.URL.Query().Get("code"));if code==""{redirect("error");return}
- cfg,e:=s.cloudflareOAuthClient(r.Context());if e!=nil{redirect("error");return}
+ redirect:=func(status string,reason string){target,parseErr:=url.Parse(returnTo);if parseErr!=nil{target=&url.URL{Path:"/settings"}};q:=target.Query();q.Set("cloudflare_oauth",status);if reason!=""{q.Set("cloudflare_oauth_error",reason)};target.RawQuery=q.Encode();http.Redirect(w,r,target.String(),http.StatusSeeOther)}
+ if oauthErr:=strings.TrimSpace(r.URL.Query().Get("error"));oauthErr!=""{if len(oauthErr)>64{oauthErr=oauthErr[:64]};if !regexp.MustCompile("^[A-Za-z0-9_.-]{1,64}$").MatchString(oauthErr){oauthErr="provider_error"};redirect("denied",oauthErr);return}
+ code:=strings.TrimSpace(r.URL.Query().Get("code"));if code==""{redirect("error","");return}
+ cfg,e:=s.cloudflareOAuthClient(r.Context());if e!=nil{redirect("error","");return}
  ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
  tokens,e:=s.cloudflareOAuthTokenRequest(ctx,cfg,url.Values{"grant_type":{"authorization_code"},"code":{code},"redirect_uri":{cfg.RedirectURI}})
- if e!=nil||tokens.RefreshToken==""||tokens.ExpiresIn<60{redirect("error");return}
- an,ac,e:=encryptCredential(s.credentialKey,[]byte(tokens.AccessToken));if e!=nil{redirect("error");return}
- rn,rc,e:=encryptCredential(s.credentialKey,[]byte(tokens.RefreshToken));if e!=nil{redirect("error");return}
+ if e!=nil||tokens.RefreshToken==""||tokens.ExpiresIn<60{redirect("error","");return}
+ an,ac,e:=encryptCredential(s.credentialKey,[]byte(tokens.AccessToken));if e!=nil{redirect("error","");return}
+ rn,rc,e:=encryptCredential(s.credentialKey,[]byte(tokens.RefreshToken));if e!=nil{redirect("error","");return}
  expiry:=time.Now().UTC().Add(time.Duration(tokens.ExpiresIn)*time.Second)
  _,e=s.db.conn.ExecContext(r.Context(),`INSERT INTO cloudflare_accounts(user_id,account_id,zone_id,zone_name,token_nonce,token_ciphertext,auth_method,oauth_refresh_nonce,oauth_refresh_ciphertext,oauth_expires_at,last_verified_at) VALUES(?,'','','',?,?,'oauth',?,?,?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE token_nonce=VALUES(token_nonce),token_ciphertext=VALUES(token_ciphertext),auth_method='oauth',oauth_refresh_nonce=VALUES(oauth_refresh_nonce),oauth_refresh_ciphertext=VALUES(oauth_refresh_ciphertext),oauth_expires_at=VALUES(oauth_expires_at),last_verified_at=VALUES(last_verified_at)`,userID,an,ac,rn,rc,expiry)
- if e!=nil{redirect("error");return}
+ if e!=nil{redirect("error","");return}
  redirect("connected")
 }
 
