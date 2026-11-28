@@ -223,7 +223,11 @@ func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 		return
 	}
 
-	user, err := srv.db.UserByAgentToken(ctx, req.Token)
+	user, err := srv.db.UserByDeviceAgentToken(ctx, req.Token, req.DeviceId)
+	if err != nil {
+		// Backward compatibility for Agents paired before device-scoped credentials.
+		user, err = srv.db.UserByAgentToken(ctx, req.Token)
+	}
 	if err != nil {
 		c.sendAuthError("invalid token")
 		return

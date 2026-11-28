@@ -130,6 +130,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/logout", s.handleLogout)
 	s.mux.HandleFunc("/api/me", s.RequireAuth(s.handleMe))
 	s.mux.HandleFunc("/api/agent-token", s.RequireAuth(s.handleAgentToken))
+	s.mux.HandleFunc("/api/device-pairing", s.RequireAuth(s.handleCreateDevicePairing))
+	s.mux.HandleFunc("/api/device-pairing/claim", s.handleClaimDevicePairing)
 	s.mux.HandleFunc("/api/api-keys", s.RequireAuth(s.handleAPIKeys))
 	s.mux.HandleFunc("/api/api-keys/", s.RequireAuth(s.handleAPIKeyByID))
 	s.mux.HandleFunc("/v1/", s.requireProAPI(s.handleV1))

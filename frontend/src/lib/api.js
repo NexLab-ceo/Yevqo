@@ -88,6 +88,10 @@ export async function rotateAgentToken() {
     return request('POST', '/api/agent-token');
 }
 
+export async function createDevicePairing() {
+    return request('POST', '/api/device-pairing');
+}
+
 // === Devices ===
 
 export async function listDevices(projectId = '') {
