@@ -43,6 +43,11 @@ func (s *Server) persistDeploymentJobEvent(ctx context.Context, userID, deviceID
 	}
 	state:=deploymentStoredState(event.State)
 	message:=strings.TrimSpace(event.Message);if len(message)>1000{message=message[:1000]}
+	if state == "failed" || state == "cancelled" {
+		level := "error"
+		if state == "cancelled" { level = "warn" }
+		s.recordSystemLog(systemLogRecord{Level:level, Category:"deployments", Source:"agent-deployment", Message:"Deployment job "+state, UserID:userID, DeviceID:deviceID, Metadata:map[string]interface{}{"site_id":event.SiteId,"job_id":event.JobId,"state":state,"progress":event.Progress,"cause":message,"commit_sha":event.CommitSHA}})
+	}
 	var runID int64
 	err:=s.db.conn.QueryRowContext(ctx,`SELECT id FROM project_deployment_runs WHERE device_id=? AND site_id=? AND (agent_job_id=? OR (agent_job_id='' AND status IN ('queued','running','preparing','cloning','installing','building','starting'))) ORDER BY id DESC LIMIT 1`,deviceID,event.SiteId,event.JobId).Scan(&runID)
 	if err==sql.ErrNoRows {
