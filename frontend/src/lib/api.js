@@ -38,8 +38,12 @@ async function request(method, path, body = null) {
     };
 
     if (body !== null) {
-        opts.headers['Content-Type'] = 'application/json';
-        opts.body = JSON.stringify(body);
+        if (typeof FormData !== 'undefined' && body instanceof FormData) {
+            opts.body = body;
+        } else {
+            opts.headers['Content-Type'] = 'application/json';
+            opts.body = JSON.stringify(body);
+        }
     }
 
     try {
@@ -395,12 +399,7 @@ export async function adminSavePlatformSettings(input) { return request('PUT', '
 // === Admin Agent packages ===
 export async function adminGetAgentPackage() { return request('GET', '/admin/api/packages/agent'); }
 export async function adminUploadAgentPackage(file) {
-    const form = new FormData(); form.append('package', file);
-    try {
-        const res = await fetch('/admin/api/packages/agent', { method: 'POST', body: form, credentials: 'same-origin' });
-        const raw = await res.text(); let data = null;
-        if (raw) { try { data = JSON.parse(raw); } catch { data = { error: raw }; } }
-        if (!res.ok) return { ok: false, error: data?.error || ('HTTP ' + res.status) };
-        return { ok: true, data };
-    } catch (e) { return { ok: false, error: e.message || 'network error' }; }
+    const form = new FormData();
+    form.append('package', file);
+    return request('POST', '/admin/api/packages/agent', form);
 }
