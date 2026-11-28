@@ -6,13 +6,12 @@
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
-    import AdminErrorMode from '$lib/components/AdminErrorMode.svelte';
     import { adminErrorMode, initializeAdminErrorMode } from '$lib/admin-error-mode.js';
 
     let loading = true;
     let adminError = null;
     function reportAdminError(title, res) {
-        adminError = { title, message: res?.error || 'Причина не классифицирована сервером.', operation: res?.operation || '', status: res?.status ?? null, code: res?.code || '', requestId: res?.requestId || '', networkError: res?.networkError || '' };
+        adminError = { title, message: res?.cause || res?.error || 'Причина не классифицирована сервером.', operation: res?.operation || '', status: res?.status ?? null, code: res?.code || '', requestId: res?.requestId || '', networkError: res?.networkError || '' };
         notify($adminErrorMode ? adminError.message : 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.', 'error');
     }
     let users = [];
@@ -168,7 +167,7 @@
     <div class="empty">Загрузка...</div>
 {:else}
 
-    <AdminErrorMode />
+
 
     <div class="admin-tabs">
         <button class:active={activeTab === 'overview'} on:click={() => activeTab = 'overview'}>Обзор и пользователи</button>
