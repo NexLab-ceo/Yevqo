@@ -15,6 +15,12 @@
     let showConfirm = false;
     let confirmAction = 'block'; // 'block' | 'unblock'
     let busy = false;
+    let adminError = null;
+
+    function reportAdminError(title, res) {
+        adminError = { title, message: res?.error || 'Причина не классифицирована сервером.', operation: res?.operation || '', status: res?.status ?? null, code: res?.code || '', requestId: res?.requestId || '' };
+        notify(adminError.message, 'error');
+    }
 
     onMount(async () => {
         const session = await me();
@@ -30,7 +36,7 @@
         const id = $page.params.id;
         const res = await adminGetUser(id);
         if (!res.ok) {
-            notify(res.error || 'Пользователь не найден', 'error');
+            reportAdminError('Не удалось загрузить пользователя', res);
             goto('/admin');
             return;
         }
@@ -54,7 +60,7 @@
             showConfirm = false;
             await loadUser();
         } else {
-            notify(res.error || 'Ошибка', 'error');
+            reportAdminError('Не удалось изменить статус пользователя', res);
         }
     }
 
@@ -63,7 +69,7 @@
         const res = await adminSetUserPlan(user.id, plan);
         busy = false;
         if (res.ok) { notify('Тариф ' + plan.toUpperCase() + ' назначен', 'success'); await loadUser(); }
-        else notify(res.error || 'Не удалось изменить тариф', 'error');
+        else reportAdminError('Не удалось изменить тариф пользователя', res);
     }
 
     function statusLabel(status) {
@@ -84,6 +90,13 @@
     }
 </script>
 
+{#if adminError}
+    <section class="admin-error" role="alert">
+        <strong>{adminError.title}</strong><p>{adminError.message}</p>
+        <dl>{#if adminError.operation}<div><dt>Операция</dt><dd><code>{adminError.operation}</code></dd></div>{/if}{#if adminError.status !== null}<div><dt>HTTP</dt><dd>{adminError.status}</dd></div>{/if}{#if adminError.code}<div><dt>Код</dt><dd><code>{adminError.code}</code></dd></div>{/if}{#if adminError.requestId}<div><dt>ID диагностики</dt><dd><code>{adminError.requestId}</code></dd></div>{/if}</dl>
+        <small>Секреты, токены и приватные данные не отображаются.</small>
+    </section>
+{/if}
 {#if loading}
     <div class="empty">Загрузка...</div>
 {:else if user}
@@ -204,6 +217,13 @@
 {/if}
 
 <style>
+    .admin-error { margin:16px 0; padding:14px 16px; border:1px solid var(--danger); border-radius:10px; background:color-mix(in srgb, var(--danger) 7%, var(--bg-surface)); }
+    .admin-error p { white-space:pre-wrap; overflow-wrap:anywhere; }
+    .admin-error dl { display:grid; gap:6px; }
+    .admin-error dl div { display:flex; flex-wrap:wrap; gap:8px; }
+    .admin-error dt { color:var(--text-muted); min-width:105px; }
+    .admin-error dd { margin:0; overflow-wrap:anywhere; }
+    .admin-error small { color:var(--text-muted); }
     .header-actions {
         display: flex;
         align-items: center;
