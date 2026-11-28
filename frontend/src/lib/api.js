@@ -127,9 +127,11 @@ export async function getSite(deviceId, siteId) {
     return request('GET', `/api/sites/${deviceId}/${siteId}`);
 }
 
-export async function runSiteCommand(deviceId, siteId, action, allowProjectCode = false, releaseCommit = '', gitCommit = '', projectId = '', environmentId = '') {
+export async function runSiteCommand(deviceId, siteId, action, _allowProjectCode = false, releaseCommit = '', gitCommit = '', projectId = '', environmentId = '') {
     const scope = projectId ? { project_id: Number(projectId), ...(environmentId ? { environment_id: Number(environmentId) } : {}) } : {};
-    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/cmd`, { action, allow_project_code: allowProjectCode, release_commit: releaseCommit, git_commit: gitCommit, ...scope });
+    // The Control Plane decides whether project code may run. Its strict request schema
+    // intentionally does not accept the removed allow_project_code client flag.
+    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/cmd`, { action, release_commit: releaseCommit, git_commit: gitCommit, ...scope });
 }
 export async function getSiteReleases(deviceId, siteId) {
     return request('GET', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/releases`);
