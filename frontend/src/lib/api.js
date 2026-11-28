@@ -13,6 +13,23 @@ const BASE = '';
  * @param {object} body - тело запроса (для POST)
  * @returns {Promise<{ok: boolean, data?: any, error?: string}>}
  */
+function detailedErrorsEnabled() {
+    try {
+        return typeof window === 'undefined' || window.localStorage.getItem('yevqo-admin-error-mode') !== 'general';
+    } catch {
+        return true;
+    }
+}
+
+function formatRequestDiagnostic(operation, status, code, requestId) {
+    return [
+        'Операция: ' + operation,
+        status === null ? 'HTTP: ответа нет (сетевая ошибка)' : 'HTTP: ' + status,
+        code ? 'Код: ' + code : '',
+        requestId ? 'ID диагностики: ' + requestId : ''
+    ].filter(Boolean).join(' · ');
+}
+
 async function request(method, path, body = null) {
     const opts = {
         method,
@@ -27,34 +44,43 @@ async function request(method, path, body = null) {
 
     try {
         const res = await fetch(BASE + path, opts);
-
-        // Пытаемся распарсить JSON.
         let data = null;
         const text = await res.text();
         if (text) {
             try {
                 data = JSON.parse(text);
             } catch {
-                data = { error: text };
+                data = { error: 'Сервер вернул ответ в неподдерживаемом формате.' };
             }
         }
 
         if (!res.ok) {
-            const adminRequest = path.startsWith('/admin/');
             const rawError = data?.error;
-            const message = typeof rawError === 'string' ? rawError : (rawError && typeof rawError === 'object' ? (rawError.message || rawError.detail || rawError.code) : '');
+            const cause = typeof rawError === 'string'
+                ? rawError
+                : (rawError && typeof rawError === 'object' ? (rawError.message || rawError.detail || rawError.code) : '');
             const code = data?.code || data?.error_code || (typeof rawError === 'object' ? rawError?.code : '');
             const requestId = res.headers.get('x-request-id') || res.headers.get('x-correlation-id') || data?.request_id || data?.requestId || '';
             const operation = method + ' ' + path;
             const fallback = res.status >= 500 ? 'Внутренняя ошибка сервера. Причина не классифицирована.' : res.status === 401 ? 'Сессия истекла или требуется повторная авторизация.' : res.status === 403 ? 'Недостаточно прав для выполнения операции.' : res.status === 404 ? 'Запрашиваемый ресурс или API-маршрут не найден.' : res.status === 429 ? 'Слишком много запросов. Повторите попытку позже.' : 'Сервер отклонил запрос. Проверьте параметры операции.';
-            return { ok: false, error: message || fallback, status: res.status, code: code || undefined, requestId: requestId || undefined, operation: adminRequest ? operation : undefined };
+            const safeCause = cause || fallback;
+            const diagnostic = formatRequestDiagnostic(operation, res.status, code, requestId);
+            const error = detailedErrorsEnabled()
+                ? safeCause + '\\n\\n' + diagnostic
+                : 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.';
+            return { ok: false, error, cause: safeCause, status: res.status, code: code || undefined, requestId: requestId || undefined, operation, diagnostic };
         }
 
         return { ok: true, data };
     } catch (e) {
-        const adminRequest = path.startsWith('/admin/');
         const operation = method + ' ' + path;
-        return { ok: false, error: 'Не удалось связаться с сервером. Проверь подключение и доступность Yevqo Control Plane.', code: adminRequest ? 'NETWORK_ERROR' : undefined, operation: adminRequest ? operation : undefined, networkError: adminRequest ? (e?.message || 'Network request failed') : undefined };
+        const networkError = e?.message || 'Network request failed';
+        const cause = 'Не удалось связаться с сервером. Проверь подключение и доступность Yevqo.';
+        const diagnostic = formatRequestDiagnostic(operation, null, 'NETWORK_ERROR', '');
+        const error = detailedErrorsEnabled()
+            ? cause + '\\n\\n' + diagnostic + ' · Причина сети: ' + networkError
+            : 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.';
+        return { ok: false, error, cause, code: 'NETWORK_ERROR', operation, networkError, diagnostic };
     }
 }
 
