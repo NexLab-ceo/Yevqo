@@ -134,7 +134,6 @@ sv status yevqo-agent
 
 - A green GitHub Actions run verifies Go tests, Android ARM64 cross-compilation, frontend build and Debian package assembly/metadata. It does **not** prove that the app starts on a real Android device.
 - The first test should stay local. Do not configure a public domain or Cloudflare Tunnel until the local Control Plane, Agent and test site pass.
-- The Build Engine runs project code with the Termux user's permissions; only build repositories you trust.
 - This checklist does not claim the first physical Android test has already passed.
 
 
