@@ -47,22 +47,14 @@ async function request(method, path, body = null) {
             const requestId = res.headers.get('x-request-id') || res.headers.get('x-correlation-id') || data?.request_id || data?.requestId || '';
             const operation = method + ' ' + path;
             const fallback = res.status >= 500 ? 'Внутренняя ошибка сервера. Причина не классифицирована.' : res.status === 401 ? 'Сессия истекла или требуется повторная авторизация.' : res.status === 403 ? 'Недостаточно прав для выполнения операции.' : res.status === 404 ? 'Запрашиваемый ресурс или API-маршрут не найден.' : res.status === 429 ? 'Слишком много запросов. Повторите попытку позже.' : 'Сервер отклонил запрос. Проверьте параметры операции.';
-            const details = [message || fallback];
-            if (adminRequest) {
-                details.push('Операция: ' + operation, 'HTTP: ' + res.status);
-                if (code) details.push('Код: ' + code);
-                if (requestId) details.push('ID диагностики: ' + requestId);
-            }
-            return { ok: false, error: details.join(' · '), status: res.status, code: code || undefined, requestId: requestId || undefined, operation: adminRequest ? operation : undefined };
+            return { ok: false, error: message || fallback, status: res.status, code: code || undefined, requestId: requestId || undefined, operation: adminRequest ? operation : undefined };
         }
 
         return { ok: true, data };
     } catch (e) {
         const adminRequest = path.startsWith('/admin/');
-        const details = [e?.message || 'Сетевая ошибка: сервер не ответил или соединение было прервано.'];
         const operation = method + ' ' + path;
-        if (adminRequest) details.push('Операция: ' + operation, 'HTTP: нет ответа', 'Код: NETWORK_ERROR');
-        return { ok: false, error: details.join(' · '), code: adminRequest ? 'NETWORK_ERROR' : undefined, operation: adminRequest ? operation : undefined };
+        return { ok: false, error: 'Не удалось связаться с сервером. Проверь подключение и доступность Yevqo Control Plane.', code: adminRequest ? 'NETWORK_ERROR' : undefined, operation: adminRequest ? operation : undefined, networkError: adminRequest ? (e?.message || 'Network request failed') : undefined };
     }
 }
 
