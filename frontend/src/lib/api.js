@@ -345,3 +345,8 @@ export async function revokeAPIKey(id) { return request('DELETE', `/api/api-keys
 export async function adminSetUserPlan(id, plan) {
     return request('POST', `/admin/api/users/${encodeURIComponent(id)}/plan`, { plan });
 }
+
+
+// === Platform administration ===
+export async function adminGetPlatformSettings() { return request('GET', '/admin/api/settings/platform'); }
+export async function adminSavePlatformSettings(input) { return request('PUT', '/admin/api/settings/platform', input); }

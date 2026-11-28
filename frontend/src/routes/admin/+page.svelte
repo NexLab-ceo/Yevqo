@@ -1,7 +1,7 @@
 <script>
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
-    import { adminListUsers, adminStats } from '$lib/api.js';
+    import { adminListUsers, adminStats, adminGetPlatformSettings, adminSavePlatformSettings } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -11,10 +11,15 @@
     let stats = null;
     let page = 1;
     let total = 0;
+    let activeTab = 'overview';
+    let platformLoading = false;
+    let platformSaving = false;
+    let platform = { public_url: '', cloudflare_oauth_client_id: '', cloudflare_oauth_secret_set: false, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false, callback_url: '', github_app_configured: false };
 
     // Загружаем статистику и пользователей.
     onMount(async () => {
         await loadAll();
+        await loadPlatformSettings();
         loading = false;
     });
 
@@ -36,6 +41,30 @@
         } else {
             notify(usersRes.error || 'Не удалось загрузить пользователей', 'error');
         }
+    }
+
+
+    async function loadPlatformSettings() {
+        platformLoading = true;
+        const res = await adminGetPlatformSettings();
+        platformLoading = false;
+        if (!res.ok) { notify(res.error || 'Не удалось загрузить настройки платформы', 'error'); return; }
+        platform = { ...platform, ...res.data, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false };
+    }
+
+    async function savePlatformSettings() {
+        if (platformSaving) return;
+        platformSaving = true;
+        const res = await adminSavePlatformSettings({
+            public_url: platform.public_url,
+            cloudflare_oauth_client_id: platform.cloudflare_oauth_client_id,
+            cloudflare_oauth_client_secret: platform.cloudflare_oauth_client_secret,
+            clear_cloudflare_oauth_secret: !!platform.clear_cloudflare_oauth_secret
+        });
+        platformSaving = false;
+        if (!res.ok) { notify(res.error || 'Не удалось сохранить настройки платформы', 'error'); return; }
+        platform = { ...platform, ...res.data, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false };
+        notify('Настройки платформы сохранены', 'success');
     }
 
     function openUser(user) {
@@ -79,6 +108,45 @@
 {#if loading && !stats}
     <div class="empty">Загрузка...</div>
 {:else}
+
+    <div class="admin-tabs">
+        <button class:active={activeTab === 'overview'} on:click={() => activeTab = 'overview'}>Обзор и пользователи</button>
+        <button class:active={activeTab === 'settings'} on:click={() => activeTab = 'settings'}>Настройки платформы</button>
+    </div>
+    {#if activeTab === 'settings'}
+        <div class="platform-settings">
+            <div class="section-header"><h2 class="section-title">Основные параметры</h2><Button size="sm" on:click={loadPlatformSettings} disabled={platformLoading}>Обновить</Button></div>
+            {#if platformLoading}<div class="empty">Загрузка настроек…</div>{:else}
+                <Card>
+                    <h3>Публичный адрес Yevqo</h3>
+                    <p class="setting-help">Базовый HTTPS URL Control Plane. Используется для callback и внешних интеграций.</p>
+                    <label>Public URL</label>
+                    <input bind:value={platform.public_url} placeholder="https://app.yevqo.cc.cd" />
+                    <label>Cloudflare OAuth callback URL</label>
+                    <div class="callback-row"><code>{platform.callback_url || 'Сначала укажите Public URL'}</code><button on:click={() => navigator.clipboard.writeText(platform.callback_url)}>Копировать</button></div>
+                </Card>
+                <Card>
+                    <h3>Cloudflare OAuth</h3>
+                    <p class="setting-help">Создайте OAuth Client в Cloudflare Dashboard → Manage Account → OAuth clients. Для SaaS выберите Public visibility, Authorization Code, refresh_token и client_secret_post или client_secret_basic. Добавьте callback URL выше. Secret хранится зашифрованным и никогда не показывается повторно.</p>
+                    <label>OAuth Client ID</label>
+                    <input bind:value={platform.cloudflare_oauth_client_id} placeholder="Cloudflare OAuth Client ID" autocomplete="off" />
+                    <label>OAuth Client Secret</label>
+                    <input type="password" bind:value={platform.cloudflare_oauth_client_secret} placeholder={platform.cloudflare_oauth_secret_set ? 'Секрет уже сохранён — введите новый только для замены' : 'Вставьте Client Secret'} autocomplete="new-password" />
+                    <div class="secret-state">{#if platform.cloudflare_oauth_secret_set}<span class="configured">Client Secret сохранён</span>{:else}<span>Client Secret ещё не задан</span>{/if}</div>
+                    {#if platform.cloudflare_oauth_secret_set}
+                        <label class="checkbox-line"><input type="checkbox" bind:checked={platform.clear_cloudflare_oauth_secret} /> Удалить сохранённый Client Secret</label>
+                    {/if}
+                    <div class="setting-actions"><Button on:click={savePlatformSettings} disabled={platformSaving}>{platformSaving ? 'Сохранение…' : 'Сохранить настройки'}</Button></div>
+                </Card>
+                <Card>
+                    <h3>GitHub App</h3>
+                    <p class="setting-help">GitHub App пока загружается в серверную конфигурацию Termux. Этот экран не подменяет её и не сообщает о подключении без реальной проверки.</p>
+                    <div class="secret-state">{#if platform.github_app_configured}<span class="configured">Переменные GitHub App обнаружены в окружении Control Plane</span>{:else}<span>GitHub App не настроен в окружении Control Plane</span>{/if}</div>
+                    <p class="setting-help">Путь конфигурации в текущей установке: <code>$PREFIX/etc/yevqo/github-app.env</code> и <code>github-app.pem</code>.</p>
+                </Card>
+            {/if}
+        </div>
+    {:else}
     <!-- Статистика -->
     {#if stats}
         <div class="stats-grid">
@@ -170,7 +238,7 @@
 {/if}
 
 <style>
-    .export-link {
+    .admin-tabs { display:flex; gap:8px; margin: 18px 0 24px; border-bottom:1px solid var(--border); }\n    .admin-tabs button { background:transparent; color:var(--text-muted); border:0; border-bottom:2px solid transparent; padding:10px 12px; cursor:pointer; }\n    .admin-tabs button.active { color:var(--text-main); border-color:var(--accent, #8AB4FF); }\n    .platform-settings { display:flex; flex-direction:column; gap:12px; max-width:860px; }\n    .platform-settings h3 { margin:0 0 8px; font-size:14px; }\n    .platform-settings label { display:block; margin:12px 0 6px; color:var(--text-muted); font-size:12px; }\n    .platform-settings input:not([type=checkbox]) { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-surface); color:var(--text-main); }\n    .setting-help { color:var(--text-muted); font-size:12px; line-height:1.6; margin:4px 0 12px; }\n    .callback-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }\n    .callback-row code { flex:1; padding:10px; background:var(--bg-elevated); border-radius:7px; overflow-wrap:anywhere; }\n    .callback-row button { padding:8px 10px; border:1px solid var(--border); background:transparent; color:var(--text-main); border-radius:7px; }\n    .secret-state { font-size:12px; color:var(--text-muted); margin-top:10px; }\n    .configured { color:var(--success); }\n    .checkbox-line { display:flex!important; align-items:center; gap:8px; }\n    .setting-actions { display:flex; justify-content:flex-end; margin-top:16px; }\n    .export-link {
         display: inline-flex;
         align-items: center;
         margin-top: 10px;
