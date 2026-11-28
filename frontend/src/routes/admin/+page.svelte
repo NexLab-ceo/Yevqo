@@ -19,7 +19,7 @@
 
     function reportAdminError(title, res) {
         adminError = { title, message: res?.error || 'Причина не классифицирована сервером.', operation: res?.operation || '', status: res?.status ?? null, code: res?.code || '', requestId: res?.requestId || '', networkError: res?.networkError || '' };
-        notify(adminError.message, 'error');
+        notify(detailedErrors ? adminError.message : 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.', 'error');
     }
     let users = [];
     let stats = null;
