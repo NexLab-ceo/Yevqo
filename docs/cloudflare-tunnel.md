@@ -14,14 +14,14 @@ Do not use the generic Linux release binary on Android/Termux. The Termux packag
 
 ## Connect a site automatically
 
-1. Create a scoped Cloudflare API Token with **Account: Cloudflare Tunnel — Edit**, **Zone: DNS — Edit**, and **Zone: Read**.
-2. In Yevqo → Site → Domains, paste the API Token and choose **Загрузить мои домены**. Select the active zone and connect it.
+1. Recommended: in Yevqo → Site → Domains select **Подключить Cloudflare через OAuth**. Authorize Yevqo in Cloudflare, then choose the active zone. The OAuth Client is configured by the platform administrator in Admin → Platform Settings.
+2. Alternative: create a scoped Cloudflare API Token with **Account: Cloudflare Tunnel — Edit**, **Zone: DNS — Edit**, and **Zone: Read**. Paste it in Site → Domains, choose **Загрузить мои домены**, and select the active zone.
 3. Enter the desired hostname in **Primary domain**, then choose **Создать Tunnel и подключить приложение**.
 4. Yevqo creates a remotely-managed Tunnel through the Cloudflare API, obtains its Tunnel token, configures the public hostname ingress and proxied DNS CNAME, then sends the token to the selected Agent over its authenticated command channel.
 5. The Agent stores the token in a private file and starts `cloudflared tunnel run --token-file`; the token is not placed in the process command line.
 6. Yevqo reports the connector active only after the Agent confirms its Cloudflare edge connection.
 
-The API Token is used only by the Control Plane for Cloudflare API calls. The generated Tunnel token is encrypted at rest and delivered only to the owning Agent. OAuth is not part of this flow; users explicitly provide a scoped API Token. Existing manual Tunnel-token setup remains available for tunnels created outside Yevqo.
+OAuth access and refresh tokens are encrypted at rest in the Control Plane; access tokens refresh automatically and are revoked when the user disconnects Cloudflare. The API Token fallback is also encrypted at rest. The generated Tunnel token is a separate credential, encrypted and delivered only to the owning Agent. Existing manual Tunnel-token setup remains available for tunnels created outside Yevqo.
 
 
 ## Existing locally-managed Tunnel (Termux config.yml)

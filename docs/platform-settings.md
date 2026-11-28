@@ -14,7 +14,7 @@ Create a self-managed OAuth client in Cloudflare Dashboard â†’ Manage Account â†
 
 Yevqo encrypts the Client Secret at rest with its Control Plane credential key. The secret is write-only in the admin UI: it is never returned by the settings API. A blank secret field preserves the existing secret; the explicit clear checkbox removes it.
 
-The OAuth authorization, state validation, code exchange, encrypted access/refresh token storage, token refresh, and zone selection are implemented. Live Cloudflare account verification is still required before treating the integration as production-validated.
+The OAuth authorization, one-time state validation, code exchange, encrypted access/refresh token storage, automatic refresh, token revocation on disconnect, and explicit zone selection are implemented. Live Cloudflare account verification is still required before treating the integration as production-validated.
 
 
 ## GitHub App
@@ -27,5 +27,7 @@ The administrator can configure the GitHub App from the same Platform Settings s
 
 The existing Termux environment variables and protected PEM file remain a backward-compatible fallback. Values stored in the administrator panel take precedence when present. The GitHub App installation/config endpoints now read this shared platform configuration.
 
+
+For a SaaS client used by accounts outside the publisher account, set visibility to Public and complete Cloudflare publisher-domain verification for the Client URL. Register both the authorization-code and refresh-token grants, and add the exact callback URL shown by Yevqo.
 
 The OAuth client must allow these scopes: `account-settings.read`, `zone.read`, `dns.write`, `argotunnel.read`, `argotunnel.write`, and `offline_access`. The user chooses the zone after authorizing Yevqo. Access and refresh tokens are encrypted at rest; the Control Plane refreshes access tokens when they are close to expiry. Existing scoped API Token connections remain supported.
