@@ -56,7 +56,7 @@ func (s *Server) handleCloudflareOAuthStart(w http.ResponseWriter,r *http.Reques
  if decodeJSON(r,&in)!=nil{apiError(w,shared.ErrBadRequest("invalid Cloudflare OAuth request"));return}
  returnTo:=strings.TrimSpace(in.ReturnTo)
  if returnTo==""{returnTo="/settings"}
- if len(returnTo)>1024||(returnTo!="/settings"&&!strings.HasPrefix(returnTo,"/sites/"))||strings.HasPrefix(returnTo,"//")||strings.ContainsAny(returnTo,"\r\n\x00"){apiError(w,shared.ErrBadRequest("invalid return path"));return}
+ if len(returnTo)>1024||(returnTo!="/settings"&&returnTo!="/settings/integrations/cloudflare"&&!strings.HasPrefix(returnTo,"/sites/"))||strings.HasPrefix(returnTo,"//")||strings.ContainsAny(returnTo,"\r\n\x00"){apiError(w,shared.ErrBadRequest("invalid return path"));return}
  parsed,e:=url.ParseRequestURI(returnTo);if e!=nil||parsed.IsAbs()||parsed.Host!=""{apiError(w,shared.ErrBadRequest("invalid return path"));return}
  cfg,e:=s.cloudflareOAuthClient(r.Context());if e!=nil{apiError(w,shared.ErrBadRequest("Cloudflare OAuth is not configured by the platform administrator"));return}
  raw:=make([]byte,32);if _,e=rand.Read(raw);e!=nil{apiError(w,shared.ErrInternal("could not create Cloudflare OAuth state"));return}
