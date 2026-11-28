@@ -300,7 +300,7 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 			for pageNumber:=1;pageNumber<=10;pageNumber++ {
 				endpoint:=fmt.Sprintf("https://api.github.com/installation/repositories?per_page=100&page=%d",pageNumber)
 				resp,requestErr:=providerRequest(ctx,"github",string(token),endpoint)
-				if requestErr!=nil { s.recordProviderFailure(r.Context(), u.ID, "github", "repository list request", requestErr); apiError(w,shared.ErrInternal("GitHub API request failed: "+requestErr.Error()));return }
+				if requestErr!=nil { s.recordProviderFailure(r.Context(), u.ID, provider, "repository list request", requestErr); apiError(w,shared.ErrInternal("GitHub API request failed: "+requestErr.Error()));return }
 				var page struct { TotalCount int `json:"total_count"`; Repositories []githubRepository `json:"repositories"` }
 				if decodeErr:=readProviderJSON(resp,&page);decodeErr!=nil { s.recordProviderFailure(r.Context(), u.ID, "github_app", "repository list response", decodeErr); apiError(w,shared.ErrBadRequest("GitHub App repository access was rejected: "+decodeErr.Error()));return }
 				appendRepositories(page.Repositories)
@@ -308,7 +308,7 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 			}
 		} else {
 			resp,requestErr:=providerRequest(ctx,"github",string(token),"https://api.github.com/user/repos?per_page=100&sort=updated")
-			if requestErr!=nil { apiError(w,shared.ErrInternal("GitHub API request failed: "+requestErr.Error()));return }
+			if requestErr!=nil { s.recordProviderFailure(r.Context(), u.ID, provider, "repository list request", requestErr); apiError(w,shared.ErrInternal("GitHub API request failed: "+requestErr.Error()));return }
 			var values []githubRepository
 			if decodeErr:=readProviderJSON(resp,&values);decodeErr!=nil { s.recordProviderFailure(r.Context(), u.ID, "github", "repository list response", decodeErr); apiError(w,shared.ErrBadRequest("GitHub rejected repository access: "+decodeErr.Error()));return }
 			appendRepositories(values)
