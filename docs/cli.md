@@ -46,8 +46,7 @@ Delete commands require `--confirm`. Project deletion removes only the project g
 
 ```sh
 yevqo-cli previews 12 my-site
-yevqo-cli preview-create 12 my-site nyevqo-cli preview-create 12 my-site feature/test abc123
-y evqo-cli preview-delete 12 my-site <preview-key> --confirm
+yevqo-cli preview-create 12 my-site nyevqo-cli preview-create 12 my-site feature/test abc123 nyevqo-cli preview-delete 12 my-site <preview-key> --confirm
 ```
 
 Preview creation uses the connected repository and selected branch. Preview deletion requires `--confirm`.
