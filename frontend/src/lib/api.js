@@ -290,6 +290,8 @@ export async function installCloudflared(deviceId, siteId) { return request('POS
 
 // === Cloudflare DNS automation ===
 export async function getCloudflareConfig() { return request('GET', '/api/cloudflare'); }
+export async function listCloudflareZones(token) { return request('POST', '/api/cloudflare/zones', { token }); }
+export async function createCloudflareTunnel(deviceId, siteId, domain) { return request('POST', '/api/cloudflare/tunnel-create', { device_id: Number(deviceId), site_id: siteId, domain }); }
 export async function saveCloudflareConfig(token, zoneId) { return request('POST', '/api/cloudflare', { token, zone_id: zoneId }); }
 export async function disconnectCloudflare() { return request('DELETE', '/api/cloudflare'); }
 export async function listCloudflareDNS() { return request('GET', '/api/cloudflare/dns'); }

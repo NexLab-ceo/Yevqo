@@ -2,7 +2,7 @@
     import { onMount, onDestroy, tick } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { getDevice, getSite, getSiteMetrics, updateSiteDomain, listSitePreviews, createSitePreview, deleteSitePreview, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream, getCloudflareConfig, saveCloudflareConfig, disconnectCloudflare, getCloudflareTunnelRoute, configureCloudflareTunnelRoute, removeCloudflareTunnelRoute } from '$lib/api.js';
+    import { getDevice, getSite, getSiteMetrics, updateSiteDomain, listSitePreviews, createSitePreview, deleteSitePreview, getSiteGit, saveSiteGit, sendCommand, runSiteCommand, getSiteReleases, pruneSiteReleases, listLogs, listSiteEnvironment, saveSiteEnvironment, deleteSiteEnvironment, getSiteWebhook, setSiteWebhook, listScheduledTasks, createScheduledTask, setScheduledTaskEnabled, deleteScheduledTask, openSiteLogStream, getCloudflareConfig, listCloudflareZones, saveCloudflareConfig, createCloudflareTunnel, disconnectCloudflare, getCloudflareTunnelRoute, configureCloudflareTunnelRoute, removeCloudflareTunnelRoute } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import { listIntegrations, listIntegrationRepositories } from '$lib/api.js';
     import Button from '$lib/components/Button.svelte';
@@ -68,6 +68,7 @@
     let cloudflareConfig = { connected: false };
     let cloudflareTokenDraft = '';
     let cloudflareZoneDraft = '';
+    let cloudflareZones = [];
     let cloudflareTunnelIdDraft = '';
     let cloudflareRoute = { configured: false };
     let cloudflareConfigBusy = false;
@@ -205,6 +206,32 @@
         }
     }
 
+    async function discoverCloudflareZones() {
+        if (cloudflareConfigBusy || !cloudflareTokenDraft.trim()) return;
+        cloudflareConfigBusy = true;
+        const res = await listCloudflareZones(cloudflareTokenDraft.trim());
+        cloudflareConfigBusy = false;
+        if (!res.ok) { notify(res.error || 'Не удалось получить список доменов Cloudflare', 'error'); return; }
+        cloudflareZones = res.data?.zones || [];
+        if (!cloudflareZones.length) { notify('В этом Cloudflare аккаунте не найдено активных доменов', 'warning'); return; }
+        cloudflareZoneDraft = cloudflareZones.length === 1 ? cloudflareZones[0].id : cloudflareZoneDraft;
+        notify('Домены Cloudflare загружены', 'success');
+    }
+
+    async function createCloudflareTunnelForSite() {
+        const hostname = String(domainDraft || '').trim().toLowerCase();
+        if (cloudflareRouteBusy || !hostname || !online) return;
+        cloudflareRouteBusy = true;
+        const res = await createCloudflareTunnel(deviceId, siteId, hostname);
+        cloudflareRouteBusy = false;
+        if (!res.ok) { notify(res.error || 'Не удалось создать Cloudflare Tunnel', 'error'); return; }
+        cloudflareTunnelIdDraft = res.data?.tunnel_id || '';
+        cloudflareRoute = { configured: true, tunnel_id: res.data?.tunnel_id, hostname, origin: res.data?.origin, ingress_managed: true };
+        notify('Cloudflare Tunnel создан, DNS настроен, Agent подключён', 'success');
+        await refresh();
+        await loadCloudflareIntegration();
+    }
+
     async function connectCloudflare() {
         if (cloudflareConfigBusy || !cloudflareTokenDraft.trim() || !cloudflareZoneDraft.trim()) return;
         cloudflareConfigBusy = true;
@@ -212,6 +239,7 @@
         cloudflareConfigBusy = false;
         if (!res.ok) { notify(res.error || 'Не удалось подключить Cloudflare', 'error'); return; }
         cloudflareTokenDraft = '';
+        cloudflareZones = [];
         notify('Cloudflare zone подключена', 'success');
         await loadCloudflareIntegration();
     }
@@ -1053,6 +1081,10 @@
             <h2 class="details-title">Cloudflare API integration</h2>
             {#if cloudflareConfig.connected}
                 <p class="muted">Подключено: {cloudflareConfig.zone_name} ({cloudflareConfig.zone_id})</p>
+                <div class="actions">
+                    <Button variant="primary" loading={cloudflareRouteBusy} disabled={cloudflareRouteBusy||!online||!domainDraft.trim()||cloudflareRoute?.configured} on:click={createCloudflareTunnelForSite}>Создать Tunnel и подключить приложение</Button>
+                </div>
+                <p class="muted">Yevqo создаст удалённый Tunnel, добавит ingress и DNS CNAME, затем запустит cloudflared на выбранном Android Agent. Домен берётся из поля Primary domain выше.</p>
                 <label class="field-label" for="cloudflare-tunnel-id">Cloudflare Tunnel ID</label>
                 <input id="cloudflare-tunnel-id" class="input" bind:value={cloudflareTunnelIdDraft} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off"/>
                 <div class="actions">
@@ -1073,10 +1105,16 @@
             {:else}
                 <label class="field-label" for="cloudflare-api-token">Cloudflare API token</label>
                 <input id="cloudflare-api-token" class="input" type="password" bind:value={cloudflareTokenDraft} placeholder="API token" autocomplete="new-password"/>
-                <label class="field-label" for="cloudflare-zone-id">Cloudflare Zone ID</label>
-                <input id="cloudflare-zone-id" class="input" bind:value={cloudflareZoneDraft} placeholder="Zone ID" autocomplete="off"/>
-                <Button variant="primary" loading={cloudflareConfigBusy} disabled={cloudflareConfigBusy||!cloudflareTokenDraft.trim()||!cloudflareZoneDraft.trim()} on:click={connectCloudflare}>Connect Cloudflare</Button>
-                <p class="muted">Токену нужны Account: Cloudflare Tunnel — Edit (API permission: Cloudflare Tunnel Write), Zone: DNS — Edit и Zone — Read. API token хранится зашифрованным. Настройку выполняет владелец workspace.</p>
+                <Button size="sm" loading={cloudflareConfigBusy} disabled={cloudflareConfigBusy||!cloudflareTokenDraft.trim()} on:click={discoverCloudflareZones}>Загрузить мои домены</Button>
+                {#if cloudflareZones.length}
+                    <label class="field-label" for="cloudflare-zone-id">Выбери домен</label>
+                    <select id="cloudflare-zone-id" class="input" bind:value={cloudflareZoneDraft}>
+                        <option value="">Выбери домен Cloudflare</option>
+                        {#each cloudflareZones as zone}<option value={zone.id}>{zone.name} · {zone.account_name}</option>{/each}
+                    </select>
+                    <Button variant="primary" loading={cloudflareConfigBusy} disabled={cloudflareConfigBusy||!cloudflareZoneDraft} on:click={connectCloudflare}>Подключить Cloudflare</Button>
+                {/if}
+                <p class="muted">Нужен ограниченный API Token с правами Account: Cloudflare Tunnel — Edit, Zone: DNS — Edit и Zone: Read. Токен проверяется при загрузке доменов и хранится в Yevqo зашифрованным. OAuth не требуется.</p>
             {/if}
         </Card>
     {:else if activeTab === 'environment'}

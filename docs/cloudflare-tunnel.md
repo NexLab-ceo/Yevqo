@@ -12,14 +12,16 @@ cloudflared --version
 
 Do not use the generic Linux release binary on Android/Termux. The Termux package is built for the Android userspace.
 
-## Connect a site
+## Connect a site automatically
 
-1. Create a remotely-managed Tunnel in Cloudflare Zero Trust → Networks → Tunnels.
-2. Copy its Tunnel token and Tunnel ID.
-3. In Yevqo → Site → Domains, save the hostname and Tunnel token. Yevqo stores the token encrypted and sends it to the owning Agent over the authenticated command channel.
-4. The Agent writes the token to a private `0600` file and starts `cloudflared tunnel run --token-file`. The token is never placed in the process command line.
-5. Connect a Cloudflare API token and Zone ID in the Domains tab, then enter the Tunnel ID and choose **Configure public route**. Yevqo adds the ingress rule and matching proxied CNAME.
-6. The Agent waits for Cloudflare to report a registered edge connection before the Control Plane changes the connector status to active.
+1. Create a scoped Cloudflare API Token with **Account: Cloudflare Tunnel — Edit**, **Zone: DNS — Edit**, and **Zone: Read**.
+2. In Yevqo → Site → Domains, paste the API Token and choose **Загрузить мои домены**. Select the active zone and connect it.
+3. Enter the desired hostname in **Primary domain**, then choose **Создать Tunnel и подключить приложение**.
+4. Yevqo creates a remotely-managed Tunnel through the Cloudflare API, obtains its Tunnel token, configures the public hostname ingress and proxied DNS CNAME, then sends the token to the selected Agent over its authenticated command channel.
+5. The Agent stores the token in a private file and starts `cloudflared tunnel run --token-file`; the token is not placed in the process command line.
+6. Yevqo reports the connector active only after the Agent confirms its Cloudflare edge connection.
+
+The API Token is used only by the Control Plane for Cloudflare API calls. The generated Tunnel token is encrypted at rest and delivered only to the owning Agent. OAuth is not part of this flow; users explicitly provide a scoped API Token. Existing manual Tunnel-token setup remains available for tunnels created outside Yevqo.
 
 
 ## Existing locally-managed Tunnel (Termux config.yml)
@@ -76,10 +78,10 @@ Stopping a website process does not stop its tunnel connector; the connector rem
 
 ## Automatic public hostname routing
 
-1. Connect a Cloudflare API token and Zone ID in the site's Domains tab before saving the site's Tunnel token if you want the route to be configured automatically.
+1. Connect a scoped Cloudflare API token and select a zone in the site's Domains tab. Yevqo can create the Tunnel automatically, or you can connect an existing Tunnel.
 2. The API token needs **Account: Cloudflare Tunnel — Edit** (API permission `Cloudflare Tunnel Write`), **Zone: DNS — Edit**, and **Zone — Read**.
-3. Save the site's hostname and Cloudflare Tunnel token. Yevqo stores the Tunnel token encrypted and sends it only to the owning Agent, which starts `cloudflared` and waits for an edge connection.
-4. When the Cloudflare API integration is already connected, the UI extracts the Tunnel UUID from the supplied token and automatically asks the existing route API to configure the remotely managed ingress to `http://127.0.0.1:<site-port>` and create the matching proxied CNAME. If the API integration was connected later, use **Configure public route** with the Tunnel ID shown in Cloudflare.
+3. For an automatically created Tunnel, Yevqo obtains its token from the Cloudflare API, stores it encrypted and sends it only to the owning Agent, which starts `cloudflared` and waits for an edge connection.
+4. Yevqo configures remotely-managed ingress to `http://127.0.0.1:<site-port>` and creates the matching proxied CNAME. Existing manually created tunnels can still be connected by supplying their token and using **Configure public route**.
 5. A successful route API response confirms that ingress and DNS configuration were accepted; it does not prove that the public HTTP origin is healthy. Verify the hostname from an external network.
 6. Remove the managed route before changing the hostname or disconnecting the Cloudflare API integration. Deleting a site or unpairing its device also removes its managed routes first; the operation is blocked if Cloudflare cleanup fails.
 
