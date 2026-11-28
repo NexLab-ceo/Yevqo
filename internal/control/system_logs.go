@@ -69,7 +69,8 @@ func (s *Server) recordSystemLog(entry systemLogRecord) {
 	}
 	// Prune in small, infrequent batches so normal log writes stay cheap.
 	// The created_at index bounds the scan to expired rows.
-	if atomic.AddUint64(&systemLogPruneCounter, 1)%256 == 0 {
+	pruneCount := atomic.AddUint64(&systemLogPruneCounter, 1)
+	if pruneCount == 1 || pruneCount%256 == 0 {
 		pruneCtx, pruneCancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer pruneCancel()
 		if _, pruneErr := s.db.conn.ExecContext(pruneCtx,
@@ -107,9 +108,18 @@ func (s *Server) handleSystemLogs(w http.ResponseWriter, r *http.Request) {
 	if search != "" { where = append(where, "(message LIKE ? OR source LIKE ? OR path LIKE ? OR request_id LIKE ?)"); term := "%" + search + "%"; args = append(args, term, term, term, term) }
 	filter := strings.Join(where, " AND ")
 	var total, errorsCount, warningsCount int64
-	_ = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM system_logs WHERE "+filter, args...).Scan(&total)
-	_ = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM system_logs WHERE level='error'").Scan(&errorsCount)
-	_ = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM system_logs WHERE level='warn'").Scan(&warningsCount)
+	if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM system_logs WHERE "+filter, args...).Scan(&total); err != nil {
+		apiError(w, fmt.Errorf("could not count matching system logs: %w", err))
+		return
+	}
+	if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM system_logs WHERE level='error'").Scan(&errorsCount); err != nil {
+		apiError(w, fmt.Errorf("could not count system log errors: %w", err))
+		return
+	}
+	if err := s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM system_logs WHERE level='warn'").Scan(&warningsCount); err != nil {
+		apiError(w, fmt.Errorf("could not count system log warnings: %w", err))
+		return
+	}
 	query := "SELECT id,level,category,source,message,request_id,user_id,device_id,method,path,status_code,duration_ms,metadata,created_at FROM system_logs WHERE "+filter+" ORDER BY id DESC LIMIT ?"
 	queryArgs := append(append([]interface{}{}, args...), limit)
 	rows, err := s.db.conn.QueryContext(r.Context(), query, queryArgs...)
