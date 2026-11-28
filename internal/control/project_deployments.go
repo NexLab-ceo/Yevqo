@@ -18,7 +18,6 @@ type projectDeploymentRequest struct {
 	SiteID   string `json:"site_id"`
 	Branch   string `json:"branch"`
 	Commit   string `json:"commit_sha"`
-	AllowProjectCode bool `json:"allow_project_code"`
 }
 
 func deploymentTerminal(state string) bool {
@@ -83,7 +82,6 @@ func (s *Server) handleProjectDeployments(w http.ResponseWriter,r *http.Request)
 	if len(parts)==2 && r.Method==http.MethodPost {
 		var in projectDeploymentRequest
 		if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid deployment request"));return}
-		if !in.AllowProjectCode{apiError(w,shared.ErrForbidden("explicit consent to execute repository code is required"));return}
 		id,queueErr:=s.queueProjectDeployment(r.Context(),u.ID,ownerID,projectID,in,"manual")
 		if queueErr!=nil{apiError(w,queueErr);return}
 		writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"deployment_id":id,"status":"queued"});return
@@ -126,7 +124,6 @@ func (s *Server) handleProjectDeployments(w http.ResponseWriter,r *http.Request)
 
 func (s *Server) queueProjectDeployment(ctx context.Context,actorID,ownerID,projectID int64,in projectDeploymentRequest,source string)(int64,error){
 	if in.DeviceID<1||!validLogSiteID(in.SiteID){return 0,shared.ErrBadRequest("valid deployment target is required")}
-	if !in.AllowProjectCode{return 0,shared.ErrForbidden("explicit project-code consent is required")}
 	var fullName,branch string
 	err:=s.db.conn.QueryRowContext(ctx,`SELECT pr.full_name,prs.deploy_branch FROM project_repository_sites prs JOIN project_repositories pr ON pr.project_id=prs.project_id WHERE prs.project_id=? AND prs.device_id=? AND prs.site_id=?`,projectID,in.DeviceID,in.SiteID).Scan(&fullName,&branch)
 	if err!=nil{return 0,shared.ErrBadRequest("connect this project repository to the selected site first")}
