@@ -66,7 +66,7 @@ async function request(method, path, body = null) {
             const safeCause = cause || fallback;
             const diagnostic = formatRequestDiagnostic(operation, res.status, code, requestId);
             const error = detailedErrorsEnabled()
-                ? safeCause + '\\n\\n' + diagnostic
+                ? safeCause + '\n\n' + diagnostic
                 : 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.';
             return { ok: false, error, cause: safeCause, status: res.status, code: code || undefined, requestId: requestId || undefined, operation, diagnostic };
         }
@@ -78,7 +78,7 @@ async function request(method, path, body = null) {
         const cause = 'Не удалось связаться с сервером. Проверь подключение и доступность Yevqo.';
         const diagnostic = formatRequestDiagnostic(operation, null, 'NETWORK_ERROR', '');
         const error = detailedErrorsEnabled()
-            ? cause + '\\n\\n' + diagnostic + ' · Причина сети: ' + networkError
+            ? cause + '\n\n' + diagnostic + ' · Причина сети: ' + networkError
             : 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.';
         return { ok: false, error, cause, code: 'NETWORK_ERROR', operation, networkError, diagnostic };
     }
