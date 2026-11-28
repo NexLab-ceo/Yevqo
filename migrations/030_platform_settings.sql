@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS platform_settings (
     id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
     public_url VARCHAR(512) NOT NULL DEFAULT '',
     cloudflare_oauth_client_id VARCHAR(255) NOT NULL DEFAULT '',
+    cloudflare_oauth_token_auth_method VARCHAR(32) NOT NULL DEFAULT 'client_secret_post',
     cloudflare_oauth_secret_nonce VARBINARY(32) NULL,
     cloudflare_oauth_secret_ciphertext LONGBLOB NULL,
     github_app_id VARCHAR(32) NOT NULL DEFAULT '',
