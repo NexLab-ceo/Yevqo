@@ -432,6 +432,15 @@ type LogEvent struct {
 	Line   string
 }
 
+type AgentSystemLogEvent struct {
+	Level string `json:"level"`
+	Category string `json:"category"`
+	Source string `json:"source"`
+	Message string `json:"message"`
+	Timestamp time.Time `json:"timestamp"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+}
+
 type DeploymentJobEvent struct {
  SiteId string `json:"site_id"`
  JobId string `json:"job_id"`
