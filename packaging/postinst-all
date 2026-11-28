@@ -3,32 +3,28 @@ set -e
 PREFIX="/data/data/com.termux/files/usr"
 DATA_ROOT="${YEVQO_DATA_ROOT:-${VELTRIX_DATA_ROOT:-/sdcard/yevqo}}"
 SHARE="$PREFIX/share/yevqo"
-# Stage only missing, byte-identical immutable migrations before the updater
-# restarts Control Plane. Existing migration files and database contents stay untouched.
+# Stage only missing, byte-identical immutable migrations. Existing migration
+# files and database contents stay untouched.
 if [ -x "$SHARE/scripts/sync-migrations.sh" ] && [ -d "$SHARE/migrations" ]; then
   "$SHARE/scripts/sync-migrations.sh" "$SHARE/migrations" "$DATA_ROOT/migrations"
 else
   echo "Packaged migration synchronizer or migrations directory is missing" >&2
   exit 1
 fi
+
+# Yevqo All has no automatic update channel. Remove the updater service and
+# stale binaries left by older package versions during an in-place upgrade.
 SERVICE_DIR="$PREFIX/var/service/yevqo-updater"
-mkdir -p "$SERVICE_DIR"
-cat > "$SERVICE_DIR/run" <<'RUN'
-#!/data/data/com.termux/files/usr/bin/sh
-set -e
-exec 2>&1
-PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
-exec "$PREFIX/bin/yevqo-auto-update-service"
-RUN
-chmod 700 "$SERVICE_DIR/run"
-if command -v sv-enable >/dev/null 2>&1; then sv-enable yevqo-updater >/dev/null 2>&1 || true; fi
-if command -v sv >/dev/null 2>&1; then sv up yevqo-updater >/dev/null 2>&1 || true; fi
+if command -v sv >/dev/null 2>&1; then sv down yevqo-updater >/dev/null 2>&1 || true; fi
+if command -v sv-disable >/dev/null 2>&1; then sv-disable yevqo-updater >/dev/null 2>&1 || true; fi
+rm -rf "$SERVICE_DIR"
+rm -f "$PREFIX/bin/yevqo-update-all" "$PREFIX/bin/yevqo-auto-update-service"
 
 if [ "${YEVQO_NONINTERACTIVE:-0}" = "1" ]; then
-  echo "Yevqo All installed; background updates are enabled. Run yevqo-setup when ready to configure services."
+  echo "Yevqo All installed; automatic updates are disabled. Run yevqo-setup when ready to configure services."
 elif [ -r /dev/tty ]; then
   "$PREFIX/bin/yevqo-setup" </dev/tty >/dev/tty 2>&1
 else
-  echo "Yevqo All installed. Run: yevqo-setup (choose server, agent or both)."
+  echo "Yevqo All installed. Automatic updates are disabled. Run: yevqo-setup (choose server, agent or both)."
 fi
 exit 0
