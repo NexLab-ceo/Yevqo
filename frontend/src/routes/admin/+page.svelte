@@ -14,7 +14,7 @@
     let activeTab = 'overview';
     let platformLoading = false;
     let platformSaving = false;
-    let platform = { public_url: '', cloudflare_oauth_client_id: '', cloudflare_oauth_secret_set: false, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false, callback_url: '', github_app_configured: false, github_app_id: '', github_app_slug: '', github_app_private_key_set: false, github_app_private_key: '', clear_github_app_private_key: false };
+    let platform = { public_url: '', cloudflare_oauth_client_id: '', cloudflare_oauth_token_auth_method: 'client_secret_post', cloudflare_oauth_secret_set: false, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false, callback_url: '', github_app_configured: false, github_app_id: '', github_app_slug: '', github_app_private_key_set: false, github_app_private_key: '', clear_github_app_private_key: false };
 
     // Загружаем статистику и пользователей.
     onMount(async () => {
@@ -59,6 +59,7 @@
             public_url: platform.public_url,
             cloudflare_oauth_client_id: platform.cloudflare_oauth_client_id,
             cloudflare_oauth_client_secret: platform.cloudflare_oauth_client_secret,
+            cloudflare_oauth_token_auth_method: platform.cloudflare_oauth_token_auth_method,
             clear_cloudflare_oauth_secret: !!platform.clear_cloudflare_oauth_secret,
             github_app_id: platform.github_app_id,
             github_app_slug: platform.github_app_slug,
@@ -134,6 +135,11 @@
                     <p class="setting-help">Создайте OAuth Client в Cloudflare Dashboard → Manage Account → OAuth clients. Для SaaS выберите Public visibility, Authorization Code, refresh_token и client_secret_post или client_secret_basic. Добавьте callback URL выше. Secret хранится зашифрованным и никогда не показывается повторно. Сам OAuth-вход пока не активен — callback появится после отдельной реализации OAuth flow.</p>
                     <label>OAuth Client ID</label>
                     <input bind:value={platform.cloudflare_oauth_client_id} placeholder="Cloudflare OAuth Client ID" autocomplete="off" />
+                    <label>Token endpoint authentication</label>
+                    <select bind:value={platform.cloudflare_oauth_token_auth_method}>
+                        <option value="client_secret_post">client_secret_post</option>
+                        <option value="client_secret_basic">client_secret_basic</option>
+                    </select>
                     <label>OAuth Client Secret</label>
                     <input type="password" bind:value={platform.cloudflare_oauth_client_secret} placeholder={platform.cloudflare_oauth_secret_set ? 'Секрет уже сохранён — введите новый только для замены' : 'Вставьте Client Secret'} autocomplete="new-password" />
                     <div class="secret-state">{#if platform.cloudflare_oauth_secret_set}<span class="configured">Client Secret сохранён</span>{:else}<span>Client Secret ещё не задан</span>{/if}</div>
@@ -258,7 +264,7 @@
     .platform-settings { display:flex; flex-direction:column; gap:12px; max-width:860px; }
     .platform-settings h3 { margin:0 0 8px; font-size:14px; }
     .platform-settings label { display:block; margin:12px 0 6px; color:var(--text-muted); font-size:12px; }
-    .platform-settings input:not([type=checkbox]), .platform-settings textarea { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-surface); color:var(--text-main); }
+     .platform-settings input:not([type=checkbox]), .platform-settings textarea, .platform-settings select { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-surface); color:var(--text-main); }
     .setting-help { color:var(--text-muted); font-size:12px; line-height:1.6; margin:4px 0 12px; }
     .callback-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
     .callback-row code { flex:1; padding:10px; background:var(--bg-elevated); border-radius:7px; overflow-wrap:anywhere; }
