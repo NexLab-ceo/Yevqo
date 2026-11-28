@@ -123,7 +123,7 @@
                     <label>Public URL</label>
                     <input bind:value={platform.public_url} placeholder="https://app.yevqo.cc.cd" />
                     <label>Cloudflare OAuth callback URL</label>
-                    <div class="callback-row"><code>{platform.callback_url || 'Сначала укажите Public URL'}</code><button on:click={() => navigator.clipboard.writeText(platform.callback_url)}>Копировать</button></div>
+                    <div class="callback-row"><code>{platform.public_url ? platform.public_url.replace(/\/+$/, '') + '/oauth/cloudflare/callback' : 'Сначала укажите Public URL'}</code><button on:click={() => navigator.clipboard.writeText(platform.public_url)}>Копировать</button></div>
                 </Card>
                 <Card>
                     <h3>Cloudflare OAuth</h3>
@@ -238,7 +238,22 @@
 {/if}
 
 <style>
-    .admin-tabs { display:flex; gap:8px; margin: 18px 0 24px; border-bottom:1px solid var(--border); }\n    .admin-tabs button { background:transparent; color:var(--text-muted); border:0; border-bottom:2px solid transparent; padding:10px 12px; cursor:pointer; }\n    .admin-tabs button.active { color:var(--text-main); border-color:var(--accent, #8AB4FF); }\n    .platform-settings { display:flex; flex-direction:column; gap:12px; max-width:860px; }\n    .platform-settings h3 { margin:0 0 8px; font-size:14px; }\n    .platform-settings label { display:block; margin:12px 0 6px; color:var(--text-muted); font-size:12px; }\n    .platform-settings input:not([type=checkbox]) { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-surface); color:var(--text-main); }\n    .setting-help { color:var(--text-muted); font-size:12px; line-height:1.6; margin:4px 0 12px; }\n    .callback-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }\n    .callback-row code { flex:1; padding:10px; background:var(--bg-elevated); border-radius:7px; overflow-wrap:anywhere; }\n    .callback-row button { padding:8px 10px; border:1px solid var(--border); background:transparent; color:var(--text-main); border-radius:7px; }\n    .secret-state { font-size:12px; color:var(--text-muted); margin-top:10px; }\n    .configured { color:var(--success); }\n    .checkbox-line { display:flex!important; align-items:center; gap:8px; }\n    .setting-actions { display:flex; justify-content:flex-end; margin-top:16px; }\n    .export-link {
+    .admin-tabs { display:flex; gap:8px; margin: 18px 0 24px; border-bottom:1px solid var(--border); }
+    .admin-tabs button { background:transparent; color:var(--text-muted); border:0; border-bottom:2px solid transparent; padding:10px 12px; cursor:pointer; }
+    .admin-tabs button.active { color:var(--text-main); border-color:var(--accent, #8AB4FF); }
+    .platform-settings { display:flex; flex-direction:column; gap:12px; max-width:860px; }
+    .platform-settings h3 { margin:0 0 8px; font-size:14px; }
+    .platform-settings label { display:block; margin:12px 0 6px; color:var(--text-muted); font-size:12px; }
+    .platform-settings input:not([type=checkbox]) { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg-surface); color:var(--text-main); }
+    .setting-help { color:var(--text-muted); font-size:12px; line-height:1.6; margin:4px 0 12px; }
+    .callback-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .callback-row code { flex:1; padding:10px; background:var(--bg-elevated); border-radius:7px; overflow-wrap:anywhere; }
+    .callback-row button { padding:8px 10px; border:1px solid var(--border); background:transparent; color:var(--text-main); border-radius:7px; }
+    .secret-state { font-size:12px; color:var(--text-muted); margin-top:10px; }
+    .configured { color:var(--success); }
+    .checkbox-line { display:flex!important; align-items:center; gap:8px; }
+    .setting-actions { display:flex; justify-content:flex-end; margin-top:16px; }
+    .export-link {
         display: inline-flex;
         align-items: center;
         margin-top: 10px;

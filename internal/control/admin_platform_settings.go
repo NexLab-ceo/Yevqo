@@ -43,8 +43,8 @@ func (s *Server) handleAdminPlatformSettings(w http.ResponseWriter, r *http.Requ
         if err:=decodeJSON(r,&in); err!=nil { apiError(w,shared.ErrBadRequest("invalid platform settings")); return }
         publicURL,err:=normalizePlatformURL(in.PublicURL); if err!=nil { apiError(w,err); return }
         in.ClientID=strings.TrimSpace(in.ClientID)
-        if len(in.ClientID)>255 || strings.ContainsAny(in.ClientID,"\\r\\n\\x00") { apiError(w,shared.ErrBadRequest("invalid Cloudflare OAuth Client ID")); return }
-        if len(in.ClientSecret)>4096 || strings.ContainsAny(in.ClientSecret,"\\r\\n\\x00") { apiError(w,shared.ErrBadRequest("invalid Cloudflare OAuth Client Secret")); return }
+        if len(in.ClientID)>255 || strings.ContainsAny(in.ClientID,"\r\n\x00") { apiError(w,shared.ErrBadRequest("invalid Cloudflare OAuth Client ID")); return }
+        if len(in.ClientSecret)>4096 || strings.ContainsAny(in.ClientSecret,"\r\n\x00") { apiError(w,shared.ErrBadRequest("invalid Cloudflare OAuth Client Secret")); return }
         if in.ClientSecret!="" && in.ClientID=="" { apiError(w,shared.ErrBadRequest("Client ID is required when setting a Client Secret")); return }
         var nonce,ciphertext []byte
         if in.ClientSecret!="" {
