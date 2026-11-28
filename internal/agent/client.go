@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sync"
 	"time"
+	"strings"
 
 	"github.com/gorilla/websocket"
 	"veltrix/internal/shared"
@@ -369,10 +370,18 @@ func (c *Client) handleCommand(ctx context.Context, cmd *shared.Command) {
 	level := "info"
 	if result == nil || !result.Ok { level = "error" }
 	details := map[string]interface{}{"command_id": cmd.Id, "action": cmd.Action}
+	if cmd.TraceID != "" { details["request_id"] = cmd.TraceID }
 	if result != nil && !result.Ok && result.Message != "" { details["cause"] = result.Message }
 	message := "Agent command completed"
 	if level == "error" { message = "Agent command failed" }
-	c.emitSystemLog(level, "command", message, details)
+	category := "command"
+	switch {
+	case strings.HasPrefix(cmd.Action, "build"), strings.Contains(cmd.Action, "build_history"), strings.Contains(cmd.Action, "build_artifact"): category = "builds"
+	case strings.Contains(cmd.Action, "deploy"), strings.Contains(cmd.Action, "rollback"), strings.Contains(cmd.Action, "release"): category = "deployments"
+	case strings.Contains(cmd.Action, "database"): category = "database"
+	case strings.Contains(cmd.Action, "backup"): category = "backups"
+	}
+	c.emitSystemLog(level, category, message, details)
 }
 
 // ============================================================
