@@ -42,7 +42,7 @@ func (s *Server) handleSiteWebhookSettings(w http.ResponseWriter, r *http.Reques
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "enabled": enabled, "path": fmt.Sprintf("/webhooks/github/%d/%s", deviceID, siteID)})
 	case http.MethodPost:
-		var in struct { Enabled bool `json:"enabled"`; AllowProjectCode bool `json:"allow_project_code"` }
+		var in struct { Enabled bool `json:"enabled"` }
 		if err := decodeJSON(r, &in); err != nil { apiError(w, shared.ErrBadRequest("invalid JSON")); return }
 		if !in.Enabled {
 			_, err := s.db.conn.ExecContext(r.Context(), `UPDATE sites SET github_webhook_enabled=FALSE,github_webhook_secret_enc=NULL,github_webhook_updated_at=NOW() WHERE device_id=? AND site_id=?`, deviceID, siteID)
@@ -50,7 +50,6 @@ func (s *Server) handleSiteWebhookSettings(w http.ResponseWriter, r *http.Reques
 			writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true, "enabled": false})
 			return
 		}
-		if !in.AllowProjectCode { apiError(w, shared.ErrForbidden("explicit consent to run repository code is required before enabling automatic deployments")); return }
 		var repository sqlNullString
 		if err := s.db.conn.QueryRowContext(r.Context(), `SELECT git_url FROM sites WHERE device_id=? AND site_id=?`, deviceID, siteID).Scan(&repository); err != nil || !repository.Valid || strings.TrimSpace(repository.String) == "" {
 			apiError(w, shared.ErrBadRequest("connect a Git repository before enabling webhooks")); return
