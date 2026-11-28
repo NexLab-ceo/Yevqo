@@ -178,10 +178,15 @@ jobs:
           grep -q '/bin/yevqo-control$' /tmp/yevqo-all.contents
           grep -q '/bin/yevqo-agent$' /tmp/yevqo-all.contents
           grep -q '/bin/yevqo-cli$' /tmp/yevqo-all.contents
+          if grep -Eq '/bin/yevqo-update|/bin/yevqo-auto-update-service' /tmp/yevqo-all.contents; then
+            echo "Yevqo All must not contain automatic update commands or services" >&2
+            exit 1
+          fi
           grep -q '/bin/yevqo$' /tmp/yevqo.contents
           grep -q '/bin/yevqo-setup$' /tmp/yevqo.contents
           grep -q '/bin/yevqo-update$' /tmp/yevqo.contents
-          grep -q '/bin/yevqo-auto-update-service          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all|/bin/yevqo-agent$' /tmp/yevqo.contents; then
+          grep -q '/bin/yevqo-auto-update-service$' /tmp/yevqo.contents
+          if grep -Eq 'yevqo-control|share/yevqo/public|migrations|yevqo-update-all|/bin/yevqo-agent$' /tmp/yevqo.contents; then
             echo "Standalone Yevqo package contains unexpected payload" >&2
             exit 1
           fi
