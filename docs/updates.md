@@ -51,11 +51,10 @@ Versioned tag builds publish automatically to the public Releases page in `NexLa
 
 To prepare a stable package version:
 
-1. Create and push a version tag from the verified `main` commit, for example:
+1. Create a version tag from the verified `main` commit, for example:
 
    ```sh
    git tag v0.2.0
-   git push origin v0.2.0
    ```
 
 2. Push the tag. This automatically starts **Build Yevqo** for that exact tag:
