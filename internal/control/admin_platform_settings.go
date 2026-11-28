@@ -1,7 +1,6 @@
 package control
 
 import (
-    "context"
     "crypto/rsa"
     "crypto/x509"
     "database/sql"

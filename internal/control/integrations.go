@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"database/sql"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"

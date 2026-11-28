@@ -150,7 +150,7 @@
                     <label>GitHub App slug</label>
                     <input bind:value={platform.github_app_slug} placeholder="yevqo" autocomplete="off" />
                     <label>GitHub App private key (PEM)</label>
-                    <textarea bind:value={platform.github_app_private_key} rows="6" placeholder={platform.github_app_private_key_set ? 'Ключ уже сохранён — вставьте новый только для замены' : '-----BEGIN RSA PRIVATE KEY-----'} spellcheck="false" />
+                    <textarea bind:value={platform.github_app_private_key} rows="6" placeholder={platform.github_app_private_key_set ? 'Ключ уже сохранён — вставьте новый только для замены' : '-----BEGIN RSA PRIVATE KEY-----'} spellcheck="false"></textarea>
                     <div class="secret-state">{#if platform.github_app_private_key_set}<span class="configured">Private key сохранён</span>{:else}<span>Private key ещё не задан</span>{/if}</div>
                     {#if platform.github_app_private_key_set}
                         <label class="checkbox-line"><input type="checkbox" bind:checked={platform.clear_github_app_private_key} /> Удалить сохранённый private key</label>
