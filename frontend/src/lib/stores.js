@@ -3,7 +3,8 @@
  * Svelte stores для данных, которые нужны на нескольких страницах.
  */
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
+import { errorDisplayMode } from '$lib/admin-error-mode.js';
 
 // Текущий пользователь (null = не залогинен).
 export const user = writable(null);
@@ -38,7 +39,10 @@ export const onlineDevicesCount = derived(devices, ($devices) =>
  */
 export function notify(message, type = 'info') {
     const id = Date.now() + Math.random();
-    notifications.update((list) => [...list, { id, message, type }]);
+    const visibleMessage = type === 'error' && !get(errorDisplayMode)
+        ? 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.'
+        : message;
+    notifications.update((list) => [...list, { id, message: visibleMessage, type }]);
 
     setTimeout(() => {
         notifications.update((list) => list.filter((n) => n.id !== id));
