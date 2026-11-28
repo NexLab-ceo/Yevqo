@@ -108,7 +108,7 @@ func (s *Server) handleProjectDeployments(w http.ResponseWriter,r *http.Request)
 			if err!=nil||result==nil||!result.Ok{message:="could not cancel deployment";if err!=nil{message=err.Error()}else if result!=nil&&result.Message!=""{message=result.Message};apiError(w,shared.ErrBadRequest(message));return}
 			writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"message":"deployment cancellation requested"});return
 		case "redeploy":
-			id,queueErr:=s.queueProjectDeployment(r.Context(),u.ID,ownerID,projectID,projectDeploymentRequest{DeviceID:deviceID,SiteID:siteID,Branch:branch,Commit:commit,AllowProjectCode:true},"redeploy")
+			id,queueErr:=s.queueProjectDeployment(r.Context(),u.ID,ownerID,projectID,projectDeploymentRequest{DeviceID:deviceID,SiteID:siteID,Branch:branch,Commit:commit},"redeploy")
 			if queueErr!=nil{apiError(w,queueErr);return}
 			writeJSON(w,http.StatusAccepted,map[string]interface{}{"ok":true,"deployment_id":id,"status":"queued"});return
 		case "rollback":
