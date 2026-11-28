@@ -12,6 +12,29 @@ cloudflared --version
 
 Do not use the generic Linux release binary on Android/Termux. The Termux package is built for the Android userspace.
 
+## Configure the Cloudflare OAuth client
+
+The OAuth client is created once by the Yevqo platform administrator in Cloudflare (**Manage Account → OAuth clients**). It must be configured for a server-side Authorization Code flow:
+
+- Response type: `code`.
+- Grant types: `authorization_code` and `refresh_token`.
+- Token endpoint authentication: choose `client_secret_post` or `client_secret_basic`, then select the same method in Yevqo → Admin → Platform Settings.
+- Redirect URL: an exact match for `<YEVQO_PUBLIC_URL>/oauth/cloudflare/callback`. For the production app this is `https://app.yevqo.cc.cd/oauth/cloudflare/callback`.
+- Required scopes: `zone.read`, `dns.write`, `argotunnel.read`, `argotunnel.write`, and `offline_access`. The last scope is required for refresh tokens; do not make required scopes optional.
+
+Cloudflare's OAuth scope IDs correspond to API permission groups. The Tunnel scope used by Yevqo is `argotunnel.write`; DNS and zone discovery use `dns.write` and `zone.read`. The client must include every scope requested by Yevqo. For a client intended for users outside the Cloudflare account that created it, Cloudflare requires public visibility and publisher-domain verification; a private OAuth client is limited to members of its owning account.
+
+After creating the client, copy its Client ID and Client Secret into Yevqo → Admin → Platform Settings, save the public URL and matching token authentication method, then reconnect from Settings → Integrations → Cloudflare. The callback consumes a one-time state value and returns to the integration page; users then load and select an active DNS zone.
+
+### If Cloudflare returns immediately
+
+- `invalid_scope`: compare the client's configured scopes with the five required scope IDs above.
+- `unauthorized_client` or `invalid_client`: check the Client ID, Client Secret, grant/response types and token authentication method.
+- A redirect URL error: compare the callback URL character-for-character, including scheme, hostname and path, with Yevqo's configured public URL.
+- If the authorization succeeds but no refresh token is returned, ensure `refresh_token` is an enabled grant and `offline_access` is included as a required scope.
+
+Yevqo deliberately does not treat a redirect as proof that Cloudflare is connected. The user must return with a valid callback, and Yevqo must be able to list zones before a zone can be selected. Live account authorization still needs to be tested against the actual OAuth client.
+
 ## Connect a site automatically
 
 1. Recommended: in Yevqo → Site → Domains select **Подключить Cloudflare через OAuth**. Authorize Yevqo in Cloudflare, then choose the active zone. The OAuth Client is configured by the platform administrator in Admin → Platform Settings.
