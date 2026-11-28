@@ -34,7 +34,17 @@
     error=(ru?'Cloudflare отказал в OAuth-доступе':'Cloudflare denied OAuth access')+(oauthError?' ('+oauthError+')':'')+'. '+(ru?'Проверь настройки OAuth-приложения и повтори подключение.':'Check the OAuth application settings and try again.');
    }
   }else if(status==='error'){
-   error=ru?'Не удалось завершить Cloudflare OAuth. Проверь настройки OAuth приложения.':'Cloudflare OAuth could not be completed. Check the OAuth application settings.';
+   const diagnostics={
+    missing_authorization_code:ru?'Cloudflare вернул callback без параметра code. Проверь Authorization Code grant и response type code.':'Cloudflare callback did not include code. Verify Authorization Code grant and response type code.',
+    oauth_client_configuration:ru?'Yevqo не смог загрузить OAuth-конфигурацию. Проверь Public URL, Client ID и Client Secret в Admin → Platform Settings, доступность MariaDB и ключ шифрования credentials.':'Yevqo could not load OAuth client configuration. Check Public URL, Client ID and Client Secret in Admin → Platform Settings, MariaDB availability, and the credential encryption key.',
+    token_exchange:ru?'Не удалось обменять authorization code на токены. Проверь Client ID/Secret, метод client_secret_post или client_secret_basic, точное совпадение Redirect URL и scopes zone.read, dns.write, argotunnel.read, argotunnel.write. Техническая причина записана в control.log без токенов и секретов.':'Authorization code could not be exchanged for tokens. Check Client ID/Secret, client_secret_post vs client_secret_basic, exact Redirect URL match, and scopes zone.read, dns.write, argotunnel.read, argotunnel.write. The technical cause is in control.log; tokens and secrets are omitted.',
+    missing_refresh_token:ru?'Cloudflare не вернул refresh_token. Проверь тип OAuth-клиента и Authorization Code grant.':'Cloudflare did not return refresh_token. Check OAuth client type and Authorization Code grant.',
+    invalid_token_lifetime:ru?'Cloudflare вернул expires_in меньше 60 секунд. Проверь OAuth-клиент и повтори авторизацию.':'Cloudflare returned expires_in below 60 seconds. Check the OAuth client and retry.',
+    encrypt_access_token:ru?'Токен получен, но Yevqo не смог зашифровать access token. Проверь credential encryption key и control.log.':'Token received, but Yevqo could not encrypt the access token. Check credential encryption key and control.log.',
+    encrypt_refresh_token:ru?'Токены получены, но Yevqo не смог зашифровать refresh token. Проверь credential encryption key и control.log.':'Tokens received, but Yevqo could not encrypt the refresh token. Check credential encryption key and control.log.',
+    persist_tokens:ru?'Токены зашифрованы, но MariaDB не сохранила их. Проверь состояние БД, миграции и control.log.':'Tokens were encrypted but MariaDB did not persist them. Check database health, migrations and control.log.'
+   };
+   error=diagnostics[oauthError]||((ru?'Ошибка Cloudflare OAuth: ':'Cloudflare OAuth error: ')+(oauthError||'unknown_error')+'. '+(ru?'Найди в control.log строку «cloudflare OAuth callback failed».':'Find “cloudflare OAuth callback failed” in control.log.'));
   }
   if(status)window.history.replaceState({},'',window.location.pathname);
   if(status!=='connected'&&config.connected&&config.needs_zone_selection&&!oauthZones.length&&config.auth_method==='oauth')await loadOAuthZones();
