@@ -7,7 +7,9 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"regexp"
 	"net/http"
 	"os/exec"
 	"runtime"
@@ -82,6 +84,35 @@ func NewClient(cfg *Config) *Client {
 		}
 	})
 	return client
+}
+
+
+var agentSensitiveLogPattern = regexp.MustCompile(`(?i)(token|secret|password|authorization|private[_ -]?key|client_secret|access_token|refresh_token|code)(["']?\\s*[:=]\\s*["']?)[^"'\\s&,;]+`)
+var agentBearerPattern = regexp.MustCompile(`(?i)bearer\\s+[a-z0-9._~+/-]+=*`)
+
+type agentLogForwarder struct { client *Client }
+
+func (w agentLogForwarder) Write(p []byte) (int, error) {
+	line := strings.TrimSpace(string(p))
+	if line == "" { return len(p), nil }
+	level := "info"
+	lower := strings.ToLower(line)
+	if strings.Contains(lower, "warning") || strings.Contains(lower, "warn:") { level = "warn" }
+	if strings.Contains(lower, "error") || strings.Contains(lower, "failed") || strings.Contains(lower, "failure") { level = "error" }
+	if level != "info" {
+		line = agentSensitiveLogPattern.ReplaceAllString(line, "$1$2[REDACTED]")
+		line = agentBearerPattern.ReplaceAllString(line, "Bearer [REDACTED]")
+		if len(line) > 512 { line = line[:512] }
+		w.client.emitSystemLog(level, "agent-runtime", "Agent runtime: "+line, nil)
+	}
+	return len(p), nil
+}
+
+// ForwardLogs mirrors Agent warnings/errors to the Control Plane while preserving
+// the existing stderr and private-file log destinations.
+func (c *Client) ForwardLogs(previous io.Writer) {
+	if previous == nil { previous = io.Discard }
+	log.SetOutput(io.MultiWriter(previous, agentLogForwarder{client:c}))
 }
 
 // Run — главный цикл. Подключается, переподключается при обрыве.
