@@ -601,3 +601,12 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 - Preserve structured error metadata from API responses (`code`, `request_id` / correlation ID) in the frontend API client. Admin errors must include the HTTP method and endpoint context.
 - Explain the likely next action in Russian in the Admin UI. Do not expose raw stack traces, SQL details, filesystem paths, credentials, cookies, OAuth codes, access/refresh tokens, private keys, or provider response bodies.
 - Apply this standard to user management, statistics, platform settings, Agent package upload/publication, backups, and every future Admin Panel action. Add tests for both classified and unclassified failures.
+
+## Administrator error reporting (mandatory)
+
+- Every Admin Panel operation must surface an actionable error, not only a generic toast. Preserve the operation (`METHOD path`), HTTP status when a response exists, stable error code, and request/correlation ID when provided by the API.
+- Show a readable cause and next step when safely known. For unknown failures, say that the cause is unclassified and provide the diagnostic ID/log location where available.
+- Keep an inline, dismissible diagnostic detail on Admin pages so an error is not lost when a toast disappears. A short toast may accompany it, but must not be the only error surface.
+- Network failures must be distinguished from HTTP responses. Never fabricate an HTTP status for a connection failure.
+- Never expose access/refresh tokens, passwords, OAuth codes/state, private keys, cookies, raw provider response bodies, stack traces, or sensitive database internals in the UI. Diagnostics must be useful without leaking secrets.
+- Apply this standard to all Admin Panel pages and actions, including user management, platform settings, package uploads, backups, and future administrator operations.
