@@ -8,6 +8,8 @@
     import Card from '$lib/components/Card.svelte';
     import StatusDot from '$lib/components/StatusDot.svelte';
     import Modal from '$lib/components/Modal.svelte';
+    import AdminErrorMode from '$lib/components/AdminErrorMode.svelte';
+    import { adminErrorMode, initializeAdminErrorMode } from '$lib/admin-error-mode.js';
 
     let user = null;
     let devices = [];
@@ -16,21 +18,13 @@
     let confirmAction = 'block'; // 'block' | 'unblock'
     let busy = false;
     let adminError = null;
-    let detailedErrors = true;
-    const ERROR_MODE_KEY = 'yevqo-admin-error-mode';
-
-    function setErrorMode(enabled) {
-        detailedErrors = enabled;
-        try { localStorage.setItem(ERROR_MODE_KEY, enabled ? 'detailed' : 'general'); } catch {}
-    }
-
     function reportAdminError(title, res) {
         adminError = { title, message: res?.error || 'Причина не классифицирована сервером.', operation: res?.operation || '', status: res?.status ?? null, code: res?.code || '', requestId: res?.requestId || '', networkError: res?.networkError || '' };
-        notify(detailedErrors ? adminError.message : 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.', 'error');
+        notify($adminErrorMode ? adminError.message : 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.', 'error');
     }
 
     onMount(async () => {
-        try { detailedErrors = localStorage.getItem(ERROR_MODE_KEY) !== 'general'; } catch {}
+        initializeAdminErrorMode();
         const session = await me();
         if (!session.ok || !session.data?.user?.is_admin) {
             goto('/overview');
@@ -100,18 +94,14 @@
 
 {#if adminError}
     <section class="admin-error" role="alert">
-        <strong>{adminError.title}</strong><p>{detailedErrors ? adminError.message : 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.'}</p>
-        {#if detailedErrors}<dl>{#if adminError.operation}<div><dt>Операция</dt><dd><code>{adminError.operation}</code></dd></div>{/if}{#if adminError.status !== null}<div><dt>HTTP</dt><dd>{adminError.status}</dd></div>{:else if adminError.networkError}<div><dt>Соединение</dt><dd>Нет HTTP-ответа</dd></div>{/if}{#if adminError.code}<div><dt>Код</dt><dd><code>{adminError.code}</code></dd></div>{/if}{#if adminError.requestId}<div><dt>ID диагностики</dt><dd><code>{adminError.requestId}</code></dd></div>{/if}{#if adminError.networkError}<div><dt>Сетевая причина</dt><dd>{adminError.networkError}</dd></div>{/if}</dl><small>Секреты, токены и приватные данные не отображаются.</small>{/if}
+        <strong>{adminError.title}</strong><p>{$adminErrorMode ? adminError.message : 'Операция не выполнена. Подробности диагностики скрыты выбранным режимом.'}</p>
+        {#if $adminErrorMode}<dl>{#if adminError.operation}<div><dt>Операция</dt><dd><code>{adminError.operation}</code></dd></div>{/if}{#if adminError.status !== null}<div><dt>HTTP</dt><dd>{adminError.status}</dd></div>{:else if adminError.networkError}<div><dt>Соединение</dt><dd>Нет HTTP-ответа</dd></div>{/if}{#if adminError.code}<div><dt>Код</dt><dd><code>{adminError.code}</code></dd></div>{/if}{#if adminError.requestId}<div><dt>ID диагностики</dt><dd><code>{adminError.requestId}</code></dd></div>{/if}{#if adminError.networkError}<div><dt>Сетевая причина</dt><dd>{adminError.networkError}</dd></div>{/if}</dl><small>Секреты, токены и приватные данные не отображаются.</small>{/if}
     </section>
 {/if}
 {#if loading}
     <div class="empty">Загрузка...</div>
 {:else if user}
-    <div class="error-mode-control">
-        <span>Ошибки:</span>
-        <label><input type="checkbox" checked={detailedErrors} on:change={(event) => setErrorMode(event.currentTarget.checked)} /> Полная диагностика</label>
-        <small>{detailedErrors ? 'Показывать подробности ошибок' : 'Показывать обобщённые сообщения'}</small>
-    </div>
+    <AdminErrorMode />
 
     <!-- Header -->
     <div class="page-header">
@@ -230,10 +220,6 @@
 {/if}
 
 <style>
-    .error-mode-control { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:12px 0; color:var(--text-muted); font-size:12px; }
-    .error-mode-control label { display:inline-flex; align-items:center; gap:7px; color:var(--text-main); cursor:pointer; }
-    .error-mode-control input { accent-color:var(--accent); }
-    .error-mode-control small { color:var(--text-muted); }
     .admin-error { margin:16px 0; padding:14px 16px; border:1px solid var(--danger); border-radius:10px; background:color-mix(in srgb, var(--danger) 7%, var(--bg-surface)); }
     .admin-error p { white-space:pre-wrap; overflow-wrap:anywhere; }
     .admin-error dl { display:grid; gap:6px; }
