@@ -153,6 +153,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/api/databases/", s.RequireAuth(func(w http.ResponseWriter,r *http.Request) { if strings.HasSuffix(r.URL.Path,"/test") { s.handleDatabaseConnectionTest(w,r); return }; if strings.HasSuffix(r.URL.Path,"/stats") { s.handleDatabaseStats(w,r); return }; s.handleDatabaseByID(w,r) }))
 	s.mux.HandleFunc("/api/database-connections", s.RequireAuth(s.handleDatabaseConnections))
 	s.mux.HandleFunc("/api/logs", s.RequireAuth(s.handleLogs))
+	s.mux.HandleFunc("/api/system-logs", s.RequireAdmin(s.handleSystemLogs))
 	s.mux.HandleFunc("/api/audit-logs", s.RequireAuth(s.handleAuditLogs))
 	s.mux.HandleFunc("/api/notifications", s.RequireAuth(s.handleNotifications))
 	s.mux.HandleFunc("/api/settings", s.RequireAuth(s.handleSettings))
@@ -233,14 +234,23 @@ func (s *Server) Start() error {
 func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
+		if requestID == "" || len(requestID) > 64 { requestID = newSystemRequestID() }
+		w.Header().Set("X-Request-ID", requestID)
 		rw := &responseWriter{ResponseWriter: w, status: 200}
 		next.ServeHTTP(rw, r)
 		dur := time.Since(start)
 
-		// Не логируем WebSocket и статику, чтобы не засорять лог.
-		if r.URL.Path != "/ws" && !strings.HasPrefix(r.URL.Path, "/_app/") {
-			log.Printf("%s %s -> %d (%s)",
-				r.Method, r.URL.Path, rw.status, dur.Round(time.Millisecond))
+		// Keep the stdout access log and persist application request events separately.
+		if r.URL.Path != "/ws" && r.URL.Path != "/ws/logs" && !strings.HasPrefix(r.URL.Path, "/_app/") && !strings.HasPrefix(r.URL.Path, "/favicon") {
+			log.Printf("request_id=%s %s %s -> %d (%s)", requestID, r.Method, r.URL.Path, rw.status, dur.Round(time.Millisecond))
+			if r.URL.Path != "/api/system-logs" && !strings.HasPrefix(r.URL.Path, "/api/system-logs/") {
+				level := "info"
+				if rw.status >= 500 { level = "error" } else if rw.status >= 400 { level = "warn" }
+				category := "http"
+				if strings.HasPrefix(r.URL.Path, "/oauth/") { category = "authentication" } else if strings.HasPrefix(r.URL.Path, "/api/cloudflare") { category = "cloudflare" } else if strings.HasPrefix(r.URL.Path, "/api/integrations") { category = "integrations" } else if strings.HasPrefix(r.URL.Path, "/api/projects") { category = "projects" } else if strings.HasPrefix(r.URL.Path, "/api/devices") { category = "devices" } else if strings.HasPrefix(r.URL.Path, "/api/deployments") { category = "deployments" } else if strings.HasPrefix(r.URL.Path, "/admin/api") { category = "admin" } else if strings.HasPrefix(r.URL.Path, "/api/backups") { category = "backups" } else if strings.HasPrefix(r.URL.Path, "/api/databases") { category = "database" }
+				s.recordSystemLog(systemLogRecord{Level: level, Category: category, Source: "http", Message: "HTTP request completed", RequestID: requestID, Method: r.Method, Path: r.URL.Path, Status: rw.status, Duration: dur, Metadata: map[string]interface{}{"remote_ip": clientIP(r)}})
+			}
 		}
 	})
 }
