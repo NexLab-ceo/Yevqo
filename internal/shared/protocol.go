@@ -45,6 +45,7 @@ type Command struct {
 	Id      string
 	Action  string
 	Payload []byte
+	TraceID string `json:"trace_id,omitempty"`
 }
 
 type InstallDatabaseServer struct {
