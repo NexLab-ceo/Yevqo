@@ -23,7 +23,7 @@ The `main` branch is the active Yevqo implementation. The all-in-one package kee
 - Database Server records remain owned by the workspace owner; server-side role checks govern member access. A server cannot be removed while database metadata references it.
 - Account settings persist Simple / Advanced mode, locale and theme.
 - Activity logs, notifications, account summary reports and backup metadata have read APIs.
-- The Termux installer prepares MariaDB and the local application account, then copies SQL migrations into the Control Plane data directory. On every startup, Control Plane idempotently ensures its own database exists using the local MariaDB client, creates the core tables from `000_core.sql` on first run, then applies all available additive migrations in order (currently `001`–`030`). Applied migration names and checksums are recorded in `schema_migrations`. Missing migration files are a startup error rather than silently skipping schema setup.
+- The Termux installer prepares MariaDB and the local application account, then copies SQL migrations into the Control Plane data directory. On every startup, Control Plane idempotently ensures its own database exists using the local MariaDB client, creates the core tables from `000_core.sql` on first run, then applies all available additive migrations in order (currently `001`–`032`). Applied migration names and checksums are recorded in `schema_migrations`. Missing migration files are a startup error rather than silently skipping schema setup.
 
 Project workspace and environment behavior, role boundaries, resource detach safety, and migration limitations are documented in [Project workspaces](docs/project-workspaces.md).
 
