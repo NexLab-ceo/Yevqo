@@ -294,6 +294,9 @@ export async function listCloudflareZones(token) { return request('POST', '/api/
 export async function createCloudflareTunnel(deviceId, siteId, domain) { return request('POST', '/api/cloudflare/tunnel-create', { device_id: Number(deviceId), site_id: siteId, domain }); }
 export async function saveCloudflareConfig(token, zoneId) { return request('POST', '/api/cloudflare', { token, zone_id: zoneId }); }
 export async function disconnectCloudflare() { return request('DELETE', '/api/cloudflare'); }
+export async function startCloudflareOAuth(returnTo) { return request('POST', '/api/cloudflare/oauth/start', { return_to: returnTo }); }
+export async function listCloudflareOAuthZones() { return request('GET', '/api/cloudflare/oauth/zones'); }
+export async function selectCloudflareOAuthZone(zoneId) { return request('POST', '/api/cloudflare/oauth/select-zone', { zone_id: zoneId }); }
 export async function listCloudflareDNS() { return request('GET', '/api/cloudflare/dns'); }
 export async function createCloudflareTunnelDNS(hostname, tunnelId) { return request('POST', '/api/cloudflare/dns', { hostname, tunnel_id: tunnelId }); }
 export async function deleteCloudflareDNS(recordId) { return request('DELETE', '/api/cloudflare/dns', { record_id: recordId }); }

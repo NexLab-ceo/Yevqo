@@ -57,11 +57,13 @@ func hostnameBelongsToZone(hostname, zone string) bool {
 func validCloudflareAccountID(value string) bool { return cloudflareZoneIDPattern.MatchString(value) }
 
 func (s *Server) cloudflareCredentials(ctx context.Context,userID int64)(string,string,string,string,error){
-	var accountID,zoneID,zoneName string;var nonce,ciphertext []byte
-	err:=s.db.conn.QueryRowContext(ctx,`SELECT account_id,zone_id,zone_name,token_nonce,token_ciphertext FROM cloudflare_accounts WHERE user_id=?`,userID).Scan(&accountID,&zoneID,&zoneName,&nonce,&ciphertext)
+	var accountID,zoneID,zoneName string
+	err:=s.db.conn.QueryRowContext(ctx,`SELECT account_id,zone_id,zone_name FROM cloudflare_accounts WHERE user_id=?`,userID).Scan(&accountID,&zoneID,&zoneName)
 	if err!=nil{return "","","","",err}
-	token,err:=decryptCredential(s.credentialKey,nonce,ciphertext)
+	if zoneID==""{return "","","","",fmt.Errorf("select a Cloudflare zone before managing domains")}
+	tokenValue,err:=s.cloudflareOAuthAccessToken(ctx,userID)
 	if err!=nil{return "","","","",err}
+	token:=[]byte(tokenValue)
 	if accountID=="" {
 		var zone struct{Account struct{ID string `json:"id"`} `json:"account"`}
 		if err:=cloudflareAPIRequest(ctx,string(token),http.MethodGet,"/zones/"+zoneID,nil,&zone);err!=nil||!validCloudflareAccountID(zone.Account.ID){return "","","","",fmt.Errorf("could not resolve Cloudflare account ID; reconnect the zone")}
@@ -75,11 +77,11 @@ func (s *Server) handleCloudflareConfig(w http.ResponseWriter,r *http.Request){
 	u:=UserFromContext(r.Context())
 	switch r.Method {
 	case http.MethodGet:
-		var accountID,zoneID,zoneName string
-		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT account_id,zone_id,zone_name FROM cloudflare_accounts WHERE user_id=?`,u.ID).Scan(&accountID,&zoneID,&zoneName)
+		var accountID,zoneID,zoneName,authMethod string
+		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT account_id,zone_id,zone_name,auth_method FROM cloudflare_accounts WHERE user_id=?`,u.ID).Scan(&accountID,&zoneID,&zoneName,&authMethod)
 		if err==sql.ErrNoRows{_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(u.ID),Action:"cloudflare_account_disconnected",Details:map[string]interface{}{},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":false});return};if err!=nil{apiError(w,shared.ErrInternal("could not load Cloudflare configuration"));return}
-		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":true,"account_id":accountID,"zone_id":zoneID,"zone_name":zoneName})
+		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":true,"account_id":accountID,"zone_id":zoneID,"zone_name":zoneName,"auth_method":authMethod,"needs_zone_selection":zoneID==""})
 	case http.MethodPost:
 		var in struct{Token string `json:"token"`;ZoneID string `json:"zone_id"`}
 		if err:=decodeJSON(r,&in);err!=nil{apiError(w,shared.ErrBadRequest("invalid Cloudflare configuration"));return}
@@ -91,7 +93,7 @@ func (s *Server) handleCloudflareConfig(w http.ResponseWriter,r *http.Request){
 		var zone struct{ID string `json:"id"`;Name string `json:"name"`;Status string `json:"status"`;Account struct{ID string `json:"id"`} `json:"account"`}
 		if err:=cloudflareAPIRequest(ctx,in.Token,http.MethodGet,"/zones/"+in.ZoneID,nil,&zone);err!=nil||zone.ID!=in.ZoneID||zone.Name==""||zone.Status!="active"||!validCloudflareAccountID(zone.Account.ID){apiError(w,shared.ErrBadRequest("Cloudflare zone or account could not be verified"));return}
 		nonce,ciphertext,err:=encryptCredential(s.credentialKey,[]byte(in.Token));if err!=nil{apiError(w,shared.ErrInternal("could not encrypt Cloudflare token"));return}
-		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO cloudflare_accounts(user_id,account_id,zone_id,zone_name,token_nonce,token_ciphertext,last_verified_at) VALUES(?,?,?,?,?,?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE account_id=VALUES(account_id),zone_id=VALUES(zone_id),zone_name=VALUES(zone_name),token_nonce=VALUES(token_nonce),token_ciphertext=VALUES(token_ciphertext),last_verified_at=VALUES(last_verified_at)`,u.ID,zone.Account.ID,in.ZoneID,zone.Name,nonce,ciphertext)
+		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO cloudflare_accounts(user_id,account_id,zone_id,zone_name,token_nonce,token_ciphertext,auth_method,oauth_refresh_nonce,oauth_refresh_ciphertext,oauth_expires_at,last_verified_at) VALUES(?,?,?,?,?,?,'api_token',NULL,NULL,NULL,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE account_id=VALUES(account_id),zone_id=VALUES(zone_id),zone_name=VALUES(zone_name),token_nonce=VALUES(token_nonce),token_ciphertext=VALUES(token_ciphertext),auth_method='api_token',oauth_refresh_nonce=NULL,oauth_refresh_ciphertext=NULL,oauth_expires_at=NULL,last_verified_at=VALUES(last_verified_at)`,u.ID,zone.Account.ID,in.ZoneID,zone.Name,nonce,ciphertext)
 		if err!=nil{apiError(w,shared.ErrInternal("could not save Cloudflare configuration"));return}
 		_ = s.db.Log(r.Context(),&shared.LogEntry{UserID:shared.PtrInt64(u.ID),WorkspaceOwnerID:shared.PtrInt64(u.ID),Action:"cloudflare_account_connected",Details:map[string]interface{}{"zone_id":zone.ID,"zone_name":zone.Name},IP:clientIP(r)})
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":true,"account_id":zone.Account.ID,"zone_id":zone.ID,"zone_name":zone.Name})
