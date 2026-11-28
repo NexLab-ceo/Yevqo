@@ -9,6 +9,7 @@ func TestSanitizeSystemLogMetadataRedactsSensitiveValuesRecursively(t *testing.T
 	input := map[string]interface{}{
 		"access_token": "ghp-secret-token",
 		"safe":         "deployment failed",
+		"typed_items": []map[string]interface{}{{"refresh_token": "typed-secret"}},
 		"details": []interface{}{
 			map[string]interface{}{
 				"authorization": "Bearer secret-header",
@@ -27,6 +28,10 @@ func TestSanitizeSystemLogMetadataRedactsSensitiveValuesRecursively(t *testing.T
 	}
 	if clean["safe"] != "deployment failed" {
 		t.Fatalf("safe metadata was changed: %#v", clean["safe"])
+	}
+	typedItems, ok := clean["typed_items"].([]map[string]interface{})
+	if !ok || len(typedItems) != 1 || typedItems[0]["refresh_token"] != "[REDACTED]" {
+		t.Fatalf("typed nested metadata was not redacted: %#v", clean["typed_items"])
 	}
 	details, ok := clean["details"].([]interface{})
 	if !ok || len(details) != 2 {
