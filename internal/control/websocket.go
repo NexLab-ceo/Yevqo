@@ -145,6 +145,7 @@ func (c *AgentConn) readPump(srv *Server) {
 					if alertErr := srv.evaluateDeviceConnectivityAlert(offlineCtx, c.Device.UserID, c.Device.ID, false); alertErr != nil { log.Printf("evaluate device offline alert: %v", alertErr) }
 				}
 				cancel()
+				srv.recordSystemLog(systemLogRecord{Level:"warn", Category:"agent", Source:"agent-connection", Message:"Agent disconnected", UserID:c.Device.UserID, DeviceID:c.Device.ID, Metadata:map[string]interface{}{"hostname":c.Device.Hostname}})
 				if srv.logStreams != nil { srv.logStreams.publishAgentStatus(c.Device.UserID, c.Device.ID, "offline") }
 			}
 		}
@@ -264,6 +265,7 @@ func (c *AgentConn) handleAuth(srv *Server, req *shared.AuthRequest) {
 	c.Device = device
 	_ = c.ws.SetReadDeadline(time.Now().Add(wsPongWait))
 	c.hub.Add(c)
+	srv.recordSystemLog(systemLogRecord{Level:"info", Category:"agent", Source:"agent-connection", Message:"Agent connected", UserID:device.UserID, DeviceID:device.ID, Metadata:map[string]interface{}{"hostname":device.Hostname,"agent_version":device.AgentVersion,"platform":device.Platform,"architecture":device.Architecture}})
 	if alertErr := srv.evaluateDeviceConnectivityAlert(ctx, device.UserID, device.ID, true); alertErr != nil { log.Printf("evaluate device online alert: %v", alertErr) }
 	if srv.logStreams != nil { srv.logStreams.publishAgentStatus(device.UserID, device.ID, "online") }
 
@@ -326,6 +328,22 @@ func (c *AgentConn) handleEvent(srv *Server, ev *shared.Event) {
 			if srv.logStreams != nil {
 				srv.logStreams.publish(c.Device.UserID, c.Device.ID, le)
 			}
+		}
+	case "system_log":
+		var event shared.AgentSystemLogEvent
+		if err := shared.Unmarshal(ev.Payload, &event); err == nil && c.Device != nil {
+			level := strings.ToLower(strings.TrimSpace(event.Level))
+			if level != "debug" && level != "info" && level != "warn" && level != "error" { level = "info" }
+			category := strings.ToLower(strings.TrimSpace(event.Category))
+			if category == "" || len(category) > 48 || strings.ContainsAny(category, " /\\") { category = "agent" }
+			message := strings.TrimSpace(event.Message)
+			if message == "" { message = "Agent event" }
+			if len(message) > 512 { message = message[:512] }
+			metadata := event.Metadata
+			if metadata == nil { metadata = map[string]interface{}{} }
+			metadata["agent_timestamp"] = event.Timestamp
+			metadata["hostname"] = c.Device.Hostname
+			srv.recordSystemLog(systemLogRecord{Level:level, Category:category, Source:"agent", Message:message, UserID:c.Device.UserID, DeviceID:c.Device.ID, Metadata:metadata})
 		}
 	case "metrics":
 		var metrics shared.MetricsResult
