@@ -7,6 +7,8 @@
  import {logout,me,getSettings,saveSettings,listProjects,listDevices,listDeployments,listLogs,listNotifications,markNotificationRead,listIntegrations,listIntegrationRepositories} from '$lib/api.js';
  import {locale} from '$lib/i18n.js';
  import {setDatePreferences,formatDate} from '$lib/date.js';
+ import AdminErrorMode from '$lib/components/AdminErrorMode.svelte';
+ import {initializeAdminErrorMode} from '$lib/admin-error-mode.js';
  let loading=true,mobileNavOpen=false,modeSaving=false,searchOpen=false,searchQuery='',searchLoading=false,searchResults=[],notificationsOpen=false,notifications=[],notificationsLoading=false,profileOpen=false;
  let searchTimer;
  $: ru=$locale!=='en';
@@ -24,7 +26,7 @@
  $: siteContextBase=inSite?'/sites/'+encodeURIComponent(pathParts[2])+'/'+encodeURIComponent(pathParts[3]):'';
  $: groups=globalGroups;
  function siteTabHref(tab){const q=new URLSearchParams();for(const key of ['project_id','environment_id']){const value=$page.url.searchParams.get(key);if(value)q.set(key,value)}q.set('tab',tab);return siteContextBase+'?'+q.toString()}
- onMount(async()=>{const [a,b]=await Promise.all([me(),getSettings()]);if(a.ok&&a.data?.user)user.set(a.data.user);if(b.ok){uiMode.set(b.data.settings?.mode||'simple');theme.set(b.data.settings?.theme||'dark');locale.set(b.data.settings?.locale||'ru');workspaceName.set(b.data.settings?.workspace_name||'Personal workspace');compactMode.set(!!b.data.settings?.compact_mode);setDatePreferences(b.data.settings)}loading=false;loadNotifications()});
+ onMount(async()=>{initializeAdminErrorMode();const [a,b]=await Promise.all([me(),getSettings()]);if(a.ok&&a.data?.user)user.set(a.data.user);if(b.ok){uiMode.set(b.data.settings?.mode||'simple');theme.set(b.data.settings?.theme||'dark');locale.set(b.data.settings?.locale||'ru');workspaceName.set(b.data.settings?.workspace_name||'Personal workspace');compactMode.set(!!b.data.settings?.compact_mode);setDatePreferences(b.data.settings)}loading=false;loadNotifications()});
  $: if(!loading&&!$isAuthenticated&&!$page.url.pathname.startsWith('/login')&&!$page.url.pathname.startsWith('/register'))goto('/login');
  $: currentTitle=groups.flatMap(g=>g.items).find(i=>{const href=i[1].split('?')[0];return $page.url.pathname===href||($page.url.pathname.startsWith(href+'/')&&href!=='/')})?.[0]||'Overview';
  async function runSearch(){const q=searchQuery.trim().toLowerCase();if(q.length<2){searchResults=[];return}searchLoading=true;const [p,d,dep,logs,ints]=await Promise.all([listProjects(),listDevices(),listDeployments(),listLogs(100),listIntegrations()]);const results=[];if(p.ok)for(const x of p.data.projects||[])if((x.name+' '+(x.description||'')).toLowerCase().includes(q))results.push({type:ru?'Проект':'Project',name:x.name,description:x.description||x.slug,url:'/projects/'+x.id});if(d.ok)for(const x of d.data.devices||[])if((x.hostname+' '+x.device_id+' '+x.platform).toLowerCase().includes(q))results.push({type:ru?'Устройство':'Device',name:x.hostname||x.device_id,description:(x.platform||'Android')+' · '+x.status,url:'/devices/'+x.id});if(dep.ok)for(const x of dep.data.deployments||[])if(JSON.stringify(x).toLowerCase().includes(q))results.push({type:ru?'Развёртывание':'Deployment',name:x.action||'Deployment',description:x.details?.site_id||x.device||'',url:'/deployments'});if(logs.ok)for(const x of logs.data.logs||[])if(JSON.stringify(x).toLowerCase().includes(q))results.push({type:ru?'Журнал':'Log',name:x.action||'Event',description:x.device||'',url:'/logs'});if(ints.ok){const repoLists=await Promise.all((ints.data.integrations||[]).map(integration=>listIntegrationRepositories(integration.id)));for(const repos of repoLists)if(repos.ok)for(const repo of repos.data.repositories||[])if((repo.full_name||repo.name||'').toLowerCase().includes(q))results.push({type:ru?'GitHub репозиторий':'GitHub repository',name:repo.full_name||repo.name,description:repo.default_branch||'',url:'/settings/integrations/github'})}searchResults=results.slice(0,20);searchLoading=false}
@@ -39,6 +41,7 @@
 </script>
 <svelte:head><meta name="theme-color" content={$theme === "dark" ? "#090D16" : "#F4F6FA"}/><title>Yevqo</title></svelte:head>
 <svelte:window on:keydown={onGlobalKey}/>
+<AdminErrorMode />
 {#if loading}<div class="loading-screen"><span class="loading-mark">Y</span><span>Yevqo</span><i></i></div>
 {:else if !$isAuthenticated}<slot/>
 {:else}
