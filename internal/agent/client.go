@@ -175,6 +175,7 @@ func (c *Client) connect(ctx context.Context) error {
 	tailscaleIP, err := GetTailscaleIP()
 	if err != nil {
 		log.Printf("warning: tailscale: %v", err)
+		c.queueSystemLog("warn", "agent", "Tailscale address detection failed", map[string]interface{}{"cause": err.Error()})
 	}
 
 	// Отправляем AuthRequest.
@@ -366,9 +367,10 @@ func (c *Client) handleCommand(ctx context.Context, cmd *shared.Command) {
 		log.Printf("write result: %v", err)
 	}
 
-	log.Printf("command %s done: ok=%v", cmd.Id, result.Ok)
+	ok := result != nil && result.Ok
+	log.Printf("command %s done: ok=%v", cmd.Id, ok)
 	level := "info"
-	if result == nil || !result.Ok { level = "error" }
+	if !ok { level = "error" }
 	details := map[string]interface{}{"command_id": cmd.Id, "action": cmd.Action}
 	if cmd.TraceID != "" { details["request_id"] = cmd.TraceID }
 	if result != nil && !result.Ok && result.Message != "" { details["cause"] = result.Message }
@@ -465,10 +467,12 @@ func (c *Client) metricsPump(ctx context.Context, done <-chan struct{}) {
 			metrics, err := collectMetrics(c.cfg.DataRoot)
 			if err != nil {
 				log.Printf("metrics collection: %v", err)
+				c.queueSystemLog("warn", "monitoring", "Agent metrics collection failed", map[string]interface{}{"cause": err.Error()})
 				continue
 			}
 			if err := c.SendEvent("metrics", metrics); err != nil {
 				log.Printf("metrics push: %v", err)
+				c.queueSystemLog("warn", "monitoring", "Agent metrics could not be sent", map[string]interface{}{"cause": err.Error()})
 				return
 			}
 		}
