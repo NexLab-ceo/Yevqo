@@ -106,7 +106,7 @@ func (s *Server) handleCloudflareOAuthCallback(w http.ResponseWriter,r *http.Req
  expiry:=time.Now().UTC().Add(time.Duration(tokens.ExpiresIn)*time.Second)
  _,e=s.db.conn.ExecContext(r.Context(),`INSERT INTO cloudflare_accounts(user_id,account_id,zone_id,zone_name,token_nonce,token_ciphertext,auth_method,oauth_refresh_nonce,oauth_refresh_ciphertext,oauth_expires_at,last_verified_at) VALUES(?,'','','',?,?,'oauth',?,?,?,UTC_TIMESTAMP()) ON DUPLICATE KEY UPDATE token_nonce=VALUES(token_nonce),token_ciphertext=VALUES(token_ciphertext),auth_method='oauth',oauth_refresh_nonce=VALUES(oauth_refresh_nonce),oauth_refresh_ciphertext=VALUES(oauth_refresh_ciphertext),oauth_expires_at=VALUES(oauth_expires_at),last_verified_at=VALUES(last_verified_at)`,userID,an,ac,rn,rc,expiry)
  if e!=nil{redirect("error","");return}
- redirect("connected")
+ redirect("connected","")
 }
 
 func (s *Server) cloudflareOAuthAccessToken(ctx context.Context,userID int64)(string,error){
