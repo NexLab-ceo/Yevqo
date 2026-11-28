@@ -152,8 +152,8 @@ export async function deleteSiteEnvironment(deviceId, siteId, name) {
 export async function getSiteWebhook(deviceId, siteId) {
     return request('GET', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/webhook`);
 }
-export async function setSiteWebhook(deviceId, siteId, enabled, allowProjectCode = false) {
-    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/webhook`, { enabled, allow_project_code: allowProjectCode });
+export async function setSiteWebhook(deviceId, siteId, enabled) {
+    return request('POST', `/api/sites/${deviceId}/${encodeURIComponent(siteId)}/webhook`, { enabled });
 }
 
 // === Admin ===
@@ -324,11 +324,11 @@ export async function listProjectRepositoryBranches(projectId, page = 0) { retur
 export async function listProjectRepositoryPulls(projectId, state = 'open', page = 0) { const q = new URLSearchParams({ state }); if (page) q.set('page', String(page)); return request('GET', `/api/projects/${projectId}/repository/pulls?` + q.toString()); }
 export async function getProjectRepositoryChecks(projectId, ref) { return request('GET', `/api/projects/${projectId}/repository/checks?ref=${encodeURIComponent(ref)}`); }
 export async function listProjectRepositorySites(projectId) { return request('GET', `/api/projects/${projectId}/repository/sites`); }
-export async function connectProjectRepositorySite(projectId, deviceId, siteId, branch, autoDeploy, allowProjectCode = false) { return request('POST', `/api/projects/${projectId}/repository/sites`, { device_id: Number(deviceId), site_id: siteId, branch, auto_deploy_enabled: autoDeploy, allow_project_code: allowProjectCode }); }
+export async function connectProjectRepositorySite(projectId, deviceId, siteId, branch, autoDeploy) { return request('POST', `/api/projects/${projectId}/repository/sites`, { device_id: Number(deviceId), site_id: siteId, branch, auto_deploy_enabled: autoDeploy }); }
 export async function disconnectProjectRepositorySite(projectId, deviceId, siteId) { return request('DELETE', `/api/projects/${projectId}/repository/sites`, { device_id: Number(deviceId), site_id: siteId }); }
 export async function listProjectDeploymentRuns(projectId) { return request('GET', `/api/projects/${projectId}/deployments`); }
 export async function getProjectDeploymentRun(projectId, runId) { return request('GET', `/api/projects/${projectId}/deployments/${runId}`); }
-export async function deployProjectSite(projectId, deviceId, siteId, branch, commitSha = '', allowProjectCode = false) { return request('POST', `/api/projects/${projectId}/deployments`, { device_id: Number(deviceId), site_id: siteId, branch, commit_sha: commitSha, allow_project_code: allowProjectCode }); }
+export async function deployProjectSite(projectId, deviceId, siteId, branch, commitSha = '') { return request('POST', `/api/projects/${projectId}/deployments`, { device_id: Number(deviceId), site_id: siteId, branch, commit_sha: commitSha }); }
 export async function cancelProjectDeployment(projectId, runId) { return request('POST', `/api/projects/${projectId}/deployments/${runId}/cancel`, {}); }
 export async function redeployProjectDeployment(projectId, runId) { return request('POST', `/api/projects/${projectId}/deployments/${runId}/redeploy`, {}); }
 
