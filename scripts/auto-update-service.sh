@@ -12,15 +12,15 @@ if [ "$INTERVAL" -lt 900 ]; then
   INTERVAL=21600
 fi
 
-# Let dpkg finish configuring the package before the first release check.
+# This service belongs to the standalone Agent package only.
+# Never fall back to an All-in-one or Control Plane updater.
+[ -x "$PREFIX/bin/yevqo-update" ] || {
+  echo "Yevqo Agent updater is not installed; refusing to run another edition's updater." >&2
+  exit 1
+}
+
 sleep 30
 while true; do
-  if [ -x "$PREFIX/bin/yevqo-update-all" ]; then
-    "$PREFIX/bin/yevqo-update-all" || echo "Yevqo All automatic update check failed; it will be retried."
-  elif [ -x "$PREFIX/bin/yevqo-update" ]; then
-    "$PREFIX/bin/yevqo-update" || echo "Yevqo Agent automatic update check failed; it will be retried."
-  else
-    echo "No Yevqo updater command is installed."
-  fi
+  "$PREFIX/bin/yevqo-update" || echo "Yevqo Agent automatic update check failed; it will be retried."
   sleep "$INTERVAL"
 done
