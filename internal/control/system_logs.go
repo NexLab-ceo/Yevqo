@@ -74,7 +74,7 @@ func (s *Server) recordSystemLog(entry systemLogRecord) {
 		pruneCtx, pruneCancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer pruneCancel()
 		if _, pruneErr := s.db.conn.ExecContext(pruneCtx,
-			"DELETE FROM system_logs WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)"); pruneErr != nil {
+			fmt.Sprintf("DELETE FROM system_logs WHERE created_at < DATE_SUB(NOW(), INTERVAL %d DAY)", systemLogRetentionDays)); pruneErr != nil {
 			log.Printf("system log retention cleanup failed: %v", pruneErr)
 		}
 	}
