@@ -613,3 +613,6 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 
 
 - Admin Panel error display preference: provide a persistent switch between **General** and **Full diagnostics**. Store the preference locally in the browser, share it across Admin routes, and default to Full diagnostics. General mode hides technical metadata; Full mode shows safe cause, operation, HTTP status or no-response state, error code, request ID and network details when available. Never expose secrets or unsafe raw internals.
+
+
+- 2026-11-28 — Unified the Admin error-detail preference across the complete Admin Panel. Added one shared Svelte store and reusable switch component backed by the existing `yevqo-admin-error-mode` localStorage key; both current Admin routes (`/admin` and `/admin/[id]`) now read and update the same live preference, so changing the switch immediately affects error details and notifications across route navigation without a reload. Full diagnostics remains the default. No server, production deployment, or user data was changed. Frontend CI/build verification is pending.
