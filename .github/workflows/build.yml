@@ -3,6 +3,9 @@ name: Build Yevqo
 run-name: Yevqo build #${{ github.run_number }}
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
   workflow_call:
 
@@ -203,3 +206,27 @@ jobs:
             yevqo-all_${{ env.VERSION }}_aarch64.deb
             yevqo_${{ env.VERSION }}_aarch64.deb
             SHA256SUMS
+
+      - name: Publish verified packages to release repository
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "PUBLIC_RELEASE_TOKEN is not configured. Add a token with Contents: Read and write access to NexLab-ceo/veltrix-dock." >&2
+            exit 1
+          fi
+          RELEASE_REPO="NexLab-ceo/veltrix-dock"
+          TAG="$GITHUB_REF_NAME"
+          ALL="yevqo-all_${VERSION}_aarch64.deb"
+          AGENT="yevqo_${VERSION}_aarch64.deb"
+          if gh release view "$TAG" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ALL" "$AGENT" SHA256SUMS --repo "$RELEASE_REPO" --clobber
+          else
+            gh release create "$TAG" "$ALL" "$AGENT" SHA256SUMS \
+              --repo "$RELEASE_REPO" \
+              --title "Yevqo $TAG" \
+              --notes "Automated Yevqo Android ARM64 release. Built and verified from NexLab-ceo/Yevqo $GITHUB_SHA."
+          fi
