@@ -20,15 +20,15 @@ The OAuth client is created once by the Yevqo platform administrator in Cloudfla
 - Grant types: `authorization_code` and `refresh_token`.
 - Token endpoint authentication: choose `client_secret_post` or `client_secret_basic`, then select the same method in Yevqo → Admin → Platform Settings.
 - Redirect URL: an exact match for `<YEVQO_PUBLIC_URL>/oauth/cloudflare/callback`. For the production app this is `https://app.yevqo.cc.cd/oauth/cloudflare/callback`.
-- Required scopes: `zone.read`, `dns.write`, `argotunnel.read`, `argotunnel.write`, and `offline_access`. The last scope is required for refresh tokens; do not make required scopes optional.
+- Required API scopes: `zone.read`, `dns.write`, `argotunnel.read`, and `argotunnel.write`. Configure `authorization_code` and `refresh_token` as grant types and `code` as the response type. Do **not** add `offline_access` manually to the requested `scope` parameter: Cloudflare automatically manages this protocol scope from the configured grant and response types.
 
-Cloudflare's OAuth scope IDs correspond to API permission groups. The Tunnel scope used by Yevqo is `argotunnel.write`; DNS and zone discovery use `dns.write` and `zone.read`. The client must include every scope requested by Yevqo. For a client intended for users outside the Cloudflare account that created it, Cloudflare requires public visibility and publisher-domain verification; a private OAuth client is limited to members of its owning account.
+Cloudflare's OAuth scope IDs correspond to API permission groups. The Tunnel scopes used by Yevqo are `argotunnel.read` and `argotunnel.write`; DNS and zone discovery use `dns.write` and `zone.read`. Cloudflare documents `offline_access` as a protocol scope that is automatically added or removed based on `grant_types` and `response_types`, so Yevqo intentionally omits it from the explicit authorization request. The client must include every scope requested by Yevqo. For a client intended for users outside the Cloudflare account that created it, Cloudflare requires public visibility and publisher-domain verification; a private OAuth client is limited to members of its owning account.
 
 After creating the client, copy its Client ID and Client Secret into Yevqo → Admin → Platform Settings, save the public URL and matching token authentication method, then reconnect from Settings → Integrations → Cloudflare. The callback consumes a one-time state value and returns to the integration page; users then load and select an active DNS zone.
 
 ### If Cloudflare returns immediately
 
-- `invalid_scope`: compare the client's configured scopes with the five required scope IDs above.
+- `invalid_scope`: compare the client's configured API scopes with the four IDs above. Confirm `authorization_code` + `refresh_token` grants and `code` response type; do not add `offline_access` to the explicit API scope list.
 - `unauthorized_client` or `invalid_client`: check the Client ID, Client Secret, grant/response types and token authentication method.
 - A redirect URL error: compare the callback URL character-for-character, including scheme, hostname and path, with Yevqo's configured public URL.
 - If the authorization succeeds but no refresh token is returned, ensure `refresh_token` is an enabled grant and `offline_access` is included as a required scope.
