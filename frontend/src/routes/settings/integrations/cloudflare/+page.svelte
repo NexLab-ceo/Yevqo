@@ -27,7 +27,7 @@
    error=ru?'Не удалось завершить Cloudflare OAuth. Проверь настройки OAuth приложения.':'Cloudflare OAuth could not be completed. Check the OAuth application settings.';
   }
   if(status)window.history.replaceState({},'',window.location.pathname);
-  if(config.connected&&config.needs_zone_selection&&!oauthZones.length&&config.auth_method==='oauth')await loadOAuthZones();
+  if(status!=='connected'&&config.connected&&config.needs_zone_selection&&!oauthZones.length&&config.auth_method==='oauth')await loadOAuthZones();
  });
 
  async function startOAuth(){
