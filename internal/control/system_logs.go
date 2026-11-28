@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,12 +44,14 @@ func (s *Server) recordSystemLog(entry systemLogRecord) {
 		VALUES(?,?,?,?,?,?,?,?,?,?)`,
 		entry.Level, entry.Category, entry.Source, entry.Message,
 		nullableString(entry.RequestID), nullableString(entry.Method), nullableString(entry.Path),
-		nullablePositiveInt64(int64(entry.Status)), nullablePositiveInt64(entry.Duration.Milliseconds()), metadata)
+		nullableSystemLogInt(int64(entry.Status)), nullableSystemLogInt(entry.Duration.Milliseconds()), metadata)
 	if err != nil {
 		// Keep the file log as a fallback; never recursively log a DB logging failure.
 		log.Printf("system log persistence failed: %v", err)
 	}
 }
+
+func nullableSystemLogInt(value int64) interface{} { if value <= 0 { return nil }; return value }
 
 func newSystemRequestID() string {
 	var raw [16]byte
