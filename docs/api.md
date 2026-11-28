@@ -2,7 +2,7 @@
 
 Base URL: `https://app.yevqo.cc.cd/v1`
 
-The versioned REST API is available to accounts with `users.status = 'pro'` and to the configured primary administrator account. API keys inherit the same workspace and project authorization as the account that created them.
+The versioned REST API is available to accounts with `users.status IN ('pro','advanced')` and to the configured primary administrator account. API keys inherit the same workspace and project authorization as the account that created them.
 
 ## API keys
 

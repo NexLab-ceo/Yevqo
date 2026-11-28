@@ -58,18 +58,18 @@
         }
     }
 
-    async function togglePlan() {
-        const plan = user.status === 'pro' ? 'free' : 'pro';
+    async function setPlan(plan) {
         busy = true;
         const res = await adminSetUserPlan(user.id, plan);
         busy = false;
-        if (res.ok) { notify(plan === 'pro' ? 'Тариф Pro назначен' : 'Тариф Free назначен', 'success'); await loadUser(); }
+        if (res.ok) { notify('Тариф ' + plan.toUpperCase() + ' назначен', 'success'); await loadUser(); }
         else notify(res.error || 'Не удалось изменить тариф', 'error');
     }
 
     function statusLabel(status) {
         if (status === 'free') return 'Free';
         if (status === 'pro') return 'Pro';
+        if (status === 'advanced') return 'Advanced';
         if (status === 'commercial') return 'Коммерческий';
         if (status === 'blocked') return 'Заблокирован';
         return status;
@@ -77,6 +77,7 @@
 
     function statusClass(status) {
         if (status === 'pro') return 'status-pro';
+        if (status === 'advanced') return 'status-advanced';
         if (status === 'commercial') return 'status-commercial';
         if (status === 'blocked') return 'status-blocked';
         return 'status-free';
@@ -99,7 +100,11 @@
         </div>
         <div class="header-actions">
             {#if !user.is_admin && user.status !== 'blocked'}
-                <Button variant="default" size="sm" on:click={togglePlan} disabled={busy}>{user.status === 'pro' ? 'Перевести на Free' : 'Назначить Pro'}</Button>
+                {#each ['free','pro','advanced'] as plan}
+                    {#if user.status !== plan}
+                        <Button variant="default" size="sm" on:click={() => setPlan(plan)} disabled={busy}>Назначить {plan === 'free' ? 'Free' : plan === 'pro' ? 'Pro' : 'Advanced'}</Button>
+                    {/if}
+                {/each}
             {/if}
             {#if user.status === 'blocked'}
                 <Button variant="primary" size="sm" on:click={() => askBlock('unblock')} disabled={busy}>
@@ -126,7 +131,7 @@
             </div>
             <div class="info-item">
                 <div class="info-label">Лимит устройств</div>
-                <div class="info-value mono">{user.is_admin || user.status === 'pro' ? 'Без ограничений' : `${user.max_devices + user.bonus_devices} (${user.max_devices} базовых + ${user.bonus_devices} бонусных)`}</div>
+                <div class="info-value mono">{user.is_admin || user.status === 'pro' || user.status === 'advanced' ? 'Без ограничений' : `${user.max_devices + user.bonus_devices} (${user.max_devices} базовых + ${user.bonus_devices} бонусных)`}</div>
             </div>
             <div class="info-item">
                 <div class="info-label">Создан</div>
@@ -226,7 +231,7 @@
         color: var(--success);
     }
 
-    .status-pro { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+    .status-pro, .status-advanced { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 
     .status-blocked {
         background: rgba(239, 68, 68, 0.1);

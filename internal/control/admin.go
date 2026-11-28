@@ -136,8 +136,8 @@ func (s *Server) handleAdminBlock(w http.ResponseWriter, r *http.Request, userID
 
 func (s *Server) handleAdminSetPlan(w http.ResponseWriter, r *http.Request, userID int64) {
 	var in struct { Plan string `json:"plan"` }
-	if err := decodeJSON(r, &in); err != nil || (in.Plan != shared.UserFree && in.Plan != shared.UserPro) {
-		apiError(w, shared.ErrBadRequest("plan must be free or pro"))
+	if err := decodeJSON(r, &in); err != nil || (in.Plan != shared.UserFree && in.Plan != shared.UserPro && in.Plan != shared.UserAdvanced) {
+		apiError(w, shared.ErrBadRequest("plan must be free, pro or advanced"))
 		return
 	}
 	target, err := s.db.GetUserByID(r.Context(), userID)

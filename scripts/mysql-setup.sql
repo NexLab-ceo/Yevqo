@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS users (
     username        VARCHAR(64)  NOT NULL UNIQUE,
     email           VARCHAR(128) NOT NULL UNIQUE,
     password_hash   VARCHAR(255) NOT NULL,             
-    status          ENUM('free','commercial','blocked') NOT NULL DEFAULT 'free',
+    status          ENUM('free','commercial','pro','advanced','blocked') NOT NULL DEFAULT 'free',
 
     -- Реферальная система (плюшки за друзей)
     referral_code   VARCHAR(16)  NOT NULL UNIQUE,

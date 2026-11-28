@@ -122,12 +122,15 @@
 
     function statusLabel(status) {
         if (status === 'free') return 'Бесплатный';
+        if (status === 'pro') return 'Pro';
+        if (status === 'advanced') return 'Advanced';
         if (status === 'commercial') return 'Коммерческий';
         if (status === 'blocked') return 'Заблокирован';
         return status;
     }
 
     function statusClass(status) {
+        if (status === 'pro' || status === 'advanced') return 'status-pro';
         if (status === 'commercial') return 'status-commercial';
         if (status === 'blocked') return 'status-blocked';
         return 'status-free';

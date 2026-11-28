@@ -18,13 +18,13 @@ func apiKeyDigest(token string) string {
 }
 
 func (s *Server) canUseProFeatures(user *shared.User) bool {
-	return user != nil && (user.Username == s.adminUsername || user.Status == shared.UserPro)
+	return user != nil && (user.Username == s.adminUsername || (user.Status == shared.UserPro || user.Status == shared.UserAdvanced))
 }
 
 func (s *Server) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 	user := UserFromContext(r.Context())
 	if !s.canUseProFeatures(user) {
-		apiError(w, shared.ErrForbidden("Yevqo API is available on the Pro plan"))
+		apiError(w, shared.ErrForbidden("Yevqo API is available on Pro and Advanced plans"))
 		return
 	}
 	switch r.Method {
@@ -63,7 +63,7 @@ func (s *Server) handleAPIKeys(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAPIKeyByID(w http.ResponseWriter,r *http.Request) {
 	user:=UserFromContext(r.Context())
-	if !s.canUseProFeatures(user) { apiError(w,shared.ErrForbidden("Yevqo API is available on the Pro plan")); return }
+	if !s.canUseProFeatures(user) { apiError(w,shared.ErrForbidden("Yevqo API is available on Pro and Advanced plans")); return }
 	if r.Method!=http.MethodDelete { http.Error(w,"method not allowed",http.StatusMethodNotAllowed); return }
 	raw:=strings.Trim(strings.TrimPrefix(r.URL.Path,"/api/api-keys/"),"/")
 	id,err:=strconv.ParseInt(raw,10,64)
@@ -83,7 +83,7 @@ func (s *Server) requireProAPI(next http.HandlerFunc) http.HandlerFunc {
 		token:=strings.TrimSpace(strings.TrimPrefix(header,"Bearer "))
 		if len(token)<40 || len(token)>128 { apiError(w,shared.ErrUnauthorized("invalid API key")); return }
 		var userID,keyID int64
-		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT k.id,k.user_id FROM api_keys k JOIN users u ON u.id=k.user_id WHERE k.key_hash=? AND k.revoked_at IS NULL AND u.status<>'blocked' AND (u.status='pro' OR u.username=?)`,apiKeyDigest(token),s.adminUsername).Scan(&keyID,&userID)
+		err:=s.db.conn.QueryRowContext(r.Context(),`SELECT k.id,k.user_id FROM api_keys k JOIN users u ON u.id=k.user_id WHERE k.key_hash=? AND k.revoked_at IS NULL AND u.status<>'blocked' AND (u.status IN ('pro','advanced') OR u.username=?)`,apiKeyDigest(token),s.adminUsername).Scan(&keyID,&userID)
 		if err!=nil { apiError(w,shared.ErrUnauthorized("invalid or inactive API key")); return }
 		user,err:=s.db.GetUserByID(r.Context(),userID)
 		if err!=nil { apiError(w,shared.ErrUnauthorized("API account unavailable")); return }

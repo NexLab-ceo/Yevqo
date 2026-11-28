@@ -35,3 +35,10 @@ func TestMaxDevicesTotalAdministratorIsUnlimited(t *testing.T) {
 		t.Fatalf("administrator allowance = %d, want effectively unlimited", got)
 	}
 }
+
+func TestMaxDevicesTotalAdvancedPlanIsUnlimited(t *testing.T) {
+	user := &User{Status: UserAdvanced, MaxDevices: 1, BonusDevices: 0}
+	if got := user.MaxDevicesTotal(); got < 1<<30 {
+		t.Fatalf("Advanced allowance = %d, want effectively unlimited", got)
+	}
+}
