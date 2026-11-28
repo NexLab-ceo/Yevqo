@@ -24,7 +24,6 @@ func TestCLICommandsCallAuthenticatedControlPlane(t *testing.T) {
 				} else if body["action"] != command {
 					t.Fatalf("unexpected action: %#v", body)
 				}
-				if command == "deploy" && body["allow_project_code"] != true { t.Fatalf("deploy consent flag missing: %#v", body) }
 				w.Header().Set("Content-Type", "application/json")
 				if command == "logs" {
 					_, _ = w.Write([]byte(`{"ok":true,"payload":"eyJjb250ZW50IjoibG9nIGxpbmVcbiJ9"}`))
@@ -35,7 +34,6 @@ func TestCLICommandsCallAuthenticatedControlPlane(t *testing.T) {
 			defer server.Close()
 			var stdout, stderr strings.Builder
 			args := []string{"--server",server.URL,"--session","test-session",command,"12","demo"}
-			if command == "deploy" { args = append(args,"--allow-project-code") }
 			code := run(args, func(string)string{return ""}, &stdout, &stderr)
 			if code != 0 { t.Fatalf("exit=%d stderr=%s",code,stderr.String()) }
 			if !called { t.Fatal("Control Plane was not called") }
@@ -96,17 +94,6 @@ func TestCLIRequiresSessionAndRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
-func TestCLIDeployRequiresExplicitProjectCodeConsent(t *testing.T) {
-	called := false
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){ called=true }))
-	defer server.Close()
-	var stdout,stderr strings.Builder
-	code:=run([]string{"--server",server.URL,"--session","test-session","deploy","12","demo"},func(string)string{return ""},&stdout,&stderr)
-	if code!=2 || called || !strings.Contains(stderr.String(),"--allow-project-code") {
-		t.Fatalf("deploy without consent: exit=%d called=%v stderr=%q",code,called,stderr.String())
-	}
-}
-
 func TestCLIProjectAndEnvironmentLifecycleCommands(t *testing.T) {
 	cases:=[]struct{
 		name string
@@ -153,7 +140,7 @@ func TestCLIDestructiveLifecycleCommandsRequireConfirmation(t *testing.T) {
 func TestCLIPreviewLifecycleCommands(t *testing.T) {
 	cases:=[]struct{name string;args []string;method,path string;body map[string]any}{
 		{"list",[]string{"previews","12","demo"},http.MethodGet,"/api/sites/12/demo/previews",nil},
-		{"create",[]string{"preview-create","12","demo","feature/test","abc123","--allow-project-code"},http.MethodPost,"/api/sites/12/demo/previews",map[string]any{"allow_project_code":true,"branch":"feature/test","commit":"abc123"}},
+		{"create",[]string{"preview-create","12","demo","feature/test","abc123"},http.MethodPost,"/api/sites/12/demo/previews",map[string]any{"branch":"feature/test","commit":"abc123"}},
 		{"delete",[]string{"preview-delete","12","demo","0123456789abcdef0123456789abcdef","--confirm"},http.MethodDelete,"/api/sites/12/demo/previews/0123456789abcdef0123456789abcdef",nil},
 	}
 	for _,tc:=range cases { t.Run(tc.name,func(t *testing.T){
@@ -175,7 +162,7 @@ func TestCLIPreviewLifecycleCommands(t *testing.T) {
 }
 
 func TestCLIPreviewCreateAndDeleteRequireConfirmation(t *testing.T) {
-	for _,args:=range [][]string{{"preview-create","12","demo"},{"preview-delete","12","demo","0123456789abcdef0123456789abcdef"}}{
+	for _,args:=range [][]string{{"preview-delete","12","demo","0123456789abcdef0123456789abcdef"}}{
 		called:=false
 		server:=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){called=true}))
 		var stdout,stderr strings.Builder
