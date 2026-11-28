@@ -22,13 +22,13 @@ var systemLogPruneCounter uint64
 
 var (
 	systemLogSensitiveKey = regexp.MustCompile(`(?i)(token|secret|password|authorization|private[_-]?key|api[_-]?key|credential|cookie)`)
-	systemLogSensitiveAssignment = regexp.MustCompile(`(?i)([a-z0-9_-]*(?:token|secret|password|authorization|private[_-]?key|api[_-]?key|credential)[a-z0-9_-]*)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;&]+)`)
+	systemLogSensitiveAssignment = regexp.MustCompile(`(?i)([a-z0-9_-]*(token|secret|password|authorization|private[_-]?key|api[_-]?key|credential)[a-z0-9_-]*)(\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&]+)`)
 	systemLogBearerValue = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*`)
 )
 
 func redactSystemLogString(value string) string {
 	value = systemLogBearerValue.ReplaceAllString(value, "Bearer [REDACTED]")
-	return systemLogSensitiveAssignment.ReplaceAllString(value, "$1$2[REDACTED]")
+	return systemLogSensitiveAssignment.ReplaceAllString(value, "$1$3[REDACTED]")
 }
 
 func sanitizeSystemLogValue(value interface{}) interface{} {
