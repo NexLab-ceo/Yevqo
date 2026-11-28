@@ -17,12 +17,22 @@
   if(result.ok)config=result.data||{connected:false};
   else error=result.error||'Could not load Cloudflare connection';
   loading=false;
-  const status=new URLSearchParams(window.location.search).get('cloudflare_oauth');
+  const callbackParams=new URLSearchParams(window.location.search);
+  const status=callbackParams.get('cloudflare_oauth');
+  const oauthError=callbackParams.get('cloudflare_oauth_error')||'';
   if(status==='connected'){
    notify(ru?'Cloudflare авторизован. Теперь выбери DNS-зону.':'Cloudflare authorized. Select a DNS zone next.','success');
    await loadOAuthZones();
   }else if(status==='denied'){
-   error=ru?'Доступ к Cloudflare не был предоставлен.':'Cloudflare access was not granted.';
+   if(oauthError==='access_denied'){
+    error=ru?'Cloudflare отклонил запрос доступа (access_denied). Разреши доступ на странице авторизации Cloudflare и попробуй снова.':'Cloudflare denied the authorization request (access_denied). Approve access on the Cloudflare authorization page and try again.';
+   }else if(oauthError==='invalid_scope'){
+    error=ru?'Cloudflare отклонил запрошенные разрешения (invalid_scope). Проверь scopes OAuth-приложения.':'Cloudflare rejected the requested permissions (invalid_scope). Check the OAuth application scopes.';
+   }else if(oauthError==='unauthorized_client'||oauthError==='invalid_client'){
+    error=ru?'Cloudflare не принял OAuth-клиент (unauthorized_client/invalid_client). Проверь Client ID, Client Secret и Redirect URL в настройках приложения.':'Cloudflare rejected the OAuth client (unauthorized_client/invalid_client). Check the Client ID, Client Secret and Redirect URL in the application settings.';
+   }else{
+    error=(ru?'Cloudflare отказал в OAuth-доступе':'Cloudflare denied OAuth access')+(oauthError?' ('+oauthError+')':'')+'. '+(ru?'Проверь настройки OAuth-приложения и повтори подключение.':'Check the OAuth application settings and try again.');
+   }
   }else if(status==='error'){
    error=ru?'Не удалось завершить Cloudflare OAuth. Проверь настройки OAuth приложения.':'Cloudflare OAuth could not be completed. Check the OAuth application settings.';
   }
