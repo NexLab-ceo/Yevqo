@@ -95,6 +95,21 @@ func readProviderJSON(resp *http.Response, target interface{}) error {
 	return nil
 }
 
+func (s *Server) recordProviderFailure(ctx context.Context, userID int64, provider, operation string, err error) {
+	if s == nil || err == nil { return }
+	category := strings.ToLower(strings.TrimSpace(provider))
+	if category == "" { category = "integration" }
+	s.recordSystemLog(systemLogRecord{
+		Context: ctx,
+		Level: "error",
+		Category: category,
+		Source: "integration",
+		Message: provider + " " + operation + " failed",
+		UserID: userID,
+		Metadata: map[string]interface{}{"operation": operation, "cause": err.Error()},
+	})
+}
+
 func verifyProviderToken(ctx context.Context, provider, token string) (providerAccount, string, error) {
 	var account providerAccount
 	var endpoint string
@@ -213,6 +228,7 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				// Provider errors contain request/transport diagnostics only; JWTs,
 				// installation tokens and PEM contents are never included.
+				s.recordProviderFailure(r.Context(), u.ID, "github_app", "installation verification", err)
 				log.Printf("GitHub App installation verification failed (installation_id=%s): %v", credentials.InstallationID, err)
 				apiError(w,shared.ErrBadRequest(githubAppVerificationMessage(err)+": "+err.Error()))
 				return
@@ -229,7 +245,7 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 		if len(in.Token)<10 || len(in.Token)>4096 || strings.ContainsAny(in.Token,"\r\n\x00") { apiError(w,shared.ErrBadRequest("enter a valid access token"));return }
 		ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
 		account,scopes,err:=verifyProviderToken(ctx,in.Provider,in.Token)
-		if err!=nil { apiError(w,shared.ErrBadRequest("provider token verification failed: "+err.Error()));return }
+		if err!=nil { s.recordProviderFailure(r.Context(), u.ID, in.Provider, "token verification", err); apiError(w,shared.ErrBadRequest("provider token verification failed: "+err.Error()));return }
 		nonce,ciphertext,err:=encryptCredential(s.credentialKey,[]byte(in.Token))
 		if err!=nil { apiError(w,shared.ErrInternal("could not encrypt provider token"));return }
 		_,err=s.db.conn.ExecContext(r.Context(),`INSERT INTO integrations(user_id,provider,account_id,account_name,account_email,token_nonce,token_ciphertext,scopes,last_verified_at) VALUES(?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE account_name=VALUES(account_name),account_email=VALUES(account_email),token_nonce=VALUES(token_nonce),token_ciphertext=VALUES(token_ciphertext),scopes=VALUES(scopes),last_verified_at=VALUES(last_verified_at)`,u.ID,in.Provider,account.ID,account.Name,nullableString(account.Email),nonce,ciphertext,scopes,time.Now())
@@ -262,6 +278,7 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 		if err:=json.Unmarshal(rawCredential,&credentials);err!=nil { apiError(w,shared.ErrInternal("stored GitHub App credentials are invalid"));return }
 		token,_,err=githubAppInstallationToken(ctx,credentials)
 		if err!=nil {
+			s.recordProviderFailure(r.Context(), u.ID, provider, "installation token refresh", err)
 			message := "GitHub App installation token could not be refreshed"
 			status := http.StatusBadRequest
 			if strings.Contains(err.Error(), "HTTP 404") { message = "GitHub App installation was removed"; status = http.StatusGone
@@ -283,9 +300,9 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 			for pageNumber:=1;pageNumber<=10;pageNumber++ {
 				endpoint:=fmt.Sprintf("https://api.github.com/installation/repositories?per_page=100&page=%d",pageNumber)
 				resp,requestErr:=providerRequest(ctx,"github",string(token),endpoint)
-				if requestErr!=nil { apiError(w,shared.ErrInternal("GitHub API request failed: "+requestErr.Error()));return }
+				if requestErr!=nil { s.recordProviderFailure(r.Context(), u.ID, "github", "repository list request", requestErr); apiError(w,shared.ErrInternal("GitHub API request failed: "+requestErr.Error()));return }
 				var page struct { TotalCount int `json:"total_count"`; Repositories []githubRepository `json:"repositories"` }
-				if decodeErr:=readProviderJSON(resp,&page);decodeErr!=nil { apiError(w,shared.ErrBadRequest("GitHub App repository access was rejected: "+decodeErr.Error()));return }
+				if decodeErr:=readProviderJSON(resp,&page);decodeErr!=nil { s.recordProviderFailure(r.Context(), u.ID, "github_app", "repository list response", decodeErr); apiError(w,shared.ErrBadRequest("GitHub App repository access was rejected: "+decodeErr.Error()));return }
 				appendRepositories(page.Repositories)
 				if len(page.Repositories)<100 || len(repos)>=page.TotalCount { break }
 			}
@@ -293,14 +310,14 @@ func (s *Server) handleIntegrationRepositories(w http.ResponseWriter, r *http.Re
 			resp,requestErr:=providerRequest(ctx,"github",string(token),"https://api.github.com/user/repos?per_page=100&sort=updated")
 			if requestErr!=nil { apiError(w,shared.ErrInternal("GitHub API request failed: "+requestErr.Error()));return }
 			var values []githubRepository
-			if decodeErr:=readProviderJSON(resp,&values);decodeErr!=nil { apiError(w,shared.ErrBadRequest("GitHub rejected repository access: "+decodeErr.Error()));return }
+			if decodeErr:=readProviderJSON(resp,&values);decodeErr!=nil { s.recordProviderFailure(r.Context(), u.ID, "github", "repository list response", decodeErr); apiError(w,shared.ErrBadRequest("GitHub rejected repository access: "+decodeErr.Error()));return }
 			appendRepositories(values)
 		}
 	} else if provider=="gitlab" {
 		resp,err:=providerRequest(ctx,provider,string(token),"https://gitlab.com/api/v4/projects?membership=true&per_page=100&order_by=last_activity_at")
-		if err!=nil { apiError(w,shared.ErrInternal("GitLab API request failed: "+err.Error()));return }
+		if err!=nil { s.recordProviderFailure(r.Context(), u.ID, "gitlab", "project list request", err); apiError(w,shared.ErrInternal("GitLab API request failed: "+err.Error()));return }
 		var values []struct { ID int64 `json:"id"`; Name string `json:"name"`; PathWithNamespace string `json:"path_with_namespace"`; HTTPURL string `json:"http_url_to_repo"`; DefaultBranch string `json:"default_branch"`; Visibility string `json:"visibility"`; WebURL string `json:"web_url"` }
-		if err:=readProviderJSON(resp,&values);err!=nil { apiError(w,shared.ErrBadRequest("GitLab rejected project access: "+err.Error()));return }
+		if err:=readProviderJSON(resp,&values);err!=nil { s.recordProviderFailure(r.Context(), u.ID, "gitlab", "project list response", err); apiError(w,shared.ErrBadRequest("GitLab rejected project access: "+err.Error()));return }
 		for _,v:=range values { repos=append(repos,providerRepository{ID:strconv.FormatInt(v.ID,10),Name:v.Name,FullName:v.PathWithNamespace,CloneURL:v.HTTPURL,DefaultBranch:v.DefaultBranch,Private:v.Visibility!="public",WebURL:v.WebURL}) }
 	} else { apiError(w,shared.ErrBadRequest("unsupported provider"));return }
 	if isGitHubApp { _, _ = s.db.conn.ExecContext(r.Context(), `UPDATE integrations SET last_verified_at=UTC_TIMESTAMP() WHERE id=? AND user_id=?`, id, u.ID) }
