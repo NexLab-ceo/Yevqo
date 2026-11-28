@@ -77,7 +77,6 @@
     let previewsLoading = false;
     let previewCreating = false;
     let previewBranch = 'main';
-    let previewConsent = false;
     let deletingPreview = '';
     let releasesLoading = false;
     let pruningReleases = false;
@@ -102,12 +101,10 @@
     let webhookEnabled = false;
     let webhookPath = '';
     let webhookSecret = '';
-    let webhookConsent = false;
     let webhookBusy = false;
     let buildPlan = null;
     let analyzingBuild = false;
     let buildRunning = false;
-    let allowProjectCode = false;
     let buildResult = null;
     let buildHistory = [];
     let buildHistoryLoading = false;
@@ -260,11 +257,10 @@
     }
 
     async function createPreview() {
-        if (!online || previewCreating || !previewConsent) return;
+        if (!online || previewCreating) return;
         previewCreating = true;
-        const res = await createSitePreview(deviceId, siteId, { branch: previewBranch.trim() || gitForm.branch || 'main', allow_project_code: true });
+        const res = await createSitePreview(deviceId, siteId, { branch: previewBranch.trim() || gitForm.branch || 'main' });
         previewCreating = false;
-        previewConsent = false;
         if (!res.ok || !res.data?.ok) { notify(res.error || res.data?.message || 'Не удалось создать Preview', 'error'); await loadPreviews(); return; }
         notify('Preview готов', 'success');
         await loadPreviews();
@@ -282,13 +278,12 @@
     async function configureWebhook(enabled) {
         if (webhookBusy) return;
         webhookBusy = true;
-        const res = await setSiteWebhook(deviceId, siteId, enabled, webhookConsent);
+        const res = await setSiteWebhook(deviceId, siteId, enabled, true);
         webhookBusy = false;
         if (!res.ok) { notify(res.error || 'Не удалось изменить webhook', 'error'); return; }
         webhookEnabled = !!res.data.enabled;
         webhookPath = res.data.path || webhookPath;
         webhookSecret = res.data.secret || '';
-        webhookConsent = false;
         notify(enabled ? 'Webhook включён. Скопируйте secret и добавьте его в GitHub.' : 'Webhook отключён', 'success');
     }
 
@@ -705,10 +700,6 @@
     }
     async function runAndroidBuild() {
         if (!online || !buildPlan || buildRunning) return;
-        if (!allowProjectCode) {
-            notify('Подтвердите запуск кода проекта перед сборкой', 'warning');
-            return;
-        }
         buildRunning = true;
         buildResult = null;
         const res = await sendCommand(deviceId, 'build_site', {
@@ -1176,11 +1167,7 @@
                         {/if}
                     {/if}
                     {#if (['nodejs','python','go','rust','php','static','java','jvm','ruby','dotnet'].includes(buildPlan.stack) || (buildPlan.provider === 'veltrix' && (buildPlan.install_command || buildPlan.build_command))) && !buildPlan.needs_configuration}
-                        <label class="consent-row">
-                            <input type="checkbox" bind:checked={allowProjectCode} />
-                            Я доверяю этому репозиторию и разрешаю запуск его build-скриптов с правами пользователя Termux.
-                        </label>
-                        <Button variant="primary" disabled={!online || buildRunning || !allowProjectCode} loading={buildRunning} on:click={runAndroidBuild}>Build on this Android device</Button>
+                        <Button variant="primary" disabled={!online || buildRunning} loading={buildRunning} on:click={runAndroidBuild}>Build on this Android device</Button>
                     {:else}
                         <p class="build-warning">Этот тип проекта пока не поддерживается локальным Android provider. Сборка не будет запускаться.</p>
                     {/if}
@@ -1292,7 +1279,6 @@
                 <label class="wide">HTTP Health Check Timeout (seconds)<input class="input" type="number" min="3" max="300" step="1" bind:value={gitForm.health_check_timeout_seconds} /><small>3–300 сек. По умолчанию 15. Применяется только при заданном Health Check Path.</small></label>
                 <label class="wide">GitHub Token<input class="input" type="password" bind:value={gitForm.github_token} autocomplete="new-password" placeholder={git.has_token ? 'Токен сохранён — пустое поле оставит его без изменений' : 'Только для приватного репозитория'} />{#if git.has_token}<small>Токен сохранён с AES-GCM шифрованием.</small>{/if}</label>
             </div>
-            <p class="security-note">Build Command выполняется на устройстве от имени пользователя Termux через allowlisted executable без shell-интерпретации. Используйте только доверенные команды.</p>
             <div class="save-row"><Button variant="primary" loading={busyAction === 'git'} on:click={saveGit}>Сохранить настройки</Button></div>
             <section class="webhook-panel">
                 <h3>GitHub Push Deployments</h3>
@@ -1302,8 +1288,7 @@
                     <div class="webhook-url"><code>{webhookPath}</code><Button size="sm" on:click={copyWebhookURL}>Copy URL</Button></div>
                     <Button size="sm" variant="danger" loading={webhookBusy} on:click={() => configureWebhook(false)}>Disable webhook</Button>
                 {:else}
-                    <label class="webhook-consent"><input type="checkbox" bind:checked={webhookConsent} /> Я разрешаю автоматически выполнять код этого репозитория при push в выбранную ветку.</label>
-                    <Button size="sm" variant="primary" disabled={!webhookConsent || !git.repository_url || webhookBusy} loading={webhookBusy} on:click={() => configureWebhook(true)}>Enable GitHub webhook</Button>
+                    <Button size="sm" variant="primary" disabled={!git.repository_url || webhookBusy} loading={webhookBusy} on:click={() => configureWebhook(true)}>Enable GitHub webhook</Button>
                 {/if}
                 {#if webhookSecret}
                     <div class="webhook-secret"><strong>Webhook secret — показывается только один раз</strong><code>{webhookSecret}</code><Button size="sm" on:click={copyWebhookSecret}>Copy secret</Button><small>В GitHub откройте Settings → Webhooks → Add webhook. Content type: application/json; Events: Just the push event.</small></div>
@@ -1322,8 +1307,7 @@
                 <div class="git-form">
                     <label>Git branch<input class="input" bind:value={previewBranch} placeholder={gitForm.branch || 'main'} maxlength="128" /></label>
                 </div>
-                <label class="webhook-consent"><input type="checkbox" bind:checked={previewConsent} /> Я разрешаю клонировать, собирать и запускать код этой ветки на Android-устройстве.</label>
-                <div class="save-row"><Button variant="primary" disabled={!previewConsent || !git.repository_url || previewCreating} loading={previewCreating} on:click={createPreview}>Create Preview</Button><Button size="sm" disabled={previewsLoading} on:click={loadPreviews}>Refresh</Button></div>
+                <div class="save-row"><Button variant="primary" disabled={!git.repository_url || previewCreating} loading={previewCreating} on:click={createPreview}>Create Preview</Button><Button size="sm" disabled={previewsLoading} on:click={loadPreviews}>Refresh</Button></div>
                 {#if previewsLoading}
                     <p class="muted">Загрузка Preview…</p>
                 {:else if previews.length === 0}
@@ -1366,7 +1350,7 @@
 .task-create{display:grid;gap:8px;margin:14px 0;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--bg-base)}.task-command{width:100%;font:11px/1.5 ui-monospace,monospace;resize:vertical}.task-create-actions{display:flex;gap:8px}.task-create-actions .input{flex:1}.task-list{display:grid;gap:8px}.task-item{display:grid;gap:7px;padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--bg-base)}.task-item-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.task-item-head>div:first-child{display:flex;align-items:center;gap:9px}.task-item-head strong{font-size:11px}.task-state{font-size:9px;color:var(--success)}.task-state.task-failed,.task-failed{color:var(--danger)}.task-buttons{display:flex;gap:6px}.task-item code{font-size:10px;color:var(--text-main);overflow-wrap:anywhere}.task-item small{font-size:9px;color:var(--text-muted)}.task-output-toggle{justify-self:start;background:transparent;border:0;color:#8AB4FF;font-size:10px}.task-output{max-height:220px;overflow:auto;padding:10px;background:var(--bg-base);border-radius:7px;color:var(--text-muted);font-size:10px;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:560px){.task-create-actions{flex-direction:column}.task-item-head{align-items:flex-start;flex-direction:column}}
 .build-history{margin-top:18px;border-top:1px solid var(--border);padding-top:14px}.build-history-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border:0;border-bottom:1px solid var(--border);background:transparent;color:var(--text-main);text-align:left}.build-history-row span{display:grid;gap:4px}.build-history-row strong{font:10px var(--mono,monospace)}.build-history-row small,.build-history-row em{font-size:9px;color:var(--text-muted);font-style:normal}.build-history-row .build-success-text{color:var(--success)}.build-history-row .build-failure-text{color:var(--danger)}
 .metrics-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.process-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}.process-metrics>div{display:grid;gap:5px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-base)}.process-metrics span{font-size:9px;color:var(--text-muted)}.process-metrics strong{font-size:15px;color:var(--text-main)}@media(max-width:560px){.process-metrics{grid-template-columns:1fr}}
-.webhook-panel{display:grid;gap:9px;margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-base)}.webhook-panel h3{font-size:13px}.webhook-state{color:var(--success);font-size:11px}.webhook-url{display:flex;align-items:center;justify-content:space-between;gap:8px}.webhook-url code,.webhook-secret code{overflow-wrap:anywhere;color:var(--accent);font-size:11px}.webhook-consent{display:flex;gap:8px;align-items:flex-start;color:var(--warning);font-size:11px}.webhook-secret{display:grid;gap:8px;padding:10px;border:1px solid var(--warning);border-radius:8px}.webhook-secret small{color:var(--text-muted);font-size:10px;line-height:1.5}
+.webhook-panel{display:grid;gap:9px;margin-top:18px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-base)}.webhook-panel h3{font-size:13px}.webhook-state{color:var(--success);font-size:11px}.webhook-url{display:flex;align-items:center;justify-content:space-between;gap:8px}.webhook-url code,.webhook-secret code{overflow-wrap:anywhere;color:var(--accent);font-size:11px}.webhook-secret{display:grid;gap:8px;padding:10px;border:1px solid var(--warning);border-radius:8px}.webhook-secret small{color:var(--text-muted);font-size:10px;line-height:1.5}
 .env-header,.env-list-head,.env-import-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .env-count{font-size:11px;color:var(--text-muted);border:1px solid var(--border);border-radius:6px;padding:5px 8px;white-space:nowrap}
 .env-notice{display:grid;gap:5px;padding:12px 14px;margin:14px 0;border:1px solid var(--border);border-radius:8px;background:var(--bg-card)}
@@ -1403,8 +1387,6 @@
     .env-row{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid #27272A;font-size:12px;color:var(--text-main)}
     .android-build-panel{display:grid;gap:12px;margin-top:20px;padding-top:18px;border-top:1px solid #27272A}
     .android-build-panel h3{font-size:14px;color:var(--text-main);margin:0}
-    .consent-row{display:flex;align-items:flex-start;gap:9px;color:var(--text-main);font-size:12px;line-height:1.5}
-    .consent-row input{margin-top:2px;accent-color:var(--accent)}
     .build-result{border:1px solid #3F3F46;border-radius:8px;padding:12px}
     .build-success{border-color:var(--border-hover)}.build-failure{border-color:var(--warning)}
     .build-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:16px 0}
