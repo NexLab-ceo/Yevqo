@@ -47,7 +47,7 @@ The update commands are safe to run more than once. If the installed version is 
 
 ## Building and publishing a release
 
-**Important: publishing is currently a manual, separate step.** A push to `main` runs the CI build and uploads both packages plus `SHA256SUMS` as a GitHub Actions artifact. The current workflows do not create or upload a GitHub Release automatically. Pushing a version tag alone does not publish a release.
+Versioned tag builds publish automatically to the public Releases page in `NexLab-ceo/veltrix-dock`. A push to `main` still runs verification and uploads a CI artifact only; it does not publish a release.
 
 To prepare a stable package version:
 
@@ -58,18 +58,21 @@ To prepare a stable package version:
    git push origin v0.2.0
    ```
 
-2. Trigger the manual workflow for that exact tag. The most deterministic method is GitHub CLI:
+2. Push the tag. This automatically starts **Build Yevqo** for that exact tag:
 
    ```sh
-   gh workflow run build.yml --ref v0.2.0
+   git push origin v0.2.0
    ```
 
-   If the Actions UI offers the tag in its ref selector, you can dispatch **Build Yevqo** there instead. Confirm the run's source ref/commit before using its artifact. Do not use an artifact from a different commit or tag.
-3. Wait for the workflow to complete successfully. Download its artifact, which contains:
+   The workflow runs Go tests, builds the Android ARM64 binaries and frontend, assembles and verifies both Debian packages, creates `SHA256SUMS`, and uploads a CI artifact.
+3. The same successful tag workflow publishes the two packages and `SHA256SUMS` to the matching `v0.2.0` release in `veltrix-dock`. If that release already exists, its three assets are replaced with the newly verified build. The workflow fails closed if publishing credentials are missing or the release upload fails.
    - `yevqo-all_0.2.0_aarch64.deb`
    - `yevqo_0.2.0_aarch64.deb`
    - `SHA256SUMS`
-4. Verify the checksums, then create the matching `v0.2.0` release in [NexLab-ceo/veltrix-dock](https://github.com/NexLab-ceo/veltrix-dock/releases) and attach all three files without renaming them.
-5. Confirm the release is public and both package assets plus `SHA256SUMS` are downloadable before announcing the update.
+4. Confirm the workflow's **Publish verified packages to release repository** step succeeded and that the matching release exposes both package assets and `SHA256SUMS`. Never announce a release from a failed or incomplete workflow.
 
-The current workflow does not use a `PUBLIC_RELEASE_TOKEN` secret. That secret will only be needed if automated publishing to `veltrix-dock` is implemented later. Never publish an artifact from a failed or unverified build.
+### Required repository secret
+
+In the **Yevqo source repository** settings, configure `PUBLIC_RELEASE_TOKEN` as an Actions secret. It must be a GitHub token with **Contents: Read and write** access to `NexLab-ceo/veltrix-dock`. The token is used only by the release-publishing step; it is not embedded in packages or sent to Android devices. Do not paste the token into source code, issues, or chat.
+
+Never publish an artifact from a failed or unverified build.
