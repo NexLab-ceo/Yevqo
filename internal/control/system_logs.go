@@ -22,6 +22,7 @@ func systemRequestIDFromContext(ctx context.Context) string {
 }
 
 type systemLogRecord struct {
+	Context context.Context
 	Level string
 	Category string
 	Source string
@@ -38,6 +39,7 @@ type systemLogRecord struct {
 
 func (s *Server) recordSystemLog(entry systemLogRecord) {
 	if s == nil || s.db == nil || s.db.conn == nil { return }
+	if entry.RequestID == "" && entry.Context != nil { entry.RequestID = systemRequestIDFromContext(entry.Context) }
 	if entry.Level == "" { entry.Level = "info" }
 	if entry.Category == "" { entry.Category = "system" }
 	if entry.Source == "" { entry.Source = "control-plane" }
