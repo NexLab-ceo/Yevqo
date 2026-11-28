@@ -101,6 +101,23 @@ func (s *Server) handleCloudflareConfig(w http.ResponseWriter,r *http.Request){
 		var routes int
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT COUNT(*) FROM site_cloudflare_routes WHERE user_id=?`,u.ID).Scan(&routes);err!=nil{apiError(w,shared.ErrInternal("could not check managed Cloudflare routes"));return}
 		if routes>0{apiError(w,shared.ErrConflict("remove all managed site routes before disconnecting Cloudflare"));return}
+		var authMethod string
+		var refreshNonce,refreshCipher,accessNonce,accessCipher []byte
+		tokenErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT auth_method,oauth_refresh_nonce,oauth_refresh_ciphertext,token_nonce,token_ciphertext FROM cloudflare_accounts WHERE user_id=?`,u.ID).Scan(&authMethod,&refreshNonce,&refreshCipher,&accessNonce,&accessCipher)
+		if tokenErr!=nil && tokenErr!=sql.ErrNoRows { apiError(w,shared.ErrInternal("could not load Cloudflare credentials for revocation")); return }
+		if tokenErr==nil && authMethod=="oauth" {
+			revokeToken,revokeType:="", "refresh_token"
+			if len(refreshNonce)>0 && len(refreshCipher)>0 {
+				raw,e:=decryptCredential(s.credentialKey,refreshNonce,refreshCipher);if e!=nil { apiError(w,shared.ErrInternal("could not decrypt Cloudflare refresh token")); return };revokeToken=string(raw)
+			} else if len(accessNonce)>0 && len(accessCipher)>0 {
+				raw,e:=decryptCredential(s.credentialKey,accessNonce,accessCipher);if e!=nil { apiError(w,shared.ErrInternal("could not decrypt Cloudflare access token")); return };revokeToken=string(raw);revokeType="access_token"
+			}
+			if revokeToken!="" {
+				cfg,e:=s.cloudflareOAuthClient(r.Context());if e!=nil { apiError(w,shared.ErrInternal("Cloudflare OAuth client configuration is unavailable for revocation")); return }
+				ctx,cancel:=context.WithTimeout(r.Context(),15*time.Second);e=s.cloudflareOAuthRevoke(ctx,cfg,revokeToken,revokeType);cancel()
+				if e!=nil { apiError(w,shared.ErrBadRequest("Cloudflare did not confirm token revocation; connection was kept")); return }
+			}
+		}
 		_,err:=s.db.conn.ExecContext(r.Context(),`DELETE FROM cloudflare_accounts WHERE user_id=?`,u.ID)
 		if err!=nil{apiError(w,shared.ErrInternal("could not disconnect Cloudflare"));return}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"connected":false})

@@ -109,11 +109,14 @@ func (s *Server) handleCloudflareOAuthCallback(w http.ResponseWriter,r *http.Req
 }
 
 func (s *Server) cloudflareOAuthAccessToken(ctx context.Context,userID int64)(string,error){
+ tx,e:=s.db.conn.BeginTx(ctx,nil);if e!=nil{return "",e};defer tx.Rollback()
  var method string;var an,ac,rn,rc []byte;var expiry sql.NullTime
- e:=s.db.conn.QueryRowContext(ctx,`SELECT auth_method,token_nonce,token_ciphertext,oauth_refresh_nonce,oauth_refresh_ciphertext,oauth_expires_at FROM cloudflare_accounts WHERE user_id=?`,userID).Scan(&method,&an,&ac,&rn,&rc,&expiry)
+ e=tx.QueryRowContext(ctx,`SELECT auth_method,token_nonce,token_ciphertext,oauth_refresh_nonce,oauth_refresh_ciphertext,oauth_expires_at FROM cloudflare_accounts WHERE user_id=? FOR UPDATE`,userID).Scan(&method,&an,&ac,&rn,&rc,&expiry)
  if e!=nil{return "",e}
  access,e:=decryptCredential(s.credentialKey,an,ac);if e!=nil{return "",e}
- if method!="oauth"||!expiry.Valid||time.Until(expiry.Time)>2*time.Minute{return string(access),nil}
+ if method!="oauth"||!expiry.Valid||time.Until(expiry.Time)>2*time.Minute{
+  if e=tx.Commit();e!=nil{return "",e};return string(access),nil
+ }
  if len(rn)==0||len(rc)==0{return "",fmt.Errorf("Cloudflare OAuth refresh token is unavailable; reconnect the account")}
  refresh,e:=decryptCredential(s.credentialKey,rn,rc);if e!=nil{return "",e}
  cfg,e:=s.cloudflareOAuthClient(ctx);if e!=nil{return "",e}
@@ -123,8 +126,22 @@ func (s *Server) cloudflareOAuthAccessToken(ctx context.Context,userID int64)(st
  nan,nac,e:=encryptCredential(s.credentialKey,[]byte(tokens.AccessToken));if e!=nil{return "",e}
  nrn,nrc:=rn,rc;if tokens.RefreshToken!=""{nrn,nrc,e=encryptCredential(s.credentialKey,[]byte(tokens.RefreshToken));if e!=nil{return "",e}}
  next:=time.Now().UTC().Add(time.Duration(tokens.ExpiresIn)*time.Second)
- _,e=s.db.conn.ExecContext(ctx,`UPDATE cloudflare_accounts SET token_nonce=?,token_ciphertext=?,oauth_refresh_nonce=?,oauth_refresh_ciphertext=?,oauth_expires_at=?,last_verified_at=UTC_TIMESTAMP() WHERE user_id=? AND auth_method='oauth'`,nan,nac,nrn,nrc,next,userID)
- if e!=nil{return "",e};return tokens.AccessToken,nil
+ _,e=tx.ExecContext(ctx,`UPDATE cloudflare_accounts SET token_nonce=?,token_ciphertext=?,oauth_refresh_nonce=?,oauth_refresh_ciphertext=?,oauth_expires_at=?,last_verified_at=UTC_TIMESTAMP() WHERE user_id=? AND auth_method='oauth'`,nan,nac,nrn,nrc,next,userID)
+ if e!=nil{return "",e}
+ if e=tx.Commit();e!=nil{return "",e}
+ return tokens.AccessToken,nil
+}
+
+func (s *Server) cloudflareOAuthRevoke(ctx context.Context,cfg cloudflareOAuthClientConfig,token,tokenType string)error{
+ form:=url.Values{"token":{token},"token_type_hint":{tokenType}}
+ if cfg.AuthMethod=="client_secret_post"{form.Set("client_id",cfg.ClientID);form.Set("client_secret",cfg.ClientSecret)}
+ req,e:=http.NewRequestWithContext(ctx,http.MethodPost,"https://dash.cloudflare.com/oauth2/revoke",strings.NewReader(form.Encode()));if e!=nil{return e}
+ req.Header.Set("Accept","application/json");req.Header.Set("Content-Type","application/x-www-form-urlencoded")
+ if cfg.AuthMethod=="client_secret_basic"{req.SetBasicAuth(cfg.ClientID,cfg.ClientSecret)}
+ resp,e:=integrationHTTPClient.Do(req);if e!=nil{return e};defer resp.Body.Close()
+ _,_=io.Copy(io.Discard,io.LimitReader(resp.Body,1<<20))
+ if resp.StatusCode<200||resp.StatusCode>=300{return fmt.Errorf("Cloudflare OAuth revoke endpoint returned HTTP %d",resp.StatusCode)}
+ return nil
 }
 
 func (s *Server) handleCloudflareOAuthZones(w http.ResponseWriter,r *http.Request){
