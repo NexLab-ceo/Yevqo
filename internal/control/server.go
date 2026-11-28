@@ -242,6 +242,7 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 		requestID := strings.TrimSpace(r.Header.Get("X-Request-ID"))
 		if requestID == "" || len(requestID) > 64 { requestID = newSystemRequestID() }
 		w.Header().Set("X-Request-ID", requestID)
+		r = r.WithContext(context.WithValue(r.Context(), systemRequestIDContextKey{}, requestID))
 		rw := &responseWriter{ResponseWriter: w, status: 200}
 		next.ServeHTTP(rw, r)
 		dur := time.Since(start)
@@ -253,7 +254,7 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 				level := "info"
 				if rw.status >= 500 { level = "error" } else if rw.status >= 400 { level = "warn" }
 				category := "http"
-				if strings.HasPrefix(r.URL.Path, "/oauth/") { category = "authentication" } else if strings.HasPrefix(r.URL.Path, "/api/cloudflare") { category = "cloudflare" } else if strings.HasPrefix(r.URL.Path, "/api/integrations") { category = "integrations" } else if strings.HasPrefix(r.URL.Path, "/api/projects") { category = "projects" } else if strings.HasPrefix(r.URL.Path, "/api/devices") { category = "devices" } else if strings.HasPrefix(r.URL.Path, "/api/deployments") { category = "deployments" } else if strings.HasPrefix(r.URL.Path, "/admin/api") { category = "admin" } else if strings.HasPrefix(r.URL.Path, "/api/backups") { category = "backups" } else if strings.HasPrefix(r.URL.Path, "/api/databases") { category = "database" }
+				if strings.HasPrefix(r.URL.Path, "/oauth/") { category = "authentication" } else if strings.HasPrefix(r.URL.Path, "/webhooks/github/") { category = "github" } else if strings.HasPrefix(r.URL.Path, "/api/cloudflare") { category = "cloudflare" } else if strings.HasPrefix(r.URL.Path, "/api/integrations") { category = "integrations" } else if strings.HasPrefix(r.URL.Path, "/api/projects") { category = "projects" } else if strings.HasPrefix(r.URL.Path, "/api/devices") { category = "devices" } else if strings.HasPrefix(r.URL.Path, "/api/deployments") { category = "deployments" } else if strings.HasPrefix(r.URL.Path, "/admin/api") { category = "admin" } else if strings.HasPrefix(r.URL.Path, "/api/backups") { category = "backups" } else if strings.HasPrefix(r.URL.Path, "/api/databases") { category = "database" }
 				s.recordSystemLog(systemLogRecord{Level: level, Category: category, Source: "http", Message: "HTTP request completed", RequestID: requestID, Method: r.Method, Path: r.URL.Path, Status: rw.status, Duration: dur, Metadata: map[string]interface{}{"remote_ip": clientIP(r)}})
 			}
 		}
