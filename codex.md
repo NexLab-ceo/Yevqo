@@ -594,3 +594,10 @@ Do not introduce paid CI services or paid infrastructure. Prefer the repository'
 - Provider integrations must distinguish configuration, authorization/consent, network, token exchange, validation, encryption, persistence, and provider API failures. Keep detailed logs secret-free and provide user-facing steps for known failure stages.
 - If a failure cannot be classified safely, show the operation name, stable error code, HTTP status (if known), and where to find the corresponding diagnostic log; do not invent a cause.
 - Apply this standard to every new or modified feature and progressively bring existing flows into compliance when touched. Never hide a concrete error behind a generic fallback when the concrete cause is safely available.
+
+## Error reporting standard — Admin Panel
+- Every Admin Panel operation must return an actionable error whenever the cause is safely known; never replace a known validation, permission, conflict, dependency, or provider failure with a generic message.
+- When the cause is unknown, show an honest generic description plus operation, HTTP status (or explicit no-response/network state), stable error code and request/correlation ID when available.
+- Preserve structured error metadata from API responses (`code`, `request_id` / correlation ID) in the frontend API client. Admin errors must include the HTTP method and endpoint context.
+- Explain the likely next action in Russian in the Admin UI. Do not expose raw stack traces, SQL details, filesystem paths, credentials, cookies, OAuth codes, access/refresh tokens, private keys, or provider response bodies.
+- Apply this standard to user management, statistics, platform settings, Agent package upload/publication, backups, and every future Admin Panel action. Add tests for both classified and unclassified failures.
