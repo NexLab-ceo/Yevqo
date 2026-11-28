@@ -11,8 +11,13 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
+
+const systemLogRetentionDays = 30
+
+var systemLogPruneCounter uint64
 
 type systemRequestIDContextKey struct{}
 
@@ -60,6 +65,17 @@ func (s *Server) recordSystemLog(entry systemLogRecord) {
 	if err != nil {
 		// Keep the file log as a fallback; never recursively log a DB logging failure.
 		log.Printf("system log persistence failed: %v", err)
+		return
+	}
+	// Prune in small, infrequent batches so normal log writes stay cheap.
+	// The created_at index bounds the scan to expired rows.
+	if atomic.AddUint64(&systemLogPruneCounter, 1)%256 == 0 {
+		pruneCtx, pruneCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer pruneCancel()
+		if _, pruneErr := s.db.conn.ExecContext(pruneCtx,
+			"DELETE FROM system_logs WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)"); pruneErr != nil {
+			log.Printf("system log retention cleanup failed: %v", pruneErr)
+		}
 	}
 }
 
