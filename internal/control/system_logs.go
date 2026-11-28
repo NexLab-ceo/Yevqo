@@ -14,12 +14,21 @@ import (
 	"time"
 )
 
+type systemRequestIDContextKey struct{}
+
+func systemRequestIDFromContext(ctx context.Context) string {
+	value, _ := ctx.Value(systemRequestIDContextKey{}).(string)
+	return value
+}
+
 type systemLogRecord struct {
 	Level string
 	Category string
 	Source string
 	Message string
 	RequestID string
+	UserID int64
+	DeviceID int64
 	Method string
 	Path string
 	Status int
@@ -40,10 +49,11 @@ func (s *Server) recordSystemLog(entry systemLogRecord) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 	_, err = s.db.conn.ExecContext(ctx, `INSERT INTO system_logs
-		(level,category,source,message,request_id,method,path,status_code,duration_ms,metadata)
-		VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		(level,category,source,message,request_id,user_id,device_id,method,path,status_code,duration_ms,metadata)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
 		entry.Level, entry.Category, entry.Source, entry.Message,
-		nullableString(entry.RequestID), nullableString(entry.Method), nullableString(entry.Path),
+		nullableString(entry.RequestID), nullableSystemLogInt(entry.UserID), nullableSystemLogInt(entry.DeviceID),
+		nullableString(entry.Method), nullableString(entry.Path),
 		nullableSystemLogInt(int64(entry.Status)), nullableSystemLogInt(entry.Duration.Milliseconds()), metadata)
 	if err != nil {
 		// Keep the file log as a fallback; never recursively log a DB logging failure.
@@ -82,7 +92,7 @@ func (s *Server) handleSystemLogs(w http.ResponseWriter, r *http.Request) {
 	_ = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM system_logs WHERE "+filter, args...).Scan(&total)
 	_ = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM system_logs WHERE level='error'").Scan(&errorsCount)
 	_ = s.db.conn.QueryRowContext(r.Context(), "SELECT COUNT(*) FROM system_logs WHERE level='warn'").Scan(&warningsCount)
-	query := "SELECT id,level,category,source,message,request_id,method,path,status_code,duration_ms,metadata,created_at FROM system_logs WHERE "+filter+" ORDER BY id DESC LIMIT ?"
+	query := "SELECT id,level,category,source,message,request_id,user_id,device_id,method,path,status_code,duration_ms,metadata,created_at FROM system_logs WHERE "+filter+" ORDER BY id DESC LIMIT ?"
 	queryArgs := append(append([]interface{}{}, args...), limit)
 	rows, err := s.db.conn.QueryContext(r.Context(), query, queryArgs...)
 	if err != nil { apiError(w, fmt.Errorf("could not query system logs: %w", err)); return }
@@ -92,13 +102,13 @@ func (s *Server) handleSystemLogs(w http.ResponseWriter, r *http.Request) {
 		var id int64
 		var lv, cat, source, message string
 		var requestID, method, path sql.NullString
-		var status, duration sql.NullInt64
+		var userID, deviceID, status, duration sql.NullInt64
 		var metadata []byte
 		var created time.Time
-		if err := rows.Scan(&id,&lv,&cat,&source,&message,&requestID,&method,&path,&status,&duration,&metadata,&created); err != nil { apiError(w, fmt.Errorf("could not read system log row: %w", err)); return }
+		if err := rows.Scan(&id,&lv,&cat,&source,&message,&requestID,&userID,&deviceID,&method,&path,&status,&duration,&metadata,&created); err != nil { apiError(w, fmt.Errorf("could not read system log row: %w", err)); return }
 		var details interface{}
 		if len(metadata)>0 { _ = json.Unmarshal(metadata,&details) }
-		out = append(out,map[string]interface{}{"id":id,"level":lv,"category":cat,"source":source,"message":message,"request_id":requestID.String,"method":method.String,"path":path.String,"status_code":status.Int64,"duration_ms":duration.Int64,"metadata":details,"created_at":created})
+		out = append(out,map[string]interface{}{"id":id,"level":lv,"category":cat,"source":source,"message":message,"request_id":requestID.String,"user_id":userID.Int64,"device_id":deviceID.Int64,"method":method.String,"path":path.String,"status_code":status.Int64,"duration_ms":duration.Int64,"metadata":details,"created_at":created})
 	}
 	if err := rows.Err(); err != nil { apiError(w, fmt.Errorf("could not finish reading system logs: %w", err)); return }
 	writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"logs":out,"summary":map[string]interface{}{"total":total,"errors":errorsCount,"warnings":warningsCount}})
