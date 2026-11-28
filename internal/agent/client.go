@@ -87,8 +87,8 @@ func NewClient(cfg *Config) *Client {
 }
 
 
-var agentSensitiveLogPattern = regexp.MustCompile(`(?i)(token|secret|password|authorization|private[_ -]?key|client_secret|access_token|refresh_token|code)(["']?\\s*[:=]\\s*["']?)[^"'\\s&,;]+`)
-var agentBearerPattern = regexp.MustCompile(`(?i)bearer\\s+[a-z0-9._~+/-]+=*`)
+var agentSensitiveLogPattern = regexp.MustCompile(`(?i)(token|secret|password|authorization|private[_ -]?key|client_secret|access_token|refresh_token|code)(["']?\s*[:=]\s*["']?)[^"'\s&,;]+`)
+var agentBearerPattern = regexp.MustCompile(`(?i)bearer\s+[a-z0-9._~+/-]+=*`)
 
 type agentLogForwarder struct { client *Client }
 
