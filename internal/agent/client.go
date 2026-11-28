@@ -126,7 +126,6 @@ func (c *Client) Run(ctx context.Context) error {
 
 		if err := c.connect(ctx); err != nil {
 			log.Printf("connection failed: %v (retry in %s)", err, ReconnectDelay)
-			c.queueSystemLog("error", "connection", "Agent could not connect to Control Plane", map[string]interface{}{"cause": err.Error(), "retry_after_seconds": int(ReconnectDelay.Seconds())})
 			time.Sleep(ReconnectDelay)
 			continue
 		}
@@ -206,7 +205,6 @@ func (c *Client) connect(ctx context.Context) error {
 	tailscaleIP, err := GetTailscaleIP()
 	if err != nil {
 		log.Printf("warning: tailscale: %v", err)
-		c.queueSystemLog("warn", "agent", "Tailscale address detection failed", map[string]interface{}{"cause": err.Error()})
 	}
 
 	// Отправляем AuthRequest.
@@ -498,12 +496,10 @@ func (c *Client) metricsPump(ctx context.Context, done <-chan struct{}) {
 			metrics, err := collectMetrics(c.cfg.DataRoot)
 			if err != nil {
 				log.Printf("metrics collection: %v", err)
-				c.queueSystemLog("warn", "monitoring", "Agent metrics collection failed", map[string]interface{}{"cause": err.Error()})
 				continue
 			}
 			if err := c.SendEvent("metrics", metrics); err != nil {
 				log.Printf("metrics push: %v", err)
-				c.queueSystemLog("warn", "monitoring", "Agent metrics could not be sent", map[string]interface{}{"cause": err.Error()})
 				return
 			}
 		}
