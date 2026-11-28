@@ -36,7 +36,7 @@ PostgreSQL and MariaDB/MySQL now have typed Agent workflows for server installat
 - GitHub PAT connections remain supported. GitHub App connections accept the App ID, installation ID and PEM private key; the private key is encrypted at rest and is never returned to the browser.
 - Control Plane signs short-lived RS256 App JWTs and requests installation access tokens just in time. Tokens are refreshed for private HTTPS GitHub repository operations and are not persisted as long-lived credentials.
 - The App installation needs read-only Contents and Metadata permissions and must be installed on the account or organization that owns the repository.
-- Push webhooks use per-site HMAC-SHA256 secrets, branch filtering, exact commit checkout and delivery-ID replay protection. Automatic Deploy requires explicit consent to execute repository code.
+- Push webhooks use per-site HMAC-SHA256 secrets, branch filtering, exact commit checkout and delivery-ID replay protection. After a repository is connected, automatic deployments can be enabled directly for selected site targets.
 - Live GitHub App installation and private-repository deployment still require configuring a GitHub App and verifying it against a real installation.
 
 ### Website lifecycle and operations
