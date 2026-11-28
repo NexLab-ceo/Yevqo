@@ -74,7 +74,7 @@
         agentPackageUploading = true;
         const res = await adminUploadAgentPackage(agentPackageFile);
         agentPackageUploading = false;
-        if (!res.ok) { notify(res.error || 'Не удалось загрузить Agent-пакет', 'error'); return; }
+        if (!res.ok) { reportAdminError('Не удалось опубликовать Agent-пакет', res); return; }
         agentPackage = res.data?.package || null;
         agentPackageFile = null;
         const picker = document.getElementById('agent-package-file');
