@@ -190,6 +190,11 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/admin/api/settings/platform", s.RequireAdmin(s.handleAdminPlatformSettings))
 	s.mux.HandleFunc("/admin/api/backups/control-plane", s.RequireAdmin(s.handleControlPlaneBackup))
 
+	// The Admin SPA route must be protected as well as every /admin/api endpoint.
+	// ServeMux selects the more-specific /admin/api handlers above these page routes.
+	s.mux.HandleFunc("/admin", s.RequireAdmin(s.handleStatic))
+	s.mux.HandleFunc("/admin/", s.RequireAdmin(s.handleStatic))
+
 	// --- Статика SvelteKit (последний маршрут — fallback) ---
 	s.mux.HandleFunc("/", s.handleStatic)
 }

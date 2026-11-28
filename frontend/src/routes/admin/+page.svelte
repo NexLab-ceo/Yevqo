@@ -1,6 +1,7 @@
 <script>
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
+    import { me } from '$lib/api.js';
     import { adminListUsers, adminStats, adminGetPlatformSettings, adminSavePlatformSettings } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
@@ -18,6 +19,11 @@
 
     // Загружаем статистику и пользователей.
     onMount(async () => {
+        const session = await me();
+        if (!session.ok || !session.data?.user?.is_admin) {
+            goto('/overview');
+            return;
+        }
         await loadAll();
         await loadPlatformSettings();
         loading = false;

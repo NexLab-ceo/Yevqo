@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { page } from '$app/stores';
     import { goto } from '$app/navigation';
-    import { adminGetUser, adminBlockUser, adminUnblockUser, adminSetUserPlan } from '$lib/api.js';
+    import { me, adminGetUser, adminBlockUser, adminUnblockUser, adminSetUserPlan } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -17,6 +17,11 @@
     let busy = false;
 
     onMount(async () => {
+        const session = await me();
+        if (!session.ok || !session.data?.user?.is_admin) {
+            goto('/overview');
+            return;
+        }
         await loadUser();
         loading = false;
     });
