@@ -104,7 +104,9 @@ func verifyProviderToken(ctx context.Context, provider, token string) (providerA
  func (s *Server) handleGitHubAppState(w http.ResponseWriter, r *http.Request) {
   if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
   u := UserFromContext(r.Context())
-  if strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_SLUG")) == "" || strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_ID")) == "" || strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_PRIVATE_KEY")) == "" {
+  appID, slug, privateKey, configErr := s.platformGitHubAppConfig(r.Context())
+  if configErr != nil { apiError(w, shared.ErrInternal("could not load GitHub App configuration")); return }
+  if slug == "" || appID == "" || privateKey == "" {
    writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{"ok":false,"error":"GitHub App is not configured on this Control Plane."}); return
   }
   raw := make([]byte, 32)
@@ -119,9 +121,8 @@ func verifyProviderToken(ctx context.Context, provider, token string) (providerA
 
 func (s *Server) handleGitHubAppConfig(w http.ResponseWriter, r *http.Request) {
   if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
-  slug := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_SLUG"))
-  appID := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_ID"))
-  privateKey := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_PRIVATE_KEY"))
+  appID, slug, privateKey, configErr := s.platformGitHubAppConfig(r.Context())
+  if configErr != nil { apiError(w, shared.ErrInternal("could not load GitHub App configuration")); return }
   configured := slug != "" && appID != "" && privateKey != ""
   if strings.ContainsAny(slug, "/\\?#") { slug = ""; configured = false }
   writeJSON(w, http.StatusOK, map[string]interface{}{"ok":true,"configured":configured,"app_slug":slug})
@@ -153,7 +154,9 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 		in.Token=strings.TrimSpace(in.Token)
 		if in.Provider == "github_app" {
 			// A browser installation callback must present a short-lived, single-use state.
-			appConfigured := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_ID")) != "" && strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_PRIVATE_KEY")) != ""
+			configuredID, _, configuredKey, configErr := s.platformGitHubAppConfig(r.Context())
+            if configErr != nil { apiError(w, shared.ErrInternal("could not load GitHub App configuration")); return }
+            appConfigured := configuredID != "" && configuredKey != ""
 			if appConfigured && in.State == "" { apiError(w, shared.ErrBadRequest("missing GitHub App installation state; start installation from the Yevqo panel")); return }
 			if in.State != "" {
 				if len(in.State) != 64 { apiError(w, shared.ErrBadRequest("invalid GitHub App installation state")); return }
@@ -166,8 +169,8 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 				if err != nil || subtle.ConstantTimeCompare(digest[:], want) != 1 { apiError(w, shared.ErrBadRequest("GitHub App installation state did not match this session")); return }
 				if _, err := s.db.conn.ExecContext(r.Context(), `DELETE FROM user_settings WHERE user_id=? AND setting_key='github_app_install_state'`, u.ID); err != nil { apiError(w, shared.ErrInternal("could not consume GitHub App installation state")); return }
 			}
-			appID := strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_ID"))
-			privateKey := strings.ReplaceAll(os.Getenv("YEVQO_GITHUB_APP_PRIVATE_KEY"), "\\n", "\n")
+			appID, _, privateKey, configErr := s.platformGitHubAppConfig(r.Context())
+            if configErr != nil { apiError(w, shared.ErrInternal("could not load GitHub App configuration")); return }
 			// Backward-compatible manual setup is retained for existing installations.
 			if appID == "" || privateKey == "" {
 				appID = strings.TrimSpace(in.AppID)
@@ -175,7 +178,7 @@ func (s *Server) handleIntegrations(w http.ResponseWriter, r *http.Request) {
 			}
 			credentials := githubAppCredentials{AppID:appID,InstallationID:strings.TrimSpace(in.InstallationID),PrivateKey:privateKey}
 			if appID == "" || strings.TrimSpace(privateKey) == "" {
-				writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{"ok":false,"error":"GitHub App is not configured on this Control Plane. Set YEVQO_GITHUB_APP_ID and YEVQO_GITHUB_APP_PRIVATE_KEY on the server."})
+				writeJSON(w, http.StatusServiceUnavailable, map[string]interface{}{"ok":false,"error":"GitHub App is not configured on this Control Plane. configure the GitHub App in administrator platform settings."})
 				return
 			}
 			if err := validateGitHubAppCredentials(credentials); err != nil { apiError(w,shared.ErrBadRequest(err.Error())); return }
@@ -301,4 +304,22 @@ func (s *Server) handleIntegrationByID(w http.ResponseWriter, r *http.Request) {
 
 func integrationProviderLabel(provider string) string {
 	switch provider { case "github":return "GitHub";case "github_app":return "GitHub App";case "gitlab":return "GitLab";default:return provider }
+}
+
+
+// platformGitHubAppConfig prefers encrypted administrator settings and retains
+// environment-variable fallback for existing Termux installations.
+func (s *Server) platformGitHubAppConfig(ctx context.Context) (appID, slug, privateKey string, err error) {
+    var nonce, ciphertext []byte
+    queryErr := s.db.conn.QueryRowContext(ctx, `SELECT github_app_id,github_app_slug,github_app_private_key_nonce,github_app_private_key_ciphertext FROM platform_settings WHERE id=1`).Scan(&appID,&slug,&nonce,&ciphertext)
+    if queryErr != nil && queryErr != sql.ErrNoRows { return "", "", "", queryErr }
+    if len(nonce)>0 && len(ciphertext)>0 {
+        raw, decryptErr := decryptCredential(s.credentialKey,nonce,ciphertext)
+        if decryptErr != nil { return "", "", "", decryptErr }
+        privateKey = string(raw)
+    }
+    if strings.TrimSpace(appID)=="" { appID=strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_ID")) }
+    if strings.TrimSpace(slug)=="" { slug=strings.TrimSpace(os.Getenv("YEVQO_GITHUB_APP_SLUG")) }
+    if strings.TrimSpace(privateKey)=="" { privateKey=strings.ReplaceAll(os.Getenv("YEVQO_GITHUB_APP_PRIVATE_KEY"), `\n`, "\n") }
+    return strings.TrimSpace(appID),strings.TrimSpace(slug),strings.TrimSpace(privateKey),nil
 }

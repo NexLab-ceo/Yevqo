@@ -14,7 +14,7 @@
     let activeTab = 'overview';
     let platformLoading = false;
     let platformSaving = false;
-    let platform = { public_url: '', cloudflare_oauth_client_id: '', cloudflare_oauth_secret_set: false, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false, callback_url: '', github_app_configured: false };
+    let platform = { public_url: '', cloudflare_oauth_client_id: '', cloudflare_oauth_secret_set: false, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false, callback_url: '', github_app_configured: false, github_app_id: '', github_app_slug: '', github_app_private_key_set: false, github_app_private_key: '', clear_github_app_private_key: false };
 
     // Загружаем статистику и пользователей.
     onMount(async () => {
@@ -49,7 +49,7 @@
         const res = await adminGetPlatformSettings();
         platformLoading = false;
         if (!res.ok) { notify(res.error || 'Не удалось загрузить настройки платформы', 'error'); return; }
-        platform = { ...platform, ...res.data, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false };
+        platform = { ...platform, ...res.data, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false, github_app_private_key: '', clear_github_app_private_key: false };
     }
 
     async function savePlatformSettings() {
@@ -59,11 +59,15 @@
             public_url: platform.public_url,
             cloudflare_oauth_client_id: platform.cloudflare_oauth_client_id,
             cloudflare_oauth_client_secret: platform.cloudflare_oauth_client_secret,
-            clear_cloudflare_oauth_secret: !!platform.clear_cloudflare_oauth_secret
+            clear_cloudflare_oauth_secret: !!platform.clear_cloudflare_oauth_secret,
+            github_app_id: platform.github_app_id,
+            github_app_slug: platform.github_app_slug,
+            github_app_private_key: platform.github_app_private_key,
+            clear_github_app_private_key: !!platform.clear_github_app_private_key
         });
         platformSaving = false;
         if (!res.ok) { notify(res.error || 'Не удалось сохранить настройки платформы', 'error'); return; }
-        platform = { ...platform, ...res.data, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false };
+        platform = { ...platform, ...res.data, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false, github_app_private_key: '', clear_github_app_private_key: false };
         notify('Настройки платформы сохранены', 'success');
     }
 
@@ -140,9 +144,18 @@
                 </Card>
                 <Card>
                     <h3>GitHub App</h3>
-                    <p class="setting-help">GitHub App пока загружается в серверную конфигурацию Termux. Этот экран не подменяет её и не сообщает о подключении без реальной проверки.</p>
-                    <div class="secret-state">{#if platform.github_app_configured}<span class="configured">Переменные GitHub App обнаружены в окружении Control Plane</span>{:else}<span>GitHub App не настроен в окружении Control Plane</span>{/if}</div>
-                    <p class="setting-help">Путь конфигурации в текущей установке: <code>$PREFIX/etc/yevqo/github-app.env</code> и <code>github-app.pem</code>.</p>
+                    <p class="setting-help">Параметры используются для установки Yevqo в аккаунты GitHub. Private key шифруется на сервере и не возвращается в браузер. Переменные Termux остаются резервным источником.</p>
+                    <label>GitHub App ID</label>
+                    <input bind:value={platform.github_app_id} placeholder="Например, 5859351" inputmode="numeric" autocomplete="off" />
+                    <label>GitHub App slug</label>
+                    <input bind:value={platform.github_app_slug} placeholder="yevqo" autocomplete="off" />
+                    <label>GitHub App private key (PEM)</label>
+                    <textarea bind:value={platform.github_app_private_key} rows="6" placeholder={platform.github_app_private_key_set ? 'Ключ уже сохранён — вставьте новый только для замены' : '-----BEGIN RSA PRIVATE KEY-----'} spellcheck="false" />
+                    <div class="secret-state">{#if platform.github_app_private_key_set}<span class="configured">Private key сохранён</span>{:else}<span>Private key ещё не задан</span>{/if}</div>
+                    {#if platform.github_app_private_key_set}
+                        <label class="checkbox-line"><input type="checkbox" bind:checked={platform.clear_github_app_private_key} /> Удалить сохранённый private key</label>
+                    {/if}
+                    <div class="setting-actions"><Button on:click={savePlatformSettings} disabled={platformSaving}>{platformSaving ? 'Сохранение…' : 'Сохранить настройки'}</Button></div>
                 </Card>
             {/if}
         </div>
