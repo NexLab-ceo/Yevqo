@@ -435,6 +435,11 @@
         color: var(--success);
     }
 
+    .status-pro {
+        background: color-mix(in srgb, var(--accent) 12%, transparent);
+        color: var(--accent);
+    }
+
     .status-blocked {
         background: rgba(239, 68, 68, 0.1);
         color: var(--danger);
