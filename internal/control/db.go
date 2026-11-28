@@ -369,10 +369,19 @@ func (db *DB) CountDevicesByUser(ctx context.Context, userID int64) (int, error)
 }
 
 func (db *DB) DeleteDevice(ctx context.Context, id int64) error {
-	_, err := db.conn.ExecContext(ctx,
-		`DELETE FROM devices WHERE id = ?`, id,
-	)
-	return err
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil { return fmt.Errorf("begin device unlink: %w", err) }
+	defer tx.Rollback()
+	// Device credentials must be revoked together with the device row so an
+	// unpaired Agent cannot reconnect using a previously issued credential.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM device_agent_tokens WHERE device_id=(SELECT device_id FROM devices WHERE id=?)`, id,
+	); err != nil { return fmt.Errorf("revoke device Agent credential: %w", err) }
+	if _, err := tx.ExecContext(ctx,`DELETE FROM devices WHERE id=?`,id); err != nil {
+		return fmt.Errorf("delete device: %w",err)
+	}
+	if err := tx.Commit(); err != nil { return fmt.Errorf("commit device unlink: %w",err) }
+	return nil
 }
 
 // ============================================================

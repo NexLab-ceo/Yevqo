@@ -17,6 +17,15 @@ command -v pkg >/dev/null 2>&1 || fail "Open this command inside Termux."
 printf '==> Installing required Termux packages\n'
 pkg update -y
 pkg install -y curl jq coreutils php git termux-services
+if [ ! -w /sdcard ] && command -v termux-setup-storage >/dev/null 2>&1; then
+  printf '==> Requesting Android shared-storage permission\\n'
+  termux-setup-storage || true
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    [ -w /sdcard ] && break
+    sleep 1
+  done
+fi
+[ -w /sdcard ] || fail "Grant Termux shared-storage access with termux-setup-storage, then run a fresh pairing command."
 command -v dpkg-deb >/dev/null 2>&1 || fail "Termux dpkg is unavailable."
 
 printf '==> Resolving the latest verified Yevqo Agent package\n'
