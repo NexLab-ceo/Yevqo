@@ -45,6 +45,22 @@ func sanitizeSystemLogValue(value interface{}) interface{} {
 			}
 		}
 		return clean
+	case map[string]string:
+		clean := make(map[string]string, len(item))
+		for key, nested := range item {
+			if systemLogSensitiveKey.MatchString(key) {
+				clean[key] = "[REDACTED]"
+			} else {
+				clean[key] = redactSystemLogString(nested)
+			}
+		}
+		return clean
+	case []map[string]interface{}:
+		clean := make([]map[string]interface{}, len(item))
+		for index, nested := range item {
+			clean[index] = sanitizeSystemLogValue(nested).(map[string]interface{})
+		}
+		return clean
 	case []interface{}:
 		clean := make([]interface{}, len(item))
 		for index, nested := range item {
