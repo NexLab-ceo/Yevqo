@@ -359,3 +359,17 @@ export async function adminSetUserPlan(id, plan) {
 // === Platform administration ===
 export async function adminGetPlatformSettings() { return request('GET', '/admin/api/settings/platform'); }
 export async function adminSavePlatformSettings(input) { return request('PUT', '/admin/api/settings/platform', input); }
+
+
+// === Admin Agent packages ===
+export async function adminGetAgentPackage() { return request('GET', '/admin/api/packages/agent'); }
+export async function adminUploadAgentPackage(file) {
+    const form = new FormData(); form.append('package', file);
+    try {
+        const res = await fetch('/admin/api/packages/agent', { method: 'POST', body: form, credentials: 'same-origin' });
+        const raw = await res.text(); let data = null;
+        if (raw) { try { data = JSON.parse(raw); } catch { data = { error: raw }; } }
+        if (!res.ok) return { ok: false, error: data?.error || ('HTTP ' + res.status) };
+        return { ok: true, data };
+    } catch (e) { return { ok: false, error: e.message || 'network error' }; }
+}

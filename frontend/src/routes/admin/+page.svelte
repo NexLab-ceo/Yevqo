@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { goto } from '$app/navigation';
     import { me } from '$lib/api.js';
-    import { adminListUsers, adminStats, adminGetPlatformSettings, adminSavePlatformSettings } from '$lib/api.js';
+    import { adminListUsers, adminStats, adminGetPlatformSettings, adminSavePlatformSettings, adminGetAgentPackage, adminUploadAgentPackage } from '$lib/api.js';
     import { notify } from '$lib/stores.js';
     import Button from '$lib/components/Button.svelte';
     import Card from '$lib/components/Card.svelte';
@@ -13,6 +13,10 @@
     let page = 1;
     let total = 0;
     let activeTab = 'overview';
+    let agentPackage = null;
+    let agentPackageLoading = false;
+    let agentPackageUploading = false;
+    let agentPackageFile = null;
     let platformLoading = false;
     let platformSaving = false;
     let platform = { public_url: '', cloudflare_oauth_client_id: '', cloudflare_oauth_token_auth_method: 'client_secret_post', cloudflare_oauth_secret_set: false, cloudflare_oauth_client_secret: '', clear_cloudflare_oauth_secret: false, callback_url: '', github_app_configured: false, github_app_id: '', github_app_slug: '', github_app_private_key_set: false, github_app_private_key: '', clear_github_app_private_key: false };
@@ -26,6 +30,7 @@
         }
         await loadAll();
         await loadPlatformSettings();
+        await loadAgentPackage();
         loading = false;
     });
 
@@ -49,6 +54,27 @@
         }
     }
 
+
+    async function loadAgentPackage() {
+        agentPackageLoading = true;
+        const res = await adminGetAgentPackage();
+        agentPackageLoading = false;
+        if (!res.ok) { notify(res.error || 'Не удалось загрузить сведения о Agent-пакете', 'error'); return; }
+        agentPackage = res.data?.package || null;
+    }
+
+    async function uploadAgentPackage() {
+        if (!agentPackageFile || agentPackageUploading) return;
+        agentPackageUploading = true;
+        const res = await adminUploadAgentPackage(agentPackageFile);
+        agentPackageUploading = false;
+        if (!res.ok) { notify(res.error || 'Не удалось загрузить Agent-пакет', 'error'); return; }
+        agentPackage = res.data?.package || null;
+        agentPackageFile = null;
+        const picker = document.getElementById('agent-package-file');
+        if (picker) picker.value = '';
+        notify('Yevqo Agent опубликован. Устройства смогут получить обновление с этого сервера.', 'success');
+    }
 
     async function loadPlatformSettings() {
         platformLoading = true;
@@ -123,8 +149,35 @@
     <div class="admin-tabs">
         <button class:active={activeTab === 'overview'} on:click={() => activeTab = 'overview'}>Обзор и пользователи</button>
         <button class:active={activeTab === 'settings'} on:click={() => activeTab = 'settings'}>Настройки платформы</button>
+        <button class:active={activeTab === 'packages'} on:click={() => activeTab = 'packages'}>Agent-пакеты</button>
     </div>
-    {#if activeTab === 'settings'}
+    {#if activeTab === 'packages'}
+        <div class="platform-settings">
+            <div class="section-header"><h2 class="section-title">Yevqo Agent · Android ARM64</h2><Button size="sm" on:click={loadAgentPackage} disabled={agentPackageLoading}>Обновить</Button></div>
+            <Card>
+                <h3>Опубликованная версия Agent</h3>
+                {#if agentPackageLoading}
+                    <p class="setting-help">Загрузка сведений…</p>
+                {:else if agentPackage}
+                    <p class="setting-help">Версия: <strong>{agentPackage.version}</strong></p>
+                    <p class="setting-help">Файл: <code>{agentPackage.filename}</code></p>
+                    <p class="setting-help">SHA-256: <code>{agentPackage.sha256}</code></p>
+                    <p class="setting-help">Размер: {(agentPackage.size / 1024 / 1024).toFixed(2)} MiB · Опубликован: {new Date(agentPackage.published_at).toLocaleString()}</p>
+                    <a href={agentPackage.download_url} target="_blank" rel="noreferrer">Скачать текущий Agent .deb</a>
+                {:else}
+                    <p class="setting-help">Пока ни одного Agent-пакета не опубликовано.</p>
+                {/if}
+            </Card>
+            <Card>
+                <h3>Загрузить новую версию</h3>
+                <p class="setting-help">Принимается только Debian-пакет Yevqo Agent: Package <code>yevqo</code>, Architecture <code>aarch64</code>. Пакеты Yevqo All здесь не принимаются.</p>
+                <label for="agent-package-file">Файл .deb</label>
+                <input id="agent-package-file" type="file" accept=".deb,application/vnd.debian.binary-package" on:change={(event) => agentPackageFile = event.currentTarget.files?.[0] || null} />
+                {#if agentPackageFile}<p class="setting-help">Выбран: {agentPackageFile.name} · {(agentPackageFile.size / 1024 / 1024).toFixed(2)} MiB</p>{/if}
+                <div class="setting-actions"><Button on:click={uploadAgentPackage} disabled={!agentPackageFile || agentPackageUploading}>{agentPackageUploading ? 'Проверка и загрузка…' : 'Загрузить и опубликовать Agent'}</Button></div>
+            </Card>
+        </div>
+    {:else if activeTab === 'settings'}
         <div class="platform-settings">
             <div class="section-header"><h2 class="section-title">Основные параметры</h2><Button size="sm" on:click={loadPlatformSettings} disabled={platformLoading}>Обновить</Button></div>
             {#if platformLoading}<div class="empty">Загрузка настроек…</div>{:else}

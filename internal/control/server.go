@@ -188,6 +188,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/admin/api/users/", s.RequireAdmin(s.handleAdminUserByID))
 	s.mux.HandleFunc("/admin/api/stats", s.RequireAdmin(s.handleAdminStats))
 	s.mux.HandleFunc("/admin/api/settings/platform", s.RequireAdmin(s.handleAdminPlatformSettings))
+	s.mux.HandleFunc("/admin/api/packages/agent", s.RequireAdmin(s.handleAdminAgentPackageUpload))
+	s.mux.HandleFunc("/updates/agent/", s.handleAgentPackageUpdates)
 	s.mux.HandleFunc("/admin/api/backups/control-plane", s.RequireAdmin(s.handleControlPlaneBackup))
 
 	// The Admin SPA route must be protected as well as every /admin/api endpoint.
