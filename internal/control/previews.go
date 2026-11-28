@@ -15,7 +15,6 @@ import (
 type previewCreateInput struct {
 	Branch string `json:"branch"`
 	Commit string `json:"commit"`
-	AllowProjectCode bool `json:"allow_project_code"`
 }
 
 func newPreviewKey() (string, error) {
@@ -83,7 +82,6 @@ func (s *Server) handleSitePreviews(w http.ResponseWriter, r *http.Request, user
 			} else if err := s.authorizeWorkspace(r.Context(), dev.UserID, user.ID, "preview.deploy"); err != nil { apiError(w, err); return }
 			var in previewCreateInput
 			if err := decodeJSON(r,&in); err != nil { apiError(w,shared.ErrBadRequest("invalid JSON")); return }
-			if !in.AllowProjectCode { apiError(w,shared.ErrBadRequest("explicit project-code consent is required before creating a preview")); return }
 			cfg, err := s.siteGitSettings(r.Context(),deviceID,siteID)
 			if err != nil || strings.TrimSpace(cfg.GitURL)=="" { apiError(w,shared.ErrBadRequest("connect a Git repository before creating a preview")); return }
 			branch:=strings.TrimSpace(in.Branch); if branch=="" { branch=cfg.GitBranch }; if branch=="" { branch="main" }
