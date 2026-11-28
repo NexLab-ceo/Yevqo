@@ -49,6 +49,7 @@ const (
 type Client struct {
 	cfg     *Config
 	handler *CommandHandler
+	pendingSystemLogs []shared.AgentSystemLogEvent
 
 	ws      *websocket.Conn
 	send    chan []byte
@@ -93,6 +94,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 		if err := c.connect(ctx); err != nil {
 			log.Printf("connection failed: %v (retry in %s)", err, ReconnectDelay)
+			c.queueSystemLog("error", "connection", "Agent could not connect to Control Plane", map[string]interface{}{"cause": err.Error(), "retry_after_seconds": int(ReconnectDelay.Seconds())})
 			time.Sleep(ReconnectDelay)
 			continue
 		}
@@ -107,6 +109,7 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 
 		log.Printf("connection lost, reconnecting in %s...", ReconnectDelay)
+		c.queueSystemLog("warn", "connection", "Agent connection was lost", map[string]interface{}{"retry_after_seconds": int(ReconnectDelay.Seconds())})
 		time.Sleep(ReconnectDelay)
 	}
 }
@@ -225,6 +228,8 @@ func (c *Client) connect(ctx context.Context) error {
 	_ = ws.SetReadDeadline(time.Now().Add(PongWait))
 	authenticated = true
 	log.Printf("authenticated as user %d", respEnv.AuthResp.UserId)
+	c.flushSystemLogs()
+	c.emitSystemLog("info", "connection", "Agent connected and authenticated", map[string]interface{}{"agent_version": Version, "platform": runtime.GOOS, "architecture": runtime.GOARCH})
 	return nil
 }
 
@@ -361,6 +366,13 @@ func (c *Client) handleCommand(ctx context.Context, cmd *shared.Command) {
 	}
 
 	log.Printf("command %s done: ok=%v", cmd.Id, result.Ok)
+	level := "info"
+	if result == nil || !result.Ok { level = "error" }
+	details := map[string]interface{}{"command_id": cmd.Id, "action": cmd.Action}
+	if result != nil && !result.Ok && result.Message != "" { details["cause"] = result.Message }
+	message := "Agent command completed"
+	if level == "error" { message = "Agent command failed" }
+	c.emitSystemLog(level, "command", message, details)
 }
 
 // ============================================================
@@ -399,6 +411,36 @@ func (c *Client) SendEvent(event string, payload interface{}) error {
 	return ws.WriteMessage(websocket.BinaryMessage, msg)
 }
 
+
+
+func (c *Client) queueSystemLog(level, category, message string, metadata map[string]interface{}) {
+	entry := shared.AgentSystemLogEvent{Level: level, Category: category, Source: "agent", Message: message, Timestamp: time.Now().UTC(), Metadata: metadata}
+	c.mu.Lock()
+	if len(c.pendingSystemLogs) >= 100 { c.pendingSystemLogs = c.pendingSystemLogs[1:] }
+	c.pendingSystemLogs = append(c.pendingSystemLogs, entry)
+	c.mu.Unlock()
+}
+
+func (c *Client) emitSystemLog(level, category, message string, metadata map[string]interface{}) {
+	entry := shared.AgentSystemLogEvent{Level: level, Category: category, Source: "agent", Message: message, Timestamp: time.Now().UTC(), Metadata: metadata}
+	if err := c.SendEvent("system_log", entry); err != nil { c.queueSystemLog(level, category, message, metadata) }
+}
+
+func (c *Client) flushSystemLogs() {
+	c.mu.Lock()
+	pending := append([]shared.AgentSystemLogEvent(nil), c.pendingSystemLogs...)
+	c.pendingSystemLogs = nil
+	c.mu.Unlock()
+	for i, entry := range pending {
+		if err := c.SendEvent("system_log", entry); err != nil {
+			c.mu.Lock()
+			c.pendingSystemLogs = append(pending[i:], c.pendingSystemLogs...)
+			if len(c.pendingSystemLogs) > 100 { c.pendingSystemLogs = c.pendingSystemLogs[len(c.pendingSystemLogs)-100:] }
+			c.mu.Unlock()
+			return
+		}
+	}
+}
 
 // metricsPump periodically pushes device metrics to the Control Plane.
 func (c *Client) metricsPump(ctx context.Context, done <-chan struct{}) {
