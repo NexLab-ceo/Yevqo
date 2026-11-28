@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -18,6 +19,48 @@ import (
 const systemLogRetentionDays = 30
 
 var systemLogPruneCounter uint64
+
+var (
+	systemLogSensitiveKey = regexp.MustCompile(`(?i)(token|secret|password|authorization|private[_-]?key|api[_-]?key|credential|cookie)`)
+	systemLogSensitiveAssignment = regexp.MustCompile(`(?i)([a-z0-9_-]*(?:token|secret|password|authorization|private[_-]?key|api[_-]?key|credential)[a-z0-9_-]*)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;&]+)`)
+	systemLogBearerValue = regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*`)
+)
+
+func redactSystemLogString(value string) string {
+	value = systemLogBearerValue.ReplaceAllString(value, "Bearer [REDACTED]")
+	return systemLogSensitiveAssignment.ReplaceAllString(value, "$1$2[REDACTED]")
+}
+
+func sanitizeSystemLogValue(value interface{}) interface{} {
+	switch item := value.(type) {
+	case string:
+		return redactSystemLogString(item)
+	case map[string]interface{}:
+		clean := make(map[string]interface{}, len(item))
+		for key, nested := range item {
+			if systemLogSensitiveKey.MatchString(key) {
+				clean[key] = "[REDACTED]"
+			} else {
+				clean[key] = sanitizeSystemLogValue(nested)
+			}
+		}
+		return clean
+	case []interface{}:
+		clean := make([]interface{}, len(item))
+		for index, nested := range item {
+			clean[index] = sanitizeSystemLogValue(nested)
+		}
+		return clean
+	case []string:
+		clean := make([]string, len(item))
+		for index, nested := range item {
+			clean[index] = redactSystemLogString(nested)
+		}
+		return clean
+	default:
+		return value
+	}
+}
 
 type systemRequestIDContextKey struct{}
 
@@ -48,9 +91,15 @@ func (s *Server) recordSystemLog(entry systemLogRecord) {
 	if entry.Level == "" { entry.Level = "info" }
 	if entry.Category == "" { entry.Category = "system" }
 	if entry.Source == "" { entry.Source = "control-plane" }
+	entry.Message = redactSystemLogString(entry.Message)
+	entry.Path = redactSystemLogString(entry.Path)
 	if len(entry.Message) > 512 { entry.Message = entry.Message[:512] }
 	if len(entry.Path) > 512 { entry.Path = entry.Path[:512] }
-	if len(entry.Metadata) == 0 { entry.Metadata = nil }
+	if len(entry.Metadata) == 0 {
+		entry.Metadata = nil
+	} else if sanitized, ok := sanitizeSystemLogValue(entry.Metadata).(map[string]interface{}); ok {
+		entry.Metadata = sanitized
+	}
 	metadata, err := json.Marshal(entry.Metadata)
 	if err != nil { metadata = []byte("{}") }
 	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
