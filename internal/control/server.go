@@ -193,6 +193,11 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("/updates/agent/", s.handleAgentPackageUpdates)
 	s.mux.HandleFunc("/admin/api/backups/control-plane", s.RequireAdmin(s.handleControlPlaneBackup))
 
+	// System logs live at /logs/system, outside the legacy /admin URL space,
+	// but both the page and its API remain administrator-only.
+	s.mux.HandleFunc("/logs/system", s.RequireAdmin(s.handleStatic))
+	s.mux.HandleFunc("/logs/system/", s.RequireAdmin(s.handleStatic))
+
 	// The Admin SPA route must be protected as well as every /admin/api endpoint.
 	// ServeMux selects the more-specific /admin/api handlers above these page routes.
 	s.mux.HandleFunc("/admin", s.RequireAdmin(s.handleStatic))
