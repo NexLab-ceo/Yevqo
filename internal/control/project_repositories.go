@@ -256,7 +256,7 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		out:=make([]map[string]interface{},0);for rows.Next(){var did int64;var sid,host,branch string;var auto,webhook bool;if err:=rows.Scan(&did,&sid,&auto,&host,&webhook,&branch);err!=nil{apiError(w,shared.ErrInternal("could not read repository deployment targets"));return};out=append(out,map[string]interface{}{"device_id":did,"site_id":sid,"device_name":host,"branch":branch,"auto_deploy_enabled":auto,"webhook_enabled":webhook})}
 		writeJSON(w,http.StatusOK,map[string]interface{}{"ok":true,"targets":out})
 	case http.MethodPost:
-		var in struct{DeviceID int64 `json:"device_id"`;SiteID string `json:"site_id"`;Branch string `json:"branch"`;AutoDeploy bool `json:"auto_deploy_enabled"`;AllowProjectCode bool `json:"allow_project_code"`}
+		var in struct{DeviceID int64 `json:"device_id"`;SiteID string `json:"site_id"`;Branch string `json:"branch"`;AutoDeploy bool `json:"auto_deploy_enabled"`}
 		if err:=decodeJSON(r,&in);err!=nil||in.DeviceID<1||!validLogSiteID(in.SiteID){apiError(w,shared.ErrBadRequest("valid device_id and site_id are required"));return}
 		var cloneURL,branch string
 		if err:=s.db.conn.QueryRowContext(r.Context(),`SELECT clone_url,deploy_branch FROM project_repositories WHERE project_id=?`,projectID).Scan(&cloneURL,&branch);err!=nil{apiError(w,shared.ErrBadRequest("connect a GitHub repository first"));return}
@@ -265,7 +265,7 @@ func (s *Server) handleProjectRepositorySites(w http.ResponseWriter,r *http.Requ
 		var mappedProjectID int64
 		mapErr:=s.db.conn.QueryRowContext(r.Context(),`SELECT project_id FROM project_repository_sites WHERE device_id=? AND site_id=?`,in.DeviceID,in.SiteID).Scan(&mappedProjectID)
 		if mapErr==nil&&mappedProjectID!=projectID{apiError(w,shared.ErrBadRequest("this site is already linked to another project's repository"));return}else if mapErr!=nil&&!errors.Is(mapErr,sql.ErrNoRows){apiError(w,shared.ErrInternal("could not inspect existing site repository mapping"));return}
-		if strings.TrimSpace(in.Branch)!="" { branch=strings.TrimSpace(in.Branch) }; if !validateGitBranchName(branch){apiError(w,shared.ErrBadRequest("invalid deployment branch"));return}; if in.AutoDeploy&&!in.AllowProjectCode{apiError(w,shared.ErrForbidden("explicit consent to automatically execute repository code is required"));return}
+		if strings.TrimSpace(in.Branch)!="" { branch=strings.TrimSpace(in.Branch) }; if !validateGitBranchName(branch){apiError(w,shared.ErrBadRequest("invalid deployment branch"));return}
 		ctx,cancel:=context.WithTimeout(r.Context(),20*time.Second);defer cancel()
 		token,repoName,_,_,tokenErr:=s.projectRepositoryToken(ctx,ownerID,projectID);if tokenErr!=nil{apiError(w,shared.ErrForbidden("GitHub App installation is unavailable"));return}
 		owner,name,_,parseErr:=parseGitHubRepositoryName(repoName);if parseErr!=nil{apiError(w,shared.ErrBadRequest("invalid connected repository"));return}
