@@ -15,9 +15,9 @@ and projects in other languages can provide their own executable plus argv comma
   compiler/build tools, memory estimate and free-disk estimate.
 - **Local provider:** executes one program at a time with an argv vector; it never
   interprets a command through a shell.
-- **Supervisor:** serialized builds, explicit project-code consent, timeout and cancellation of the
-  complete build process group, bounded combined stdout/stderr, path validation and
-  a filtered environment.
+- **Supervisor:** serialized builds, timeout and cancellation of the complete build
+  process group, bounded combined stdout/stderr, path validation and a filtered
+  environment.
 - **Build cache:** persistent per-tool caches under `<agent-data>/build-cache`
   for Go, Rust/Cargo, Node/npm, Python/pip, Deno, Gradle, Composer, Ruby, Dart,
   .NET and Julia. Existing explicitly configured cache paths are preserved.
@@ -147,9 +147,9 @@ ARM64 build exists.
 
 ## Security and Android limits
 
-The runner requires explicit `allow_project_code=true`; only build trusted
-repositories. Package scripts, compiler plugins, build files and project commands
-execute with the Agent user's permissions. This is not a security sandbox.
+Once a repository is connected, configured install/build commands run on the selected
+Android device through the Agent. Commands use an argv vector rather than shell
+interpretation and execute in the Agent's Termux user context.
 
 Path checks reject traversal and symlink escapes. Child processes receive a
 filtered environment, a timeout and bounded logs. Builds are serialized. Memory
