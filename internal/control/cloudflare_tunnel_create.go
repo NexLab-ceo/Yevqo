@@ -129,7 +129,7 @@ func (s *Server) handleCloudflareTunnelCreate(w http.ResponseWriter, r *http.Req
 		apiError(w, shared.ErrBadRequest("application port is outside the supported range"))
 		return
 	}
-	if currentDomain.Valid && currentDomain.String != "" && len(currentTunnelToken) > 0 {
+	if len(currentTunnelToken) > 0 {
 		apiError(w, shared.ErrConflict("this application already has a Tunnel; remove its current domain connection first"))
 		return
 	}
@@ -165,8 +165,20 @@ func (s *Server) handleCloudflareTunnelCreate(w http.ResponseWriter, r *http.Req
 		apiError(w, shared.ErrBadRequest("connect the Android Agent before creating a Tunnel"))
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Minute+30*time.Second)
 	defer cancel()
+
+	installCtx, installCancel := context.WithTimeout(ctx, 5*time.Minute+15*time.Second)
+	installed, installErr := conn.SendCommand(installCtx, "install_cloudflared", map[string]interface{}{})
+	installCancel()
+	if installErr != nil || installed == nil || !installed.Ok {
+		message := "Agent could not install cloudflared"
+		if installed != nil && installed.Message != "" {
+			message = installed.Message
+		}
+		apiError(w, shared.ErrBadRequest(message))
+		return
+	}
 
 	var created struct {
 		ID         string `json:"id"`
@@ -228,6 +240,9 @@ func (s *Server) handleCloudflareTunnelCreate(w http.ResponseWriter, r *http.Req
 	})
 	agentCancel()
 	if agentErr != nil || result == nil || !result.Ok {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		_, _ = conn.SendCommand(stopCtx, "stop_tunnel", &shared.StopTunnel{SiteId: in.SiteID})
+		stopCancel()
 		cleanupTunnel()
 		message := "Agent could not start cloudflared"
 		if result != nil && result.Message != "" {

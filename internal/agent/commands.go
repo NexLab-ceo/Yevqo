@@ -130,6 +130,8 @@ func (h *CommandHandler) HandleCommand(cmd *shared.Command) *shared.Result {
 		return h.handleGitPull(cmd)
 	case "get_logs":
 		return h.handleGetLogs(cmd)
+	case "install_cloudflared":
+		return h.handleInstallCloudflared(cmd)
 	case "create_tunnel":
 		return h.handleCreateTunnel(cmd)
 	case "stop_tunnel":
