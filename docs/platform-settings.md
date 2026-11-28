@@ -30,4 +30,4 @@ The existing Termux environment variables and protected PEM file remain a backwa
 
 For a SaaS client used by accounts outside the publisher account, set visibility to Public and complete Cloudflare publisher-domain verification for the Client URL. Register both the authorization-code and refresh-token grants, and add the exact callback URL shown by Yevqo.
 
-The OAuth client must allow these scopes: `account-settings.read`, `zone.read`, `dns.write`, `argotunnel.read`, `argotunnel.write`, and `offline_access`. The user chooses the zone after authorizing Yevqo. Access and refresh tokens are encrypted at rest; the Control Plane refreshes access tokens when they are close to expiry. Existing scoped API Token connections remain supported.
+The OAuth client must allow these scopes: `zone.read`, `dns.write`, `argotunnel.read`, `argotunnel.write`, and `offline_access`. The user chooses the zone after authorizing Yevqo. Access and refresh tokens are encrypted at rest; the Control Plane refreshes access tokens when they are close to expiry. Existing scoped API Token connections remain supported.

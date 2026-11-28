@@ -22,7 +22,7 @@ import (
 const (
  cloudflareOAuthAuthorizeURL = "https://dash.cloudflare.com/oauth2/auth"
  cloudflareOAuthTokenURL = "https://dash.cloudflare.com/oauth2/token"
- cloudflareOAuthScopes = "account-settings.read zone.read dns.write argotunnel.read argotunnel.write offline_access"
+ cloudflareOAuthScopes = "zone.read dns.write argotunnel.read argotunnel.write offline_access"
 )
 
 type cloudflareOAuthClientConfig struct { ClientID, ClientSecret, RedirectURI, AuthMethod string }

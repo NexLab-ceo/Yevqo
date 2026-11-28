@@ -132,7 +132,7 @@
                 </Card>
                 <Card>
                     <h3>Cloudflare OAuth</h3>
-                    <p class="setting-help">Создайте OAuth Client в Cloudflare Dashboard → Manage Account → OAuth clients. Для SaaS выберите Public visibility (после проверки домена издателя), Authorization Code + refresh_token и client_secret_post или client_secret_basic. Добавьте callback URL выше и scopes: account-settings.read, zone.read, dns.write, argotunnel.read, argotunnel.write, offline_access. Secret хранится зашифрованным и никогда не показывается повторно. Сам OAuth-вход пока не активен — callback появится после отдельной реализации OAuth flow.</p>
+                    <p class="setting-help">Создайте OAuth Client в Cloudflare Dashboard → Manage Account → OAuth clients. Для SaaS выберите Public visibility (после проверки домена издателя), Authorization Code + refresh_token и client_secret_post или client_secret_basic. Добавьте callback URL выше и scopes: zone.read, dns.write, argotunnel.read, argotunnel.write, offline_access. Secret хранится зашифрованным и никогда не показывается повторно. Сам OAuth-вход пока не активен — callback появится после отдельной реализации OAuth flow.</p>
                     <label>OAuth Client ID</label>
                     <input bind:value={platform.cloudflare_oauth_client_id} placeholder="Cloudflare OAuth Client ID" autocomplete="off" />
                     <label>Token endpoint authentication</label>
