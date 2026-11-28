@@ -622,15 +622,12 @@ func (s *Server) handleReports(w http.ResponseWriter, r *http.Request) {
 	u := UserFromContext(r.Context())
 	ownerID := u.ID
 	projectID := int64(0)
-	role := "owner"
 	if raw := r.URL.Query().Get("project_id"); raw != "" {
 		parsed, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || parsed < 1 { apiError(w, shared.ErrBadRequest("invalid project id")); return }
 		resolved, accessErr := s.authorizeProjectOwner(r.Context(), parsed, u.ID, "project.read")
 		if accessErr != nil { apiError(w, accessErr); return }
 		projectID, ownerID = parsed, resolved
-		role, roleErr := s.projectAccessRole(r.Context(), projectID, u.ID, ownerID)
-		if roleErr != nil { apiError(w, roleErr); return }
 	}
 	days, periodErr := parseReportPeriodDays(r.URL.Query().Get("days"))
 	if periodErr != nil { apiError(w, periodErr); return }
