@@ -205,11 +205,11 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		if err!=nil{fmt.Fprintln(stderr,err);return 1};if err:=printJSON(data,stdout);err!=nil{fmt.Fprintln(stderr,err);return 1};return 0
 	}
 	if command=="preview-create" {
-		if len(rest)<4 || len(rest)>6 || rest[len(rest)-1]!="--allow-project-code" { fmt.Fprintln(stderr,"preview creation requires --allow-project-code consent");return 2 }
+		if len(rest)<3 || len(rest)>5 { fmt.Fprintln(stderr,"expected device-id, site-id and optional branch/commit");return 2 }
 		if err:=positiveCLIID(rest[1]);err!=nil{fmt.Fprintln(stderr,err);return 2}
-		body:=map[string]any{"allow_project_code":true}
-		if len(rest)>=5 { body["branch"]=rest[3] }
-		if len(rest)==6 { body["commit"]=rest[4] }
+		body:=map[string]any{}
+		if len(rest)>=4 { body["branch"]=rest[3] }
+		if len(rest)==5 { body["commit"]=rest[4] }
 		result,err:=client.post("/api/sites/"+url.PathEscape(rest[1])+"/"+url.PathEscape(rest[2])+"/previews",body)
 		if err!=nil{fmt.Fprintln(stderr,err);return 1};printMutationResult(result,stdout,"preview queued");return 0
 	}
@@ -250,17 +250,13 @@ func run(args []string, getenv func(string) string, stdout, stderr io.Writer) in
 		fmt.Fprintf(stderr,"unknown command %q\n",command);return 2
 	}
 	expectedArgs:=3
-	if command=="deploy" {
-		expectedArgs=4
-		if len(rest)!=4 || rest[3]!="--allow-project-code" { fmt.Fprintln(stderr,"deploy requires explicit --allow-project-code consent"); return 2 }
-	}
 	if len(rest)!=expectedArgs { fmt.Fprintln(stderr,"expected command, device-id and site-id");return 2 }
 	deviceID,siteID:=rest[1],rest[2]
 	if _,err:=strconv.ParseInt(deviceID,10,64);err!=nil||deviceID==""||siteID==""||strings.ContainsAny(deviceID+siteID,"/?#"){fmt.Fprintln(stderr,"invalid device-id or site-id");return 2}
 	var result apiResponse
 	switch command {
 	case "deploy":
-		result,err=client.post("/api/sites/"+url.PathEscape(deviceID)+"/"+url.PathEscape(siteID)+"/cmd",map[string]any{"action":"deploy","allow_project_code":rest[3]=="--allow-project-code"})
+		result,err=client.post("/api/sites/"+url.PathEscape(deviceID)+"/"+url.PathEscape(siteID)+"/cmd",map[string]any{"action":"deploy"})
 	case "start","stop","restart":
 		result,err=client.post("/api/sites/"+url.PathEscape(deviceID)+"/"+url.PathEscape(siteID)+"/cmd",map[string]any{"action":command})
 	case "logs":
