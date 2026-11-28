@@ -278,7 +278,7 @@
     async function configureWebhook(enabled) {
         if (webhookBusy) return;
         webhookBusy = true;
-        const res = await setSiteWebhook(deviceId, siteId, enabled, true);
+        const res = await setSiteWebhook(deviceId, siteId, enabled);
         webhookBusy = false;
         if (!res.ok) { notify(res.error || 'Не удалось изменить webhook', 'error'); return; }
         webhookEnabled = !!res.data.enabled;
